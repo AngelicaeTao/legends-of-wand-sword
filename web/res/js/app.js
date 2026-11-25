@@ -277,7 +277,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.0';
+const BUILD_VER='v1.9.2';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -385,6 +385,7 @@ async function enterGame(){
     // 进入玩家当前世界并拉取服务端点位
     await loadWorld(state.world.worldId||'W1', state.world.x, state.world.y);
     showView('world');
+    $('sfxBtn')&&$('sfxBtn').classList.remove('hidden');
     connectWS();
     // 主线任务：绑定当前账号，注入服务端领取与状态回调
     if(window.Quest) Quest.init(uid(),{
@@ -486,6 +487,7 @@ async function travelTo(gate){
     $('modalLayer').classList.add('hidden');
     await loadWorld(gate.to, state.world.x, state.world.y);
     if(window.Quest&&gate.to==='W2')Quest.set('travel',1);
+    window.SFX&&SFX.gate();
     toastModal('传送成功','已抵达 '+$('worldTitle').textContent);
     if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'match_join',worldId:gate.to,name:loggedUser}));
   }catch(e){ toastModal('传送失败',e.message); worldMap.active=true; }
@@ -495,6 +497,7 @@ function doLogout(){
   setSession(null); state=null; panel=null; equipDetailSlot=null;
   if(window.Quest&&$('questTracker'))$('questTracker').innerHTML='';
   closeWS(); worldMap.active=false;
+  $('sfxBtn')&&$('sfxBtn').classList.add('hidden');
   showView('login'); refreshLoginView();
 }
 
@@ -526,9 +529,12 @@ function expNeeded(level){
   return Math.round((g.expBase||60)*Math.pow(g.expGrowth||1.18,Math.max(0,level-1)));
 }
 function fmt(n){return Number(n||0).toLocaleString('zh-CN');}
+let _lastLv=0;
 function syncHud(){
   if(!state||!state.core)return;
   const c=state.core;
+  if(_lastLv&&c.level>_lastLv&&window.SFX)SFX.level();
+  _lastLv=c.level;
   const cdef=CFG&&CFG.classes.classes.find(x=>x.id===c.classId);
   const cname=cdef?cdef.name:c.classId;
   $('worldName').textContent=cname+' · '+(c.name||'英雄');
@@ -603,7 +609,7 @@ function renderHome(){
   const used=(state?.warehouse?.length)||12;
   const homeInfo=state?.home||{cart:0,bed:0};
   body.innerHTML=`
-    <div class="home-scene" style="position:relative;height:100px;border-radius:10px;margin-bottom:12px;background:linear-gradient(160deg,#1c2a3a,#0d1420);border:1px solid #2a3a52;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;gap:20px;padding-bottom:8px">
+    <div class="home-scene" style="position:relative;height:150px;border-radius:14px;margin-bottom:14px;background-image:linear-gradient(180deg,rgba(8,13,22,.35),rgba(8,13,22,.88)),url(${RES}v3/backgrounds/bg_explore_grassland.png);background-size:cover;background-position:center;border:1px solid #2a3a52;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;gap:36px;padding-bottom:10px">
       <div class="deco-item" data-deco="cart" style="text-align:center;cursor:pointer"><div>${ICON.cart(38)}</div><div style="font-size:11px;color:#c9a227">手推车 Lv.${homeInfo.cart||0}</div></div>
       <div class="deco-item" data-deco="bed" style="text-align:center;cursor:pointer"><div>${ICON.bed(38)}</div><div style="font-size:11px;color:#8fd0ff">营地床 Lv.${homeInfo.bed||0}</div></div>
     </div>
@@ -647,17 +653,23 @@ function renderDungeon(){
   Promise.all(dungeons.map(d=>api('/api/player/action',{userId:uid(),action:'dungeon_remain',dungeonId:d.id}).catch(()=>({remain:d.perDay})))).then(rems=>{
     if(!body.isConnected)return; // 面板已切换，避免残留渲染
     dungeons.forEach((d,i)=>d._remain=(rems[i]?.remain!=null?rems[i].remain:d.perDay));
+    const bgOf={grass:'bg_explore_grassland',mist:'bg_explore_forest',flame:'bg_explore_cave',frost:'bg_explore_snow'};
+    const diffOf={grass:1,mist:2,flame:3,frost:4};
     body.innerHTML=`
       <div class="dungeon-list">${dungeons.map(d=>{
         const locked=lv<d.lv, exhausted=(d._remain!=null?d._remain:d.perDay)<=0;
         const dis=locked||exhausted;
-        return `<div class="dungeon-item">
-          <div class="di-info"><div class="di-name">${d.name}</div>
-            <div class="di-meta">Lv${d.lv}+ · 今日剩余 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} · ${d.drop}</div></div>
-          <button class="di-enter" data-dg="${d.id}" ${dis?'disabled style="opacity:.45;cursor:not-allowed"':''}>${locked?'等级不足':exhausted?'次数用完':'进入'}</button>
+        const diff=diffOf[d.id]||1;
+        const stars='★'.repeat(diff)+'☆'.repeat(4-diff);
+        return `<div class="dungeon-item" style="background-image:linear-gradient(90deg,rgba(8,13,22,.94) 42%,rgba(8,13,22,.55)),url(${RES}v3/backgrounds/${bgOf[d.id]||'bg_explore_grassland'}.png)">
+          <div class="di-info">
+            <div class="di-name">${d.name}<em class="di-star">${stars}</em></div>
+            <div class="di-meta">推荐 Lv.${d.lv} · 今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次 · ${d.drop}</div>
+          </div>
+          <button class="di-enter${dis?' off':''}" data-dg="${d.id}" ${dis?'disabled':''}>${locked?'等级不足':exhausted?'次数用完':'进入'}</button>
         </div>`;
       }).join('')}</div>
-      <div class="home-note">副本为独立战斗场景，每日次数服务端权威计数、0 点重置，结算后返回副本列表</div>`;
+      <div class="home-note">每日 0 点重置次数 · 结算后返回列表 · 战败不扣次数</div>`;
     body.querySelectorAll('.di-enter').forEach(btn=>{
       if(btn.disabled)return;
       btn.onclick=async()=>{
@@ -677,18 +689,81 @@ function renderDungeon(){
   });
 }
 
-/* ---- 公会占位页（v1.6）：本期 Out of Scope ---- */
+/* ---- 公会页（v1.9.2）：捐献 / 公会商店 / 成员，服务端权威 ---- */
+const GUILD_SHOP=[
+  {id:'gem_pack',      name:'钻石礼包 ×60',  price:200, ico:'gem'},
+  {id:'material_pack', name:'材料包 ×30',    price:150, ico:'bag'},
+  {id:'skill_book',    name:'奥义书（经验+300）', price:300, ico:'book'}
+];
 function renderGuild(){
   $('panelTitle').textContent='公会';
-  $('panelSub').textContent='';
+  $('panelSub').textContent='天姬丨凌烟阁 · 3 级公会';
   const body=$('panelBody');
+  const ext=(state&&state.ext)||{};
+  const coin=Math.floor(ext.guildCoin||0);
+  const donated=Math.floor(ext.guildDonated||0);
+  const members=[
+    {n:'凌烟·青岚', role:'会长', lv:42, on:true},
+    {n:'凌烟·白露', role:'副会长', lv:38, on:true},
+    {n:'凌烟·子夜', role:'精英', lv:31, on:false},
+    {n:'凌烟·孤舟', role:'成员', lv:24, on:false},
+    {n:'你', role:'成员', lv:(state&&state.core?state.core.level:1), on:true}
+  ];
   body.innerHTML=`
-    <div class="guild-placeholder">
-      <h2>公 会</h2>
-      <p>公会系统开发中 · 敬请期待</p>
-      <span class="gp-sub">本期原型不包含公会功能（Out of Scope）</span>
-      <div class="gp-note">入口保留，功能待后续版本实现</div>
-    </div>`;
+    <div class="guild-hero">
+      <div class="gh-emblem">${ICON.shield(40,'#f0d590')}</div>
+      <div class="gh-meta">
+        <div class="gh-name">天姬丨凌烟阁 <em>Lv.3</em></div>
+        <div class="gh-sub">会长 凌烟·青岚 · 成员 ${members.length}/30 · 今日活跃 3</div>
+        <div class="gh-bar"><i style="width:${Math.min(100,(coin/1000)*100)}%"></i><span>公会进度 ${coin} / 1000</span></div>
+      </div>
+      <div class="gh-coin"><em>公会币</em><b>${fmt(coin)}</b></div>
+    </div>
+    <div class="sec-title">公会捐献</div>
+    <div class="guild-donate">
+      <div class="gd-info">
+        <div class="gd-t">每日捐献 <b>${donated}/3</b></div>
+        <div class="gd-s">消耗 1,000 金币 → 获得 50 公会币 + 60 经验</div>
+      </div>
+      <button class="big-btn goldbtn" id="guildDonate" ${donated>=3?'disabled style="opacity:.5;cursor:not-allowed"':''}>${donated>=3?'今日已满':'捐 献'}</button>
+    </div>
+    <div class="sec-title">公会商店</div>
+    <div class="guild-shop">
+      ${GUILD_SHOP.map(it=>`
+        <div class="gs-item">
+          <span class="gs-ico">${ICON[it.ico]?ICON[it.ico](24,'#f0d590'):''}</span>
+          <div class="gs-main"><div class="gs-name">${it.name}</div><div class="gs-price">${ICON.gold(12,'#c9a227')} ${it.price} 公会币</div></div>
+          <button class="gs-buy" data-item="${it.id}" ${coin<it.price?'disabled style="opacity:.45"':''}>兑换</button>
+        </div>`).join('')}
+    </div>
+    <div class="sec-title">成员</div>
+    <div class="guild-members">
+      ${members.map(m=>`<div class="gm-row"><span class="gm-dot ${m.on?'on':''}"></span>
+        <span class="gm-name">${m.n}</span><span class="gm-role">${m.role}</span><span class="gm-lv">Lv.${m.lv}</span></div>`).join('')}
+    </div>
+    <div class="home-note">公会捐献与商店为服务端权威计数 · 每日 0 点重置</div>`;
+  const btn=$('guildDonate');
+  if(btn&&!btn.disabled)btn.onclick=async()=>{
+    try{
+      const r=await api('/api/player/action',{userId:uid(),action:'guild_donate'});
+      if(r.state){state=r.state;await refreshStats();syncHud();}
+      window.SFX&&SFX.chest();
+      toastModal('捐献成功','公会币 +50 · 经验 +60');
+      renderGuild();
+    }catch(e){ toastModal('捐献失败',e.message); }
+  };
+  body.querySelectorAll('.gs-buy').forEach(b=>{
+    if(b.disabled)return;
+    b.onclick=async()=>{
+      try{
+        const r=await api('/api/player/action',{userId:uid(),action:'guild_buy',itemId:b.dataset.item});
+        if(r.state){state=r.state;await refreshStats();syncHud();}
+        window.SFX&&SFX.chest();
+        toastModal('兑换成功',GUILD_SHOP.find(x=>x.id===b.dataset.item).name);
+        renderGuild();
+      }catch(e){ toastModal('兑换失败',e.message); }
+    };
+  });
 }
 function renderRole(){
   const body=$('panelBody');
@@ -922,7 +997,8 @@ function renderWarehouse(){
   const eqAll=state?.equip||[];
   const eqInBag=eqAll.filter(e=>!e.equipped);
   const matItems=wh.map(it=>({id:it.id,name:it.id,qty:it.qty,kind:it.kind||'材料',isEq:false}));
-  const eqItems=eqInBag.map(e=>({id:e.id,name:e.id+' +'+(e.enhance||0),qty:1,kind:'装备_'+e.slot,isEq:true,slot:e.slot}));
+  const slotIcoSm={weapon:ICON.sword(20,'#2a1c08'),helmet:ICON.helmet(20,'#2a1c08'),armor:ICON.armor(20,'#2a1c08'),trinket:ICON.ring(20,'#2a1c08')};
+  const eqItems=eqInBag.map(e=>({id:e.id,name:e.id+' +'+(e.enhance||0),qty:1,kind:'装备_'+e.slot,isEq:true,slot:e.slot,ico:slotIcoSm[e.slot]||ICON.sword(20,'#2a1c08')}));
   const allItems=[...eqItems,...matItems];
   const colOf=k=>k.startsWith('装备')?'#b8862f':k==='消耗品'?'#5fd38a':'#8892a4';
   let filter='all';
@@ -932,7 +1008,7 @@ function renderWarehouse(){
     if(!grid)return;
     grid.innerHTML=shown.length?shown.map(it=>`
       <div class="wg-cell ${it.isEq?'equip':''}" data-id="${it.id}" data-eq="${it.isEq?it.slot:''}" data-kind="${it.kind}">
-        <div class="wgi" style="background:${colOf(it.kind)}">${it.isEq?ICON.sword(20,'#2a1c08'):ICON.crystal(20,'#2a1c08')}</div>${it.name}<div class="wq">x${it.qty}</div>
+        <div class="wgi" style="background:${colOf(it.kind)}">${it.isEq?(it.ico||ICON.sword(20,'#2a1c08')):ICON.crystal(20,'#2a1c08')}</div>${it.name}<div class="wq">x${it.qty}</div>
       </div>`).join(''):'<div class="sec-sub">此类物品为空</div>';
     grid.querySelectorAll('.wg-cell[data-id]').forEach(el=>el.onclick=()=>{
       const it=allItems.find(x=>x.id===el.dataset.id);
@@ -988,9 +1064,13 @@ function renderMap(){
     ${worlds.map(w=>{
       const isCur=w.id===cur, isUnlocked=unlocked.indexOf(w.id)>=0;
       const bg=bgOf[w.theme]||'bg_explore_grassland';
-      return `<div class="preview-box world-map-item ${isCur?'cur':''} ${isUnlocked?'':'locked'}" data-world="${w.id}" style="height:88px;background-image:linear-gradient(rgba(8,13,22,.6),rgba(8,13,22,.85)),url(${RES}v3/backgrounds/${bg}.png);background-size:cover;background-position:center;cursor:${isUnlocked&&!isCur?'pointer':'default'}">
-        <div class="pt">${w.id} · ${w.name} ${isCur?'<span style="font-size:11px;color:#7fe0a0">· 当前</span>':isUnlocked?'<span style="font-size:11px;color:#8fd0ff">· 已解锁</span>':'<span style="font-size:11px;color:#aaa">· 未解锁</span>'}</div>
-        <div class="sec-sub">需 Lv.${w.level} ｜ ${isUnlocked?'可探索':'沿通道推进解锁'}</div>
+      return `<div class="preview-box world-map-item ${isCur?'cur':''} ${isUnlocked?'':'locked'}" data-world="${w.id}" style="height:96px;background-image:linear-gradient(90deg,rgba(8,13,22,.92) 30%,rgba(8,13,22,.45)),url(${RES}v3/backgrounds/${bg}.png);background-size:cover;background-position:center;cursor:${isUnlocked&&!isCur?'pointer':'default'}">
+        <div class="wm-no">${w.id}</div>
+        <div class="wm-txt">
+          <div class="pt">${w.name}${isCur?'<span class="wm-tag cur">当前</span>':isUnlocked?'<span class="wm-tag ok">已解锁</span>':'<span class="wm-tag">未解锁</span>'}</div>
+          <div class="sec-sub">${isUnlocked?'可探索 · 点击传送':'需 Lv.'+w.level+' ｜ 沿通道推进解锁'}</div>
+        </div>
+        ${isUnlocked?'':'<div class="wm-lock">'+ICON.lock(18,'#8fa0b8')+'</div>'}
       </div>`;
     }).join('')}
     <div class="sec-sub" style="margin-top:12px">提示：也可在大世界中找到发光的「⇄ 世界通道」直接传送。</div>`;
@@ -1055,6 +1135,7 @@ async function onChestOpened(chest){
     if(r.state){state=r.state;await refreshStats();syncHud();}
   }catch(e){ reward=null; }
   if(reward&&window.Quest)Quest.progress('chest',1);
+  if(reward&&window.SFX)SFX.chest();
   const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱'}[chest.tier]||'宝箱';
   setTimeout(()=>{
     const rw=reward||{exp:0,gold:0,gem:0,material:0};
@@ -1161,9 +1242,11 @@ async function playBattle(rep,mon,bd){
       if(r.damage>0){
         setBAnim('mon','hit',300);
         spawnFx('-'+Math.round(r.damage),858,430,'#ff6b6b');
+        window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${r.skillName} → ${mon.name} -${Math.round(r.damage)}`);
       }else if(r.heal>0){
         spawnFx('+'+Math.round(r.heal),420,430,'#7fe0a0');
+        window.SFX&&SFX.heal();
         logLine('hero',`R${r.n} ${r.skillName} → 恢复 +${Math.round(r.heal)}`);
       }else{
         logLine('hero',`R${r.n} ${r.skillName}（增益/护盾）`);
@@ -1172,6 +1255,7 @@ async function playBattle(rep,mon,bd){
       setBAnim('mon','attack',420);await sleep(150);
       setBAnim('hero','hit',300);
       spawnFx('-'+Math.round(r.damage),420,430,'#ff6b6b');
+      window.SFX&&SFX.hit();
       logLine('mon',`R${r.n} ${mon.name} → 英雄 -${Math.round(r.damage)}`);
     }
     bHp.hero=r.heroHp;bHp.mon=r.monHp;updateHp();
@@ -1208,6 +1292,18 @@ $('switchBtn').onclick=switchAccount;
 $('authPwd').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 // 退出登录（唯一出口，全局）
 $('logoutBtn').onclick=doLogout;
+// 音效开关
+const sfxBtn=$('sfxBtn');
+function syncSfxBtn(){
+  if(!sfxBtn)return;
+  const m=window.SFX&&window.SFX.muted;
+  sfxBtn.textContent=m?'静音':'音效';
+  sfxBtn.classList.toggle('off',!!m);
+}
+if(sfxBtn){
+  syncSfxBtn();
+  sfxBtn.onclick=()=>{ if(window.SFX){ SFX.setMuted(!SFX.muted); syncSfxBtn(); if(!SFX.muted)SFX.click(); } };
+}
 // 底部 5 入口导航（v1.6，唯一面板入口）
 document.querySelectorAll('.nav-badge').forEach(b=>b.onclick=()=>openPanel(b.dataset.panel));
 // 面板唯一出口

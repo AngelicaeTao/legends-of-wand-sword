@@ -87,7 +87,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   } else {
     const base=RES+'maps/'+worldId+'_';
     const loadImg=(src)=>new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('地形加载失败:'+src));im.src=src;});
-    const maskImg=await loadImg(base+'mask_half.png');
+    const maskImg=await loadImg(base+'mask_half.png?v=1.9.2');
     const mc=document.createElement('canvas');mc.width=MASK_W;mc.height=MASK_H;
     const mg=mc.getContext('2d',{willReadFrequently:true});mg.drawImage(maskImg,0,0);
     this.maskData=mg.getImageData(0,0,MASK_W,MASK_H).data;
@@ -108,7 +108,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   this.groundBmp=null;this.ground=null;
   // 全图：仅当前世界持有。优先 fetch→createImageBitmap：
   // 解码与后续按块裁剪均在浏览器解码线程完成，主线程零大图采样（消除预热期掉帧）
-  const url=RES+'maps/'+worldId+'_full_half.png';
+  const url=RES+'maps/'+worldId+'_full_half.png?v=1.9.2';
   try{
     const resp=await fetch(url,{cache:'force-cache'});
     const blob=await resp.blob();
@@ -896,16 +896,37 @@ WMap.prototype.drawHero=function(g,sx,sy,t){
 };
 WMap.prototype.drawMonster=function(g,m,sx,sy,t){
   const bob=Math.sin(t*3+m.phase)*3;
-  g.fillStyle='rgba(0,0,0,.25)';g.beginPath();g.ellipse(sx,sy+10,24,9,0,0,Math.PI*2);g.fill();
+  const near=this.hero&&Math.hypot(m.x-this.hero.x,m.y-this.hero.y)<m.alert;
+  // 阴影
+  g.fillStyle='rgba(0,0,0,.26)';
+  g.beginPath();g.ellipse(sx,sy+10,24,9,0,0,Math.PI*2);g.fill();
   if(m.actor)m.actor.render(g,sx,sy+bob,m.type==='boss_beetle'?2.6:2.1,{});
-  g.strokeStyle='rgba(255,90,90,.45)';g.lineWidth=2;g.setLineDash([6,6]);
-  g.beginPath();g.arc(sx,sy,m.alert,0,Math.PI*2);g.stroke();g.setLineDash([]);
-  g.font='bold 13px sans-serif';g.textAlign='center';
-  const ny=sy-(m.type==='boss_beetle'?150:120);
-  g.strokeStyle='#000';g.lineWidth=3;g.strokeText(m.name,sx,ny);g.fillStyle='#fff';g.fillText(m.name,sx,ny);
-  g.fillStyle='#c0392b';g.fillRect(sx-24,ny+5,48,6);
-  g.fillStyle='#5fd38a';g.fillRect(sx-24,ny+5,48*(0.6+0.4*Math.abs(Math.sin(t+m.phase))),6);
-  g.fillStyle='#ff5d5d';g.font='bold 20px sans-serif';g.fillText('❗',sx+26,ny-12);
+  // 警戒圈：仅当玩家靠近时显示，避免满屏红圈
+  if(near){
+    g.strokeStyle='rgba(255,110,90,.30)';g.lineWidth=2;g.setLineDash([5,7]);
+    g.beginPath();g.arc(sx,sy,m.alert,0,Math.PI*2);g.stroke();g.setLineDash([]);
+  }
+  // 名牌：深色底 + 金色字（纯描边在浅色地面上看不清）
+  g.font='bold 12px "Microsoft YaHei","PingFang SC",sans-serif';
+  g.textAlign='center';
+  const label=m.name;
+  const w=g.measureText(label).width+14;
+  const ny=sy-(m.type==='boss_beetle'?150:118);
+  g.fillStyle='rgba(8,12,20,.72)';
+  g.beginPath();
+  const r=5;
+  g.moveTo(sx-w/2+r,ny-9);g.lineTo(sx+w/2-r,ny-9);g.quadraticCurveTo(sx+w/2,ny-9,sx+w/2,ny-9+r);
+  g.lineTo(sx+w/2,ny+7-r);g.quadraticCurveTo(sx+w/2,ny+7,sx+w/2-r,ny+7);
+  g.lineTo(sx-w/2+r,ny+7);g.quadraticCurveTo(sx-w/2,ny+7,sx-w/2,ny+7-r);
+  g.lineTo(sx-w/2,ny-9+r);g.quadraticCurveTo(sx-w/2,ny-9,sx-w/2+r,ny-9);
+  g.closePath();g.fill();
+  g.fillStyle=m.elite?'#f0d590':'#e8eef8';
+  g.fillText(label,sx,ny+3);
+  // 精英标记：小三角（替代 emoji ❗，避免字体缺字）
+  if(m.elite){
+    g.fillStyle='#ff6b5a';
+    g.beginPath();g.moveTo(sx+w/2+6,ny-10);g.lineTo(sx+w/2+14,ny-10);g.lineTo(sx+w/2+10,ny-2);g.closePath();g.fill();
+  }
 };
 WMap.prototype.drawChest=function(g,c,sx,sy,t,isDrop){
   const bob=isDrop?0:Math.sin(t*2+c.phase)*2;
@@ -921,13 +942,53 @@ WMap.prototype.drawChest=function(g,c,sx,sy,t,isDrop){
   }
 };
 WMap.prototype.drawGate=function(g,gt,sx,sy,t){
-  const glow=0.5+0.5*Math.sin(t*3);
-  g.strokeStyle=`rgba(150,200,255,${0.4+glow*0.4})`;g.lineWidth=4;
-  g.beginPath();g.ellipse(sx,sy,44,20,0,0,Math.PI*2);g.stroke();
-  g.fillStyle='rgba(120,180,255,.25)';g.beginPath();g.ellipse(sx,sy,40,17,0,0,Math.PI*2);g.fill();
-  g.font='bold 14px sans-serif';g.textAlign='center';g.strokeStyle='#000';g.lineWidth=3;
-  g.strokeText('⇄ '+gt.label,sx,sy-30);g.fillStyle='#cfe6ff';g.fillText('⇄ '+gt.label,sx,sy-30);
-  if(gt.requireLevel>0){g.font='11px sans-serif';g.fillStyle='#ffd590';g.fillText('需 Lv.'+gt.requireLevel,sx,sy-14);}
+  const glow=0.5+0.5*Math.sin(t*2.2);
+  // 光柱
+  const beam=g.createLinearGradient(0,sy-140,0,sy+10);
+  beam.addColorStop(0,'rgba(140,200,255,0)');
+  beam.addColorStop(0.55,`rgba(140,200,255,${0.10+glow*0.10})`);
+  beam.addColorStop(1,'rgba(140,200,255,.02)');
+  g.fillStyle=beam;
+  g.beginPath();g.moveTo(sx-26,sy+8);g.lineTo(sx-14,sy-130);g.lineTo(sx+14,sy-130);g.lineTo(sx+26,sy+8);g.closePath();g.fill();
+  // 石拱（左右立柱 + 顶弧）
+  g.fillStyle='#6b6a72';
+  g.fillRect(sx-40,sy-64,14,70);
+  g.fillRect(sx+26,sy-64,14,70);
+  g.beginPath();g.arc(sx,sy-64,40,Math.PI,0);g.lineWidth=13;g.strokeStyle='#6b6a72';g.stroke();
+  g.fillStyle='rgba(255,255,255,.12)';
+  g.fillRect(sx-40,sy-64,4,70);g.fillRect(sx+26,sy-64,4,70);
+  // 门内传送漩涡
+  g.save();
+  g.beginPath();g.arc(sx,sy-64,34,Math.PI,0);g.arc(sx,sy-3,34,0,Math.PI);g.closePath();g.clip();
+  const swirl=g.createRadialGradient(sx,sy-30,4,sx,sy-30,40);
+  swirl.addColorStop(0,`rgba(190,225,255,${0.55+glow*0.3})`);
+  swirl.addColorStop(0.6,'rgba(90,150,220,.35)');
+  swirl.addColorStop(1,'rgba(40,80,140,.08)');
+  g.fillStyle=swirl;g.fillRect(sx-40,sy-72,80,80);
+  g.strokeStyle=`rgba(200,235,255,${0.25+glow*0.25})`;g.lineWidth=2;
+  for(let i=0;i<3;i++){
+    g.beginPath();
+    for(let a=0;a<Math.PI*2;a+=0.25){
+      const r=10+i*9+a*2.4+t*0.8;
+      const px=sx+Math.cos(a)*Math.min(34,r), py=sy-34+Math.sin(a)*Math.min(34,r)*0.9;
+      a===0?g.moveTo(px,py):g.lineTo(px,py);
+    }
+    g.stroke();
+  }
+  g.restore();
+  // 顶牌
+  g.font='bold 12px "Microsoft YaHei","PingFang SC",sans-serif';g.textAlign='center';
+  const txt='⇄ '+gt.label;
+  const w=g.measureText(txt).width+16;
+  g.fillStyle='rgba(8,12,20,.78)';
+  g.fillRect(sx-w/2,sy-118,w,20);
+  g.strokeStyle='rgba(160,210,255,.6)';g.lineWidth=1;g.strokeRect(sx-w/2,sy-118,w,20);
+  g.fillStyle='#cfe6ff';g.fillText(txt,sx,sy-104);
+  if(gt.requireLevel>0){
+    g.font='10px "Microsoft YaHei",sans-serif';
+    g.fillStyle=gt.requireLevel>((this.hero&&this.lv)||99)?'#ff9a8f':'#ffd590';
+    g.fillText('需 Lv.'+gt.requireLevel,sx,sy-84);
+  }
 };
 WMap.prototype.drawRemote=function(g,r,sx,sy,t){
   g.fillStyle='rgba(0,0,0,.25)';g.beginPath();g.ellipse(sx,sy+10,18,7,0,0,Math.PI*2);g.fill();

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 	"os"
 
 	"zjcs/server/internal/game"
@@ -368,6 +369,43 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 			if d.ID == q.DGID { perDay = d.PerDay; break }
 		}
 		extra["remain"] = p.DungeonRemain(q.DGID, perDay)
+	case "guild_donate":
+		if p.Ext == nil { p.Ext = map[string]any{} }
+		today := time.Now().Format("2006-01-02")
+		if d, _ := p.Ext["guildDay"].(string); d != today {
+			p.Ext["guildDay"] = today
+			p.Ext["guildDonated"] = float64(0)
+		}
+		donated := 0
+		if v, ok := p.Ext["guildDonated"].(float64); ok { donated = int(v) }
+		if donated >= 3 { http.Error(w, "今日捐献次数已用完（3/3）", 409); return }
+		const cost = 1000
+		if p.Core.Gold < cost { http.Error(w, "金币不足（需 1,000）", 400); return }
+		p.Core.Gold -= cost
+		coin := 0
+		if v, ok := p.Ext["guildCoin"].(float64); ok { coin = int(v) }
+		coin += 50
+		p.Ext["guildCoin"] = float64(coin)
+		p.Ext["guildDonated"] = float64(donated + 1)
+		p.GainExp(60)
+		extra["guildCoin"] = coin
+		extra["guildDonated"] = donated + 1
+	case "guild_buy":
+		if p.Ext == nil { p.Ext = map[string]any{} }
+		prices := map[string]int{"gem_pack": 200, "material_pack": 150, "skill_book": 300}
+		price, ok := prices[q.ItemID]
+		if !ok { http.Error(w, "未知商品", 400); return }
+		coin := 0
+		if v, ok := p.Ext["guildCoin"].(float64); ok { coin = int(v) }
+		if coin < price { http.Error(w, "公会币不足", 400); return }
+		coin -= price
+		p.Ext["guildCoin"] = float64(coin)
+		switch q.ItemID {
+		case "gem_pack": p.Core.Gem += 60
+		case "material_pack": p.Core.Material += 30
+		case "skill_book": p.Core.Gem += 30; p.GainExp(300)
+		}
+		extra["guildCoin"] = coin
 	case "quest_claim":
 		rw, ok := questRewards[q.QuestID]
 		if !ok { http.Error(w, "未知任务", 400); return }

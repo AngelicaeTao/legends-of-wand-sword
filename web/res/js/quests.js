@@ -45,13 +45,13 @@ function render(){
   const list=QDEFS.slice(ai,ai+2);
   let html=`<div class="qt-head"><span>主线 · 第一章</span><em>${claimedCount()}/${QDEFS.length}</em></div>`;
   list.forEach((q,i)=>{
-    const p=Math.min(st.progress[q.kind]||0,q.goal), ok=done(q);
+    const p=Math.min(st.progress[q.kind]||0,q.goal), ok=done(q)&&i===0;   // 只有当前任务可领，后续任务仅展示进度
     html+=`<div class="qt-item${i>0?' next':''}${ok?' done':''}" data-q="${q.id}">
       <span class="qt-ico">${(window.ICON&&ICON[q.ico])?ICON[q.ico](22,ok?'#7fe0a0':'#f0d590'):''}</span>
       <div class="qt-main">
         <div class="qt-name">${q.name}</div>
         <div class="qt-desc">${q.desc}</div>
-        <div class="qt-bar"><i style="width:${Math.round(p/q.goal*100)}%"></i></div>
+        <div class="qt-bar${p>=q.goal?' full':''}"><i style="width:${Math.round(p/q.goal*100)}%"></i></div>
       </div>
       <span class="qt-right">${ok?'<b class="qt-claim">领取</b>':`<em>${p}/${q.goal}</em>`}</span>
     </div>`;
@@ -70,6 +70,7 @@ function render(){
 async function claim(qid){
   const q=QDEFS.find(x=>x.id===qid);
   if(!q||!done(q)||st.claimed[qid]) return;
+  if(QDEFS[activeIdx()]&&QDEFS[activeIdx()].id!==qid) return;   // 顺序解锁：只能领当前任务
   try{
     const r=await hooks.claim(qid);
     st.claimed[qid]=true; save();
