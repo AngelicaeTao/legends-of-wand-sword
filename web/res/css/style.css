@@ -478,7 +478,7 @@ input{font-family:inherit}
 .dungeon-item{background-size:cover;background-position:center 62%;border-radius:12px;position:relative;overflow:hidden;
   background-blend-mode:multiply;box-shadow:inset 0 0 40px rgba(6,10,18,.75)}
 .di-name{display:flex;align-items:center;gap:8px}
-.di-star{font-style:normal;font-size:11px;color:#f0d590;letter-spacing:2px;opacity:.9}
+.di-star{font-style:normal;display:inline-flex;align-items:center;gap:2px;opacity:.95}
 .di-enter.off{background:linear-gradient(180deg,#4a5568,#333c4c)!important;box-shadow:0 3px 0 #232a36!important;color:#9aa7bd!important}
 .world-map-item{position:relative;display:flex;align-items:center;gap:13px;padding:10px 14px;overflow:hidden}
 .wm-no{flex:0 0 auto;width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;
@@ -560,3 +560,9 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .guild-members::-webkit-scrollbar{width:6px}
 .guild-members::-webkit-scrollbar-thumb{background:rgba(217,180,91,.45);border-radius:3px}
 .guild-members::-webkit-scrollbar-track{background:rgba(255,255,255,.05);border-radius:3px}
+/* v1.9.4：副本卡去掉照片背景（小尺寸拉伸后树干变黑竖条），改主题色 + 帐篷水印 */
+.dungeon-item{background:linear-gradient(100deg,rgba(20,30,46,.96),rgba(12,18,28,.92))!important;
+  border-left:3px solid var(--dc,#5b8f4a)}
+.dungeon-item .di-art{position:absolute;right:-14px;bottom:-26px;opacity:.12;transform:rotate(-8deg);pointer-events:none;
+  color:var(--dc,#5b8f4a)}
+.dungeon-item .di-art svg{width:132px;height:132px;stroke:var(--dc,#5b8f4a)}

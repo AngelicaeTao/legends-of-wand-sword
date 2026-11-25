@@ -737,8 +737,10 @@ function renderDungeon(){
         const locked=lv<d.lv, exhausted=(d._remain!=null?d._remain:d.perDay)<=0;
         const dis=locked||exhausted;
         const diff=diffOf[d.id]||1;
-        const stars='★'.repeat(diff)+'☆'.repeat(4-diff);
-        return `<div class="dungeon-item" style="background-image:linear-gradient(90deg,rgba(8,13,22,.95) 46%,rgba(8,13,22,.74) 78%,rgba(8,13,22,.62)),url(${RES}v3/backgrounds/${bgOf[d.id]||'bg_explore_grassland'}.png)">
+        const stars=Array.from({length:4},(_,i)=>i<diff?ICON.star(11,'#f0d590'):ICON.star(11,'#37414f')).join('');
+        const tint=['#5b8f4a','#4a6b8f','#a2593c','#6f86a8'][diff-1]||'#5b8f4a';
+        return `<div class="dungeon-item" style="--dc:${tint}">
+          <div class="di-art">${ICON.tent(132)}</div>
           <div class="di-info">
             <div class="di-name">${d.name}<em class="di-star">${stars}</em></div>
             <div class="di-meta">推荐 Lv.${d.lv} · 今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次 · ${d.drop}</div>
