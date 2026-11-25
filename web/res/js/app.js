@@ -192,19 +192,65 @@ function ensureBattleActors(){
     battleMonActor.init().then(()=>battleMonActor.play('idle'));
   }
 }
+/* 战斗背景：程序化"远景 + 地面 + 前景剪影"，按当前世界主题换色。
+   比静态 arena 图更贴合场景，也避免"所有战斗都在同一个紫色舞台"的违和。 */
+const BG_PAL={
+  grassland:{sky:['#7ea9c9','#cfe0b4'],far:'#5b7f53',near:'#3d5c37',ground:'#87a45c',groundD:'#6d8a49'},
+  forest:   {sky:['#3d5a4c','#7c9a74'],far:'#2f4b31',near:'#20361f',ground:'#4f6b3d',groundD:'#3b5330'},
+  desert:   {sky:['#c98f5c','#f2d7a8'],far:'#a5794a',near:'#7d5630',ground:'#c09159',groundD:'#a2764a'},
+  snow:     {sky:['#8fb0c8','#e8f4fb'],far:'#8fa8bb',near:'#6c8496',ground:'#c6d9e5',groundD:'#a9c0d0'},
+  cave:     {sky:['#4a3f2e','#8a7756'],far:'#4e4232',near:'#33291c',ground:'#7b6a4f',groundD:'#5f5240'},
+  arena:    {sky:['#241f38','#4d4468'],far:'#332c4a',near:'#1e1a2c',ground:'#4b4560',groundD:'#37324a'}
+};
+function drawBattleBg(key){
+  const p=BG_PAL[key]||BG_PAL.grassland;
+  // 1) 天空
+  const sky=cvb.createLinearGradient(0,0,0,470);
+  sky.addColorStop(0,p.sky[0]);sky.addColorStop(1,p.sky[1]);
+  cvb.fillStyle=sky;cvb.fillRect(0,0,1280,470);
+  // 2) 远景山脊（两层）
+  const ridge=(yBase,amp,color,seed)=>{
+    cvb.fillStyle=color;cvb.beginPath();cvb.moveTo(0,yBase);
+    for(let x=0;x<=1280;x+=40){
+      const h=Math.sin((x+seed)*0.006)*amp+Math.sin((x+seed)*0.017)*amp*0.45;
+      cvb.lineTo(x,yBase-h);
+    }
+    cvb.lineTo(1280,470);cvb.lineTo(0,470);cvb.closePath();cvb.fill();
+  };
+  ridge(400,46,p.far,0); ridge(440,28,p.near,120);
+  // 3) 地面
+  cvb.fillStyle=p.ground;cvb.fillRect(0,452,1280,268);
+  const gd=cvb.createLinearGradient(0,452,0,720);
+  gd.addColorStop(0,p.groundD);gd.addColorStop(.35,p.ground);
+  cvb.fillStyle=gd;cvb.fillRect(0,452,1280,268);
+  // 4) 地面纹理：横向条带 + 稀疏颗粒（确定性）
+  cvb.strokeStyle='rgba(0,0,0,.10)';cvb.lineWidth=2;
+  for(let i=0;i<7;i++){
+    const y=470+i*34+i*i*1.2;
+    cvb.beginPath();cvb.moveTo(0,y);cvb.lineTo(1280,y+6);cvb.stroke();
+  }
+  for(let i=0;i<220;i++){
+    const x=(i*197)%1280, y=458+((i*137)%262);
+    cvb.fillStyle=(i%3)?'rgba(255,255,255,.05)':'rgba(0,0,0,.07)';
+    cvb.fillRect(x,y,2,1);
+  }
+  // 5) 战斗区地面光斑
+  const spot=cvb.createRadialGradient(640,540,20,640,540,420);
+  spot.addColorStop(0,'rgba(255,240,200,.10)');spot.addColorStop(1,'rgba(255,240,200,0)');
+  cvb.fillStyle=spot;cvb.fillRect(0,440,1280,280);
+}
 function drawBattle(t,now){
-  const bg=IMG['bg_arena'];
-  if(bg) cvb.drawImage(bg,0,0,1280,720); else {cvb.fillStyle='#26202a';cvb.fillRect(0,0,1280,720);}
+  const key=(worldMap&&worldMap.themeKey)||'grassland';
+  drawBattleBg(key);
   ensureBattleActors();
-  // 若动画到期，回 idle
   if(curBAnim('hero')==='idle'&&battleHeroActor&&battleHeroActor.state!=='idle')battleHeroActor.play('idle');
   if(curBAnim('mon')==='idle'&&battleMonActor&&battleMonActor.state!=='idle')battleMonActor.play('idle');
-  cvb.fillStyle='rgba(0,0,0,.35)';
-  cvb.beginPath();cvb.ellipse(430,560,52,14,0,0,7);cvb.fill();
-  cvb.beginPath();cvb.ellipse(870,560,58,15,0,0,7);cvb.fill();
-  if(battleHeroActor)battleHeroActor.render(cvb,430,555,3,{});
-  if(battleMonActor)battleMonActor.render(cvb,870,558,currentMonster&&currentMonster.type==='boss_beetle'?3.6:3,{dir:-1});
-  // 程序化飘字（v3.0 飘字由代码渲染，不依赖 fx PNG）
+  // 站位：英雄 420 / 怪物 860，脚底阴影贴合
+  cvb.fillStyle='rgba(0,0,0,.34)';
+  cvb.beginPath();cvb.ellipse(420,566,54,14,0,0,7);cvb.fill();
+  cvb.beginPath();cvb.ellipse(858,566,58,15,0,0,7);cvb.fill();
+  if(battleHeroActor)battleHeroActor.render(cvb,420,560,3.2,{});
+  if(battleMonActor)battleMonActor.render(cvb,858,558,currentMonster&&currentMonster.type==='boss_beetle'?3.8:3.2,{dir:-1});
   bFx=bFx.filter(f=>now-f.born<620);
   for(const f of bFx){
     const age=(now-f.born)/620;
@@ -231,7 +277,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.8.0';
+const BUILD_VER='v1.9.0';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -340,6 +386,13 @@ async function enterGame(){
     await loadWorld(state.world.worldId||'W1', state.world.x, state.world.y);
     showView('world');
     connectWS();
+    // 主线任务：绑定当前账号，注入服务端领取与状态回调
+    if(window.Quest) Quest.init(uid(),{
+      claim:(qid)=>api('/api/player/action',{userId:uid(),action:'quest_claim',questId:qid}),
+      getState:()=>state,
+      onState:(st)=>{ state=st; refreshStats().then(syncHud); },
+      toast:(t,s)=>toastModal(t,s)
+    });
   }catch(e){ $('loadTxt').textContent='进入失败：'+e.message; $('loading').classList.remove('hidden'); }
 }
 // 加载世界：切主题地图 + 拉取 ACTIVE 点位
@@ -432,6 +485,7 @@ async function travelTo(gate){
     if(r.state){ state=r.state; }
     $('modalLayer').classList.add('hidden');
     await loadWorld(gate.to, state.world.x, state.world.y);
+    if(window.Quest&&gate.to==='W2')Quest.set('travel',1);
     toastModal('传送成功','已抵达 '+$('worldTitle').textContent);
     if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'match_join',worldId:gate.to,name:loggedUser}));
   }catch(e){ toastModal('传送失败',e.message); worldMap.active=true; }
@@ -439,6 +493,7 @@ async function travelTo(gate){
 // 唯一出口：任意处 → 登录页
 function doLogout(){
   setSession(null); state=null; panel=null; equipDetailSlot=null;
+  if(window.Quest&&$('questTracker'))$('questTracker').innerHTML='';
   closeWS(); worldMap.active=false;
   showView('login'); refreshLoginView();
 }
@@ -466,6 +521,10 @@ function closePanel(){
 }
 
 /* ---- HUD 同步（大世界左上信息） ---- */
+function expNeeded(level){
+  const g=(CFG&&CFG.classes&&CFG.classes.levelGrowth)||{expBase:60,expGrowth:1.18};
+  return Math.round((g.expBase||60)*Math.pow(g.expGrowth||1.18,Math.max(0,level-1)));
+}
 function fmt(n){return Number(n||0).toLocaleString('zh-CN');}
 function syncHud(){
   if(!state||!state.core)return;
@@ -474,7 +533,13 @@ function syncHud(){
   const cname=cdef?cdef.name:c.classId;
   $('worldName').textContent=cname+' · '+(c.name||'英雄');
   const power=heroStats&&heroStats.power?heroStats.power:c.battlePower;
-  $('worldLv').textContent=`Lv.${c.level} · 战力 ${fmt(power)} · 💰${fmt(c.gold)} 💎${fmt(c.gem)}`;
+  const need=expNeeded(c.level), exp=Math.max(0,c.exp||0), pct=Math.min(100,need>0?exp/need*100:0);
+  const ef=$('expFill'), et=$('expTxt');
+  if(ef){ ef.style.width=pct.toFixed(1)+'%'; }
+  if(et){ et.textContent=`EXP ${fmt(exp)} / ${fmt(need)}`; }
+  $('worldLv').innerHTML=`Lv.${c.level} · 战力 ${fmt(power)} · ` +
+    `<b class="cur cur-gold">${ICON.gold(13)}<i>${fmt(c.gold)}</i></b>` +
+    `<b class="cur cur-gem">${ICON.gem(13)}<i>${fmt(c.gem)}</i></b>`;
   const iconKey=(cdef&&cdef.icon)?cdef.icon.replace('ui_card_','').replace('.png',''):'warrior';
   $('worldClsIco').src=RES+'characters/cards/ui_card_'+iconKey+'.png';
   $('heroName').textContent=(c.name||'英雄')+' Lv.'+c.level;
@@ -486,16 +551,29 @@ async function refreshStats(){
   }catch(e){}
 }
 function attrRows(){
-  const s=heroStats||{};
+  const st=heroStats||{};
   const rows=[
-    ['攻击', Number(s.atk||0).toFixed(1)],
-    ['防御', Number(s.def||0).toFixed(1)],
-    ['生命', Math.round(s.hp||0)],
-    ['暴击', (Number(s.crit||0)*100).toFixed(0)+'%'],
-    ['速度', Math.round(s.spd||10)],
+    ['攻击', Number(st.atk||0).toFixed(1), 'atk'],
+    ['防御', Number(st.def||0).toFixed(1), 'def'],
+    ['生命', Math.round(st.hp||0), 'hp'],
+    ['暴击', (Number(st.crit||0)*100).toFixed(0)+'%', 'crit'],
+    ['速度', Math.round(st.spd||10), 'spd'],
+    ['装备', ((state&&state.equip)?state.equip.filter(e=>e.equipped).length:0)+' / 4', 'eq']
   ];
-  return rows.map(([k,v])=>`<div class="attr-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+  return `<div class="attr-grid">${rows.map(([k,v])=>
+    `<div class="attr-cell"><span class="ak">${k}</span><span class="av">${v}</span></div>`).join('')}</div>`;
 }
+function recentLogs(){
+  const logs=(state&&state.logs)||[];
+  if(!logs.length)return '';
+  const rows=logs.slice(-5).reverse().map(l=>{
+    const t=l.ts?new Date(l.ts*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
+    return `<div class="log-row"><span class="lr-t">${t}</span><span class="lr-e">${l.event||''}${l.detail?' · '+l.detail:''}</span></div>`;
+  }).join('');
+  return `<div class="sec-title">最近动态</div><div class="log-list">${rows}</div>`;
+}
+const QUALITY=['普通','精良','稀有','史诗','传说'];
+const QCOLOR=['#9aa7bd','#5fd38a','#5aa8e0','#b98cf0','#e8a33c'];
 
 /* ============================================================
    面板渲染（单入口单出口，面板内 tab 不跨面板）
@@ -526,16 +604,16 @@ function renderHome(){
   const homeInfo=state?.home||{cart:0,bed:0};
   body.innerHTML=`
     <div class="home-scene" style="position:relative;height:100px;border-radius:10px;margin-bottom:12px;background:linear-gradient(160deg,#1c2a3a,#0d1420);border:1px solid #2a3a52;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;gap:20px;padding-bottom:8px">
-      <div class="deco-item" data-deco="cart" style="text-align:center;cursor:pointer"><div style="font-size:34px">🛒</div><div style="font-size:11px;color:#c9a227">手推车 Lv.${homeInfo.cart||0}</div></div>
-      <div class="deco-item" data-deco="bed" style="text-align:center;cursor:pointer"><div style="font-size:34px">🛏️</div><div style="font-size:11px;color:#8fd0ff">营地床 Lv.${homeInfo.bed||0}</div></div>
+      <div class="deco-item" data-deco="cart" style="text-align:center;cursor:pointer"><div>${ICON.cart(38)}</div><div style="font-size:11px;color:#c9a227">手推车 Lv.${homeInfo.cart||0}</div></div>
+      <div class="deco-item" data-deco="bed" style="text-align:center;cursor:pointer"><div>${ICON.bed(38)}</div><div style="font-size:11px;color:#8fd0ff">营地床 Lv.${homeInfo.bed||0}</div></div>
     </div>
     <div class="home-cards">
       <button class="home-card hc-warehouse" id="hcWarehouse">
-        <span class="hc-ico">🎒</span><span class="hc-title">仓库</span>
+        <span class="hc-ico">${ICON.bag(26)}</span><span class="hc-title">仓库</span>
         <span class="hc-desc">物品存放与整理</span><span class="hc-enter">进入</span>
       </button>
       <button class="home-card hc-idle" id="hcIdle">
-        <span class="hc-ico">⏳</span><span class="hc-title">挂机收益</span>
+        <span class="hc-ico">${ICON.hourglass(26)}</span><span class="hc-title">挂机收益</span>
         <span class="hc-desc">离线领取与结算</span><span class="hc-enter">进入</span>
       </button>
     </div>
@@ -621,27 +699,43 @@ function renderRole(){
   if(roleTab==='info'){
     const eq=state.equip||[];
     const done=eq.filter(e=>e.equipped).length;
+    const need=expNeeded(c.level), exp=Math.max(0,c.exp||0), pct=Math.min(100,need>0?exp/need*100:0);
     html+=`
-      <div class="sec-title">${cdef?cdef.name:c.classId} · ${c.name||'英雄'}</div>
-      <div class="sec-sub">Lv.${c.level} ｜ 战力 ${fmt(c.battlePower)} ｜ 已装备 ${done} 件</div>
-      <div style="text-align:center;margin:8px 0 14px"><img src="${RES}v3/characters/cards/${(cdef&&cdef.icon)||'ui_card_mage.png'}" style="width:130px;height:170px;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 8px 18px rgba(0,0,0,.6))"></div>
-      <div class="sec-title">基础属性</div>${attrRows()}`;
+      <div class="hero-card">
+        <div class="hero-portrait"><img src="${RES}v3/characters/cards/${(cdef&&cdef.icon)||'ui_card_mage.png'}" alt=""></div>
+        <div class="hero-brief">
+          <div class="hb-name">${c.name||'英雄'}<em>${cdef?cdef.name:c.classId}</em></div>
+          <div class="hb-lv">Lv.${c.level}<span>已装备 ${done}/4</span></div>
+          <div class="hb-exp"><i style="width:${pct.toFixed(1)}%"></i><span>${fmt(exp)} / ${fmt(need)}</span></div>
+        </div>
+        <div class="hero-power"><em>战力</em><b>${fmt((heroStats&&heroStats.power)||c.battlePower)}</b></div>
+      </div>
+      <div class="sec-title">基础属性</div>${attrRows()}
+      ${recentLogs()}`;
   } else if(roleTab==='equip'){
     const eq=state.equip||[];
     const slotNames={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
-    const slotIco={weapon:'🗡️',helmet:'🪖',armor:'🛡️',trinket:'💍'};
+    const slotIco={weapon:ICON.sword(30),helmet:ICON.helmet(30),armor:ICON.armor(30),trinket:ICON.ring(30)};
     const order=['weapon','helmet','armor','trinket'];
     const cells=order.map(id=>{
       const e=eq.find(x=>x.slot===id&&x.equipped);
-      return `<div class="equip-cell ${e?'worn':''}"><div class="ei">${slotIco[id]}</div><div class="en">${slotNames[id]}</div><div class="el">${e?e.id+' +'+e.enhance:'空'}</div></div>`;
+      const q=e?Math.max(0,Math.min(4,e.quality||0)):-1;
+      return `<div class="equip-cell ${e?'worn':''}" style="${e?'border-color:'+QCOLOR[q]:''}">
+        <div class="ei">${slotIco[id]}</div><div class="en">${slotNames[id]}</div>
+        <div class="el" style="${e?'color:'+QCOLOR[q]:''}">${e?e.id+' +'+(e.enhance||0):'未装备'}</div></div>`;
     }).join('');
-    const rows=eq.map(e=>`
-      <div class="preview-box" style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1"><div class="pt">${e.id} <span style="font-size:11px;color:${e.equipped?'#7fe0a0':'#9aa7bd'}">${e.equipped?'· 已穿戴':'· 仓库中'}</span></div>
-          <div class="sec-sub">${slotNames[e.slot]||e.slot} ｜ 强化 +${e.enhance||0}</div></div>
-        <button class="btn-gray eq-toggle" data-eqid="${e.id}" data-slot="${e.slot}">${e.equipped?'卸下':'穿戴'}</button>
-        ${e.equipped?`<button class="btn-gray eq-enh" data-slot="${e.slot}">强化</button>`:''}
-      </div>`).join('');
+    const rows=eq.map(e=>{
+      const q=Math.max(0,Math.min(4,e.quality||0));
+      return `<div class="eq-row" style="border-left-color:${QCOLOR[q]}">
+        <span class="eq-ico">${slotIco[e.slot]||ICON.crystal(20)}</span>
+        <div style="flex:1;min-width:0">
+          <div class="eq-name" style="color:${QCOLOR[q]}">${e.id}<em>${QUALITY[q]}</em></div>
+          <div class="eq-sub">${slotNames[e.slot]||e.slot} · 强化 +${e.enhance||0} ${e.equipped?'· <b style="color:#7fe0a0">已穿戴</b>':'· 仓库中'}</div>
+        </div>
+        <button class="eq-btn eq-toggle" data-eqid="${e.id}" data-slot="${e.slot}">${e.equipped?'卸下':'穿戴'}</button>
+        ${e.equipped?`<button class="eq-btn gold eq-enh" data-slot="${e.slot}">强化</button>`:''}
+      </div>`;
+    }).join('');
     html+=`
       <div class="sec-sub">已穿戴 4 槽，点击下方按钮拆装/强化（服务端权威，战力即时更新）</div>
       <div class="equip-grid">${cells}</div>
@@ -655,13 +749,26 @@ function renderRole(){
     const unlocked=state.skills?.unlocked||['slash'];
     const color=['sk-fire','sk-ice','sk-heal','sk-shield'];
     const kindDesc=s=>s.kind==='heal'?'恢复生命':s.kind==='shield'?'吸收伤害':s.kind==='buff'?'增益':s.kind==='debuff'?'减益':'单体伤害';
+    const kindIco={physical:'sword',magic:'bolt',heal:'flask',shield:'shield',buff:'star',debuff:'skull'};
     const cards=equipped.map((sid,i)=>{
       const s=all.find(x=>x.id===sid)||all[0];
-      return `<div class="skill-card ${color[i%4]}" data-slot="${i}" style="cursor:pointer"><div><div class="sn">${s.name}</div><div class="sd">${kindDesc(s)}</div></div><div class="srm" style="font-size:10px;color:#ffb">点击卸下</div></div>`;
+      const ic=kindIco[s.kind]||'sword';
+      return `<div class="skill-card ${color[i%4]}" data-slot="${i}" style="cursor:pointer">
+        <div class="sk-ico">${ICON[ic]?ICON[ic](24,'#fff3c4'):''}</div>
+        <div style="flex:1;min-width:0"><div class="sn">${s.name}</div>
+          <div class="sd">${kindDesc(s)} · 威力 ${Number(s.power||1).toFixed(1)} · CD ${s.cd||2}s</div></div>
+        <div class="srm" style="font-size:10px;color:#ffd590">点击卸下</div>
+      </div>`;
     }).join('');
     const lib=all.filter(s=>!equipped.includes(s.id)).map(s=>{
       const lock=!unlocked.includes(s.id);
-      return `<div class="lib-item ${lock?'locked':''}" data-skill="${s.id}" style="cursor:${lock?'not-allowed':'pointer'};opacity:${lock?'.45':'1'}">${s.name}${lock?' 🔒':''}</div>`;
+      const ic=kindIco[s.kind]||'sword';
+      return `<div class="lib-item ${lock?'locked':''}" data-skill="${s.id}" style="cursor:${lock?'not-allowed':'pointer'};opacity:${lock?'.5':'1'}">
+        <span class="li-ico">${ICON[ic]?ICON[ic](18,lock?'#7d8899':'#f0d590'):''}</span>
+        <span class="li-name">${s.name}</span>
+        <span class="li-cd">CD ${s.cd||2}s</span>
+        ${lock?ICON.lock(12,'#9aa7bd'):''}
+      </div>`;
     }).join('');
     html+=`
       <div class="sec-sub">战前 BD：点击技能库装配（蓝=已解锁，灰=未解锁），点击槽位卸下。同流派技能互斥，最多 4 槽。</div>
@@ -724,6 +831,7 @@ function renderRole(){
         const r=await api('/api/player/action',{userId:uid(),action:act,itemId:b.dataset.eqid});
         if(r.state){state=r.state;await refreshStats();syncHud();}
         toastModal(act==='equip'?'已穿戴':'已卸下',b.dataset.eqid);
+        if(window.Quest&&state.equip)Quest.set('equip',state.equip.filter(x=>x.equipped).length);
         renderRole();
       }catch(err){toastModal('操作失败',err.message);}
     });
@@ -733,6 +841,7 @@ function renderRole(){
         const r=await api('/api/player/action',{userId:uid(),action:'enhance',slot:b.dataset.slot});
         if(r.state){state=r.state;await refreshStats();syncHud();}
         toastModal('强化成功',b.dataset.slot+' +'+(r.enhanceLevel||'?'));
+        if(window.Quest)Quest.progress('enhance',1);
         renderRole();
       }catch(err){toastModal('强化失败',err.message);}
     });
@@ -760,7 +869,7 @@ function renderWarehouse(){
   if(equipDetailSlot){
     const eq=state&&state.equip?state.equip:[];
     const e=eq.find(x=>x.slot===equipDetailSlot)||{slot:equipDetailSlot,name:'未装备',enhance:0};
-    const meta={weapon:['武器','🗡️'],helmet:['头盔','🪖'],armor:['护甲','🛡️'],trinket:['饰品','💍']}[equipDetailSlot]||['装备','◈'];
+    const meta={weapon:['武器',ICON.sword(34)],helmet:['头盔',ICON.helmet(34)],armor:['护甲',ICON.armor(34)],trinket:['饰品',ICON.ring(34)]}[equipDetailSlot]||['装备',ICON.crystal(34)];
     const lv=e.enhance||0;
     body.innerHTML=`
       ${backHome}
@@ -786,6 +895,7 @@ function renderWarehouse(){
         const r=await api('/api/player/action',{userId:uid(),action:'enhance',slot:equipDetailSlot});
         if(r.state){state=r.state;await refreshStats();syncHud();}
         toastModal('强化成功',equipDetailSlot+' 强化至 +'+(r.enhanceLevel||'?'));
+        if(window.Quest)Quest.progress('enhance',1);
         renderWarehouse();
       }catch(e){toastModal('强化失败',e.message);}
     };
@@ -822,7 +932,7 @@ function renderWarehouse(){
     if(!grid)return;
     grid.innerHTML=shown.length?shown.map(it=>`
       <div class="wg-cell ${it.isEq?'equip':''}" data-id="${it.id}" data-eq="${it.isEq?it.slot:''}" data-kind="${it.kind}">
-        <div class="wgi" style="background:${colOf(it.kind)}">${it.isEq?'🗡️':'◈'}</div>${it.name}<div class="wq">x${it.qty}</div>
+        <div class="wgi" style="background:${colOf(it.kind)}">${it.isEq?ICON.sword(20,'#2a1c08'):ICON.crystal(20,'#2a1c08')}</div>${it.name}<div class="wq">x${it.qty}</div>
       </div>`).join(''):'<div class="sec-sub">此类物品为空</div>';
     grid.querySelectorAll('.wg-cell[data-id]').forEach(el=>el.onclick=()=>{
       const it=allItems.find(x=>x.id===el.dataset.id);
@@ -883,7 +993,7 @@ function renderMap(){
         <div class="sec-sub">需 Lv.${w.level} ｜ ${isUnlocked?'可探索':'沿通道推进解锁'}</div>
       </div>`;
     }).join('')}
-    <div class="sec-sub" style="margin-top:12px">💡 也可在大世界中找到发光的「⇄ 世界通道」直接传送。</div>`;
+    <div class="sec-sub" style="margin-top:12px">提示：也可在大世界中找到发光的「⇄ 世界通道」直接传送。</div>`;
   body.querySelectorAll('.world-map-item').forEach(el=>{
     el.onclick=()=>{
       const wid=el.dataset.world;
@@ -944,6 +1054,7 @@ async function onChestOpened(chest){
     reward=r.reward;
     if(r.state){state=r.state;await refreshStats();syncHud();}
   }catch(e){ reward=null; }
+  if(reward&&window.Quest)Quest.progress('chest',1);
   const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱'}[chest.tier]||'宝箱';
   setTimeout(()=>{
     const rw=reward||{exp:0,gold:0,gem:0,material:0};
@@ -960,7 +1071,9 @@ async function onChestOpened(chest){
 }
 function showBattleResult(rep,mon){
   const win=rep.result==='win';
-  const drops=(rep.drops||[]).map(d=>`<div class="reward-row"><span class="rk">装备掉落</span><span class="rv g">${d.slot}</span></div>`).join('');
+  if(win&&window.Quest)Quest.progress('kill',1);
+  const slotCN={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
+  const drops=(rep.drops||[]).map(d=>`<div class="reward-row"><span class="rk">装备掉落</span><span class="rv g">${slotCN[d.slot]||d.slot}${d.quality!=null?' · '+['普通','精良','稀有','史诗','传说'][Math.min(4,d.quality)]:''}</span></div>`).join('');
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
     <div class="msub">${win?'击败':'被击败于'} ${mon.name} · 用时 ${rep.seconds||0} 秒</div>
     <div class="divider"></div>
@@ -1005,9 +1118,10 @@ function floatDmg(text,x,y,heal){
   setTimeout(()=>d.remove(),920);
 }
 function logLine(cls,text){
+  const box=$('battleLog');
   const d=document.createElement('div');d.className='lg '+cls;d.textContent=text;
-  $('battleLog').appendChild(d);
-  $('battleLog').scrollTop=$('battleLog').scrollHeight;
+  box.appendChild(d);
+  while(box.childElementCount>6)box.removeChild(box.firstChild);
 }
 function skillSlots(bd){
   const all=CFG.skills.skills;
@@ -1023,6 +1137,13 @@ async function playBattle(rep,mon,bd){
   skillSlots(bd);
   $('battleLog').innerHTML='';
   $('monName').textContent=mon.name;
+  const lvTag=$('monLvTag');
+  if(lvTag){
+    const wl=(CFG.worlds.worlds.find(w=>w.id===worldMap.worldId)||{}).level||1;
+    lvTag.textContent='Lv.'+Math.max(1,wl+(mon.elite?4:0)+(mon.type==='boss_beetle'?8:0));
+  }
+  const cdef=CFG.classes.classes.find(x=>x.id===(state&&state.core&&state.core.classId));
+  if(cdef&&cdef.icon&&$('btHeroFace'))$('btHeroFace').src=RES+'characters/cards/'+cdef.icon;
   $('autoTag').textContent='▶ 自动战斗中';$('btPause').textContent='暂停';
   showView('battle');
   const hMax=Math.max(50,...rep.rounds.map(r=>r.heroHp));
@@ -1039,10 +1160,10 @@ async function playBattle(rep,mon,bd){
       setBAnim('hero','attack',420);await sleep(150);
       if(r.damage>0){
         setBAnim('mon','hit',300);
-        spawnFx('-'+Math.round(r.damage),880,420,'#ff6b6b');
+        spawnFx('-'+Math.round(r.damage),858,430,'#ff6b6b');
         logLine('hero',`R${r.n} ${r.skillName} → ${mon.name} -${Math.round(r.damage)}`);
       }else if(r.heal>0){
-        spawnFx('+'+Math.round(r.heal),440,420,'#7fe0a0');
+        spawnFx('+'+Math.round(r.heal),420,430,'#7fe0a0');
         logLine('hero',`R${r.n} ${r.skillName} → 恢复 +${Math.round(r.heal)}`);
       }else{
         logLine('hero',`R${r.n} ${r.skillName}（增益/护盾）`);
@@ -1050,7 +1171,7 @@ async function playBattle(rep,mon,bd){
     }else{
       setBAnim('mon','attack',420);await sleep(150);
       setBAnim('hero','hit',300);
-      spawnFx('-'+Math.round(r.damage),440,420,'#ff6b6b');
+      spawnFx('-'+Math.round(r.damage),420,430,'#ff6b6b');
       logLine('mon',`R${r.n} ${mon.name} → 英雄 -${Math.round(r.damage)}`);
     }
     bHp.hero=r.heroHp;bHp.mon=r.monHp;updateHp();
@@ -1059,7 +1180,7 @@ async function playBattle(rep,mon,bd){
   battlePlaying=false;
   if(view!=='battle') return;  // 已退出登录
   const win=rep.result==='win';
-  if(win){setBAnim('mon','die',600);spawnFx('+EXP',880,400,'#f0d590');spawnFx('+GOLD',840,370,'#ffd76b');}
+  if(win){setBAnim('mon','die',600);spawnFx('+EXP',858,410,'#f0d590');spawnFx('+GOLD',818,378,'#ffd76b');}
   else setBAnim('hero','die',600);
   const toast=document.createElement('div');
   toast.className='toast-win'+(win?'':' lose');toast.textContent=win?'战 斗 胜 利':'战 斗 失 败';
@@ -1097,7 +1218,9 @@ async function doFight(mon){
   if(view!=='world'||panel||battlePlaying)return;
   try{
     const bd=(state&&state.skills&&state.skills.slots)||['slash'];
-    const bundle=await api('/api/battle/fight',{userId:uid(),bd,monsterId:mon.monId||mon.type,monsterLv:5,elite:mon.elite?'elite':''});
+    const worldLv=(CFG.worlds.worlds.find(w=>w.id===worldMap.worldId)||{}).level||1;
+    const monLv=Math.max(1,Math.min(60,worldLv+(mon.elite?4:0)+(mon.type==='boss_beetle'?8:0)));
+    const bundle=await api('/api/battle/fight',{userId:uid(),bd,monsterId:mon.monId||mon.type,monsterLv:monLv,elite:mon.elite?'elite':''});
     if(bundle.state){state=bundle.state;await refreshStats();syncHud();}
     currentReport=bundle.report;
     await playBattle(bundle.report,mon,bd);

@@ -75,6 +75,18 @@ func ApplyChestReward(p *PlayerState, exp, gold, gem, material int) []string {
 	return logs
 }
 
+// GainExp 直接加经验并处理升级（任务奖励等非战斗来源使用）。
+func (p *PlayerState) GainExp(exp int) {
+	if exp <= 0 { return }
+	p.Core.Exp += exp
+	for p.Core.Level < 200 && p.Core.Exp >= game.ExpNeeded(p.Core.Level) {
+		p.Core.Exp -= game.ExpNeeded(p.Core.Level)
+		p.Core.Level++
+		p.appendLogs([]string{fmt.Sprintf("升级至 Lv.%d", p.Core.Level)})
+	}
+	p.refreshPower()
+}
+
 // refreshPower 用当前职业/等级/装备重算战力，避免存档里战力与属性脱节。
 func (p *PlayerState) refreshPower() {
 	equip := make([]game.EquipItem, 0, len(p.Equip))

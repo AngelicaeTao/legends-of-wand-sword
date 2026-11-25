@@ -275,7 +275,7 @@ DecoLayer.prototype.distanceToWalkable=function(walk,x,y,maxR){
   return maxR+1;
 };
 
-DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk){
+DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
   const cv=document.createElement('canvas');
   cv.width=VW; cv.height=VH;
   const g=cv.getContext('2d');
@@ -293,6 +293,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk){
       const x=gx+(rnd()-0.5)*GS*0.8, y=gy+(rnd()-0.5)*GS*0.8;   // 块内局部坐标（绘制用）
       const wx=ox+x, wy=oy+y;                                     // 世界坐标（判定用）
       if(walk(wx,wy))continue;                                    // 通道内不种树
+      if(isWater&&isWater(wx,wy))continue;                        // 水面不长树
       const dist=this.distanceToWalkable(walk,wx,wy,96);
       const edge=dist<=30, near=dist<=96;
       const p=edge?0.92:near?0.55:0.3;
@@ -330,6 +331,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk){
       const px=x+(rnd()-0.5)*ES, py=y+(rnd()-0.5)*ES;
       const wx=ox+px, wy=oy+py;
       if(!walk(wx,wy))continue;
+      if(isWater&&isWater(wx,wy))continue;
       let edge=false;
       for(let a=0;a<8;a++){
         const ang=a*Math.PI/4;
@@ -403,11 +405,11 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk){
   }
   return cv;
 };
-DecoLayer.prototype.get=function(tx,ty,VW,VH,walk){
+DecoLayer.prototype.get=function(tx,ty,VW,VH,walk,isWater){
   const key=tx+','+ty;
   let c=this.tiles.get(key);
   if(c){ this.tiles.delete(key); this.tiles.set(key,c); return c; }
-  c=this.bake(tx,ty,VW,VH,walk);
+  c=this.bake(tx,ty,VW,VH,walk,isWater);
   this.tiles.set(key,c);
   while(this.tiles.size>this.max){ this.tiles.delete(this.tiles.keys().next().value); }
   return c;

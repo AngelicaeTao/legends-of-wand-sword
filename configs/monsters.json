@@ -2,31 +2,74 @@
   "_readme": "怪物配置。sprite 为像素资源包中的主体名（动画帧 = sprites_{idle,attack,hit,die}）。改这里即可调怪物强度/掉落。",
   "monsters": [
     {
-      "id": "slime", "name": "史莱姆", "sprite": "slime", "icon": "🟢",
-      "base": { "hp": 80, "atk": 10, "def": 3 }, "growth": 1.15,
-      "exp": 12, "gold": 8, "dropTier": 0
+      "id": "slime",
+      "name": "史莱姆",
+      "sprite": "slime",
+      "base": {
+        "hp": 80,
+        "atk": 10,
+        "def": 3
+      },
+      "growth": 1.15,
+      "exp": 36,
+      "gold": 24,
+      "dropTier": 0
     },
     {
-      "id": "skeleton", "name": "骷髅兵", "sprite": "skeleton", "icon": "💀",
-      "base": { "hp": 130, "atk": 16, "def": 6 }, "growth": 1.18,
-      "exp": 22, "gold": 15, "dropTier": 1
+      "id": "skeleton",
+      "name": "骷髅兵",
+      "sprite": "skeleton",
+      "base": {
+        "hp": 130,
+        "atk": 16,
+        "def": 6
+      },
+      "growth": 1.18,
+      "exp": 66,
+      "gold": 45,
+      "dropTier": 1
     },
     {
-      "id": "bat", "name": "洞穴蝙蝠", "sprite": "bat", "icon": "🦇",
-      "base": { "hp": 95, "atk": 20, "def": 2 }, "growth": 1.16,
-      "exp": 26, "gold": 18, "dropTier": 1
+      "id": "bat",
+      "name": "洞穴蝙蝠",
+      "sprite": "bat",
+      "base": {
+        "hp": 95,
+        "atk": 20,
+        "def": 2
+      },
+      "growth": 1.16,
+      "exp": 78,
+      "gold": 54,
+      "dropTier": 1
     },
     {
-      "id": "boss_beetle", "name": "甲虫将军", "sprite": "boss_beetle", "icon": "👑", "isBoss": true,
-      "base": { "hp": 680, "atk": 42, "def": 14 }, "growth": 1.22,
-      "exp": 180, "gold": 220, "dropTier": 3
+      "id": "boss_beetle",
+      "name": "甲虫将军",
+      "sprite": "boss_beetle",
+      "isBoss": true,
+      "base": {
+        "hp": 680,
+        "atk": 42,
+        "def": 14
+      },
+      "growth": 1.22,
+      "exp": 540,
+      "gold": 660,
+      "dropTier": 3
     }
   ],
   "spawnRule": {
     "_note": "普通怪点按 tier 产出池权重 roll；保底 pity=8 次未出高价值则强制出。服务端权威。",
-    "weights": { "normal": 0.70, "elite": 0.25, "rareElite": 0.05 },
-    "eliteHpMult": 1.8, "eliteAtkMult": 1.4,
-    "rareEliteHpMult": 2.6, "rareEliteAtkMult": 1.8,
+    "weights": {
+      "normal": 0.7,
+      "elite": 0.25,
+      "rareElite": 0.05
+    },
+    "eliteHpMult": 1.8,
+    "eliteAtkMult": 1.4,
+    "rareEliteHpMult": 2.6,
+    "rareEliteAtkMult": 1.8,
     "pity": 8
   }
 }

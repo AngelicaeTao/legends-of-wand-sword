@@ -99,6 +99,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   this._pwToken++;
   if(this.thumb&&this.thumb.close){try{this.thumb.close();}catch(e){}} this.thumb=null; this.miniCv=null; this.maskCv=null; this.paintCv=null;
   if(this.deco)this.deco.clear();
+  this.waterCv=null;
   this.deco=null; this._decoPending=null; this.pal=null;
   const oldTiles=this.tiles;
   this.tiles=null;this._pending=null;
@@ -152,6 +153,8 @@ WMap.prototype.loadTerrain=async function(worldId){
   // 地表装饰层（草簇/花/石子/灌木/林缘树）：按块惰性烘焙，1:1 像素细节
   this.deco=new window.DecoLayer(this.worldId,this.themeKey);
   this._decoPending=new Set();
+  // 水面重着色：原图的水色逐世界不一致（W1 偏紫、W3 偏脏），统一为主题湖水色 + 波纹
+  this.waterCv=this.buildWaterLayer();
   // 场景遮罩：不可通行区域 → 林地（真实地形色 + 树冠斑驳纹理）
   this.maskCv=this.buildMaskLayer();
   // 补绘层：未绘制的棋盘格底 → 与地形同色的草地（含颗粒噪点）
@@ -272,6 +275,51 @@ WMap.prototype.buildPaintLayer=function(){
   const ctx2=tc.getContext('2d');
   ctx2.putImageData(out,0,0);
   return tc;
+};
+
+/* 水面层：把原图的"水"统一重着色为主题湖水色，并叠波纹与岸线
+   —— 原图各世界水色不一致（W1 偏紫、W3 偏脏、W6 偏黑），直接露出很违和 */
+WMap.prototype.buildWaterLayer=function(){
+  const wf=this.waterFlag;
+  if(!wf)return null;
+  const W=MASK_W,H=MASK_H;
+  const hexMap={grassland:'#3f7fa8',forest:'#35657f',desert:'#6f4f38',snow:'#7fb4d4',cave:'#5c523f',arena:'#33304d'};
+  const hex=hexMap[this.themeKey]||'#3f7fa8';
+  const cr=parseInt(hex.slice(1,3),16),cg=parseInt(hex.slice(3,5),16),cb=parseInt(hex.slice(5,7),16);
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const g=cv.getContext('2d');
+  const img=g.createImageData(W,H), d=img.data;
+  let n=0;
+  for(let p=0;p<W*H;p++){
+    if(!wf[p]){ d[p*4+3]=0; continue; }
+    const x=p%W,y=(p/W)|0;
+    // 近岸浅、中心深：以 6px 邻域的水像素密度近似"离岸距离"
+    let land=0;
+    for(let dy=-3;dy<=3;dy+=3)for(let dx=-3;dx<=3;dx+=3){
+      const q=(y+dy)*W+(x+dx);
+      if(q>=0&&q<W*H&&!wf[q])land++;
+    }
+    const shallow=land>=2;
+    const t=((x*7+y*13)%5)-2;
+    d[p*4]  =Math.max(0,Math.min(255,cr+(shallow?26:0)+t));
+    d[p*4+1]=Math.max(0,Math.min(255,cg+(shallow?24:0)+t));
+    d[p*4+2]=Math.max(0,Math.min(255,cb+(shallow?18:0)+t));
+    d[p*4+3]=255;
+    n++;
+  }
+  g.putImageData(img,0,0);
+  // 波纹：按掩码裁剪的横线
+  g.globalCompositeOperation='source-atop';
+  g.strokeStyle='rgba(255,255,255,.16)';
+  g.lineWidth=1.2;
+  for(let y=6;y<H;y+=11){
+    g.beginPath();
+    for(let x=0;x<W;x+=8)g.lineTo(x,y+Math.sin(x*0.35+y)*1.2);
+    g.stroke();
+  }
+  g.globalCompositeOperation='source-over';
+  this.waterPixels=n;
+  return cv;
 };
 
 /* 由 maskData 生成不可通行区域遮罩（与掩码同尺寸 1920×1080，放大 8× 绘制）
@@ -414,7 +462,8 @@ WMap.prototype.ensureDeco=function(tx,ty){
     self._decoPending.delete(key);
     if(token!==self._pwToken||!self.deco)return;
     const walk=(x,y)=>self.isWalkable(x,y);
-    self.deco.get(tx,ty,VW,VH,walk);
+    const isW=(x,y)=>self.isWaterAt(x,y);
+    self.deco.get(tx,ty,VW,VH,walk,isW);
   };
   if(window.requestIdleCallback)requestIdleCallback(job,{timeout:120});
   else setTimeout(job,16);
@@ -604,6 +653,12 @@ WMap.prototype.buildObstacles=function(rnd,th,cx,cy){
 
 /* ---------- 碰撞：读通行掩码，白(255)=可走，黑(0)=墙 ---------- */
 // 检查角色 (x,y) 半径 r 覆盖范围内的采样点是否全在可走区
+WMap.prototype.isWaterAt=function(x,y){
+  if(!this.waterFlag)return false;
+  const mx=Math.floor(x/MASK_SCALE),my=Math.floor(y/MASK_SCALE);
+  if(mx<0||my<0||mx>=MASK_W||my>=MASK_H)return false;
+  return this.waterFlag[my*MASK_W+mx]===1;
+};
 WMap.prototype.isWalkable=function(x,y){
   if(!this.maskData)return true; // 掩码未加载时不阻挡（避免卡死）
   const mx=Math.floor(x/MASK_SCALE),my=Math.floor(y/MASK_SCALE);
@@ -733,6 +788,16 @@ WMap.prototype.render=function(now){
     }
   }
   else {g.fillStyle='#3a5a2a';g.fillRect(0,0,VW,VH);}
+  // 水面：统一湖水色（盖住原图的脏色），再叠波纹
+  if(this.waterCv){
+    const ms=MASK_SCALE;
+    let sx=cx/ms, sy=cy/ms, sw=VW/ms, sh=VH/ms;
+    if(sx<0){sw+=sx;sx=0;}
+    if(sy<0){sh+=sy;sy=0;}
+    if(sx+sw>MASK_W)sw=MASK_W-sx;
+    if(sy+sh>MASK_H)sh=MASK_H-sy;
+    if(sw>0&&sh>0)g.drawImage(this.waterCv,sx,sy,sw,sh,sx*ms-cx,sy*ms-cy,sw*ms,sh*ms);
+  }
   // 不可通行区域遮罩：盖住地形图的棋盘格/透明底，只留出可走通道（与碰撞一致）
   if(this.maskCv){
     const ms=MASK_SCALE;

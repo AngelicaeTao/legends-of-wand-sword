@@ -292,3 +292,151 @@ input{font-family:inherit}
 
 /* 性能角标：版本号 + 实时FPS + GPU纹理上限（排查掉帧用，不挡操作） */
 .perf-badge{position:absolute;left:10px;bottom:8px;z-index:30;padding:3px 9px;border-radius:8px;background:rgba(8,13,21,.72);border:1px solid rgba(217,180,91,.35);color:#9fb4cc;font:11px/1.5 ui-monospace,Consolas,monospace;pointer-events:none;letter-spacing:.5px}
+
+/* ---------- v1.8 图标与货币（内联 SVG，替代 emoji） ---------- */
+.cur{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-weight:800;letter-spacing:.2px}
+.cur i{font-style:normal}
+.cur-gold{color:#f0d590}
+.cur-gem{color:#8fd0ff}
+.hc-ico{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;background:rgba(240,213,144,.12);border:1px solid rgba(240,213,144,.35);margin-bottom:8px}
+.equip-cell .ei{display:flex;align-items:center;justify-content:center;height:38px}
+.ed-ico{display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:12px;background:rgba(240,213,144,.12);border:1px solid rgba(240,213,144,.4)}
+.wg-cell .wgi{display:flex;align-items:center;justify-content:center}
+.lib-item .locked,.lib-item svg{margin-left:4px;opacity:.9}
+.deco-item svg{filter:drop-shadow(0 3px 8px rgba(0,0,0,.5))}
+
+/* ---------- v1.9 主线任务追踪 + 经验条 ---------- */
+.exp-strip{position:relative;width:238px;height:14px;margin-top:7px;border-radius:8px;overflow:hidden;
+  background:rgba(9,14,24,.86);border:1px solid rgba(217,180,91,.55);box-shadow:0 3px 10px rgba(0,0,0,.4)}
+.exp-strip i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#4fa3e3,#7fd0ff);transition:width .35s ease}
+.exp-strip span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:#eaf4ff;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:.3px}
+.quest-tracker{position:absolute;right:14px;top:112px;width:248px;padding:10px 11px 11px;border-radius:14px;
+  background:linear-gradient(160deg,rgba(16,24,38,.92),rgba(8,13,22,.95));border:1.5px solid rgba(217,180,91,.5);
+  box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:6;pointer-events:auto}
+.quest-tracker.qt-all-done{border-color:rgba(127,224,160,.5)}
+.qt-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#c9a227;
+  letter-spacing:1px;font-weight:800;padding-bottom:7px;border-bottom:1px solid rgba(217,180,91,.22)}
+.qt-head em{font-style:normal;color:#8fa0b8;font-weight:600;letter-spacing:0}
+.qt-all{font-size:11.5px;color:#9fb0c6;padding:9px 2px 2px;line-height:1.6}
+.qt-item{display:flex;align-items:flex-start;gap:8px;padding:9px 2px 6px;position:relative}
+.qt-item+.qt-item{border-top:1px dashed rgba(217,180,91,.16)}
+.qt-item.next{opacity:.62}
+.qt-item.done .qt-name{color:#7fe0a0}
+.qt-ico{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;background:rgba(240,213,144,.1);border:1px solid rgba(240,213,144,.3)}
+.qt-main{flex:1;min-width:0}
+.qt-name{font-size:12.5px;font-weight:800;color:#f4ead0;letter-spacing:.4px}
+.qt-desc{font-size:11px;color:#9fb0c6;margin-top:2px}
+.qt-bar{height:5px;margin-top:5px;border-radius:4px;background:rgba(255,255,255,.09);overflow:hidden}
+.qt-bar i{display:block;height:100%;background:linear-gradient(90deg,#c9a227,#f0d590);transition:width .3s}
+.qt-item.done .qt-bar i{background:linear-gradient(90deg,#2f9d5c,#7fe0a0)}
+.qt-right{flex:0 0 auto;font-size:11px;color:#8fa0b8;padding-top:2px}
+.qt-right em{font-style:normal}
+.qt-claim{display:inline-block;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;
+  color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);box-shadow:0 2px 0 #8a641f;
+  animation:qtPulse 1.8s ease-in-out infinite}
+@keyframes qtPulse{0%,100%{box-shadow:0 2px 0 #8a641f,0 0 0 rgba(255,220,140,0)}50%{box-shadow:0 2px 0 #8a641f,0 0 14px rgba(255,220,140,.75)}}
+
+/* ---------- v1.9 战斗界面重排 ---------- */
+.bt-bar{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;
+  gap:16px;padding:12px 18px 16px;background:linear-gradient(180deg,rgba(6,10,18,.92),rgba(6,10,18,.55) 70%,transparent);
+  z-index:5}
+.bt-side{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.bt-side.right{justify-content:flex-end}
+.bt-face{width:44px;height:44px;border-radius:10px;object-fit:cover;image-rendering:pixelated;
+  border:1.5px solid rgba(217,180,91,.65);background:#1b2334;box-shadow:0 3px 10px rgba(0,0,0,.5)}
+.bt-meta{flex:1;min-width:0;max-width:330px}
+.bt-name{font-size:13px;font-weight:800;color:#eef3fb;letter-spacing:.4px;margin-bottom:5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-name.gold{color:#f0d590;text-align:right}
+.bt-hp{position:relative;height:16px;border-radius:9px;background:rgba(8,12,20,.9);
+  border:1px solid rgba(255,255,255,.16);overflow:hidden}
+.bt-hp .hp-fill{position:absolute;left:0;top:0;bottom:0;display:block;transition:width .25s ease;border-radius:9px}
+.hp-fill.hero{background:linear-gradient(180deg,#63c78a,#2f9d5c)}
+.hp-fill.mon{background:linear-gradient(180deg,#e35d4f,#b33328)}
+.bt-hpnum{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:10.5px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.9);letter-spacing:.3px}
+.bt-round{flex:0 0 auto;text-align:center;padding:4px 12px;border-radius:10px;
+  background:rgba(12,18,30,.85);border:1px solid rgba(217,180,91,.5)}
+.bt-round em{display:block;font-style:normal;font-size:10px;color:#c9a227;letter-spacing:2px}
+.bt-round b{font-size:15px;color:#fff;letter-spacing:1px}
+.bt-lv{flex:0 0 auto;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:800;color:#ffd590;background:rgba(30,20,10,.8);border:1.5px solid rgba(217,180,91,.5)}
+.battle-tools{position:absolute;right:18px;top:76px;display:flex;gap:8px;z-index:6}
+.auto-tag{font-size:11.5px;font-weight:800;color:#7fe0a0;padding:6px 12px;border-radius:9px;
+  background:rgba(10,26,18,.82);border:1px solid rgba(127,224,160,.4)}
+.battle-pause{font-size:11.5px;font-weight:800;color:#f0d590;padding:6px 12px;border-radius:9px;
+  background:rgba(28,22,10,.85);border:1px solid rgba(217,180,91,.5)}
+.battle-log{position:absolute;left:auto;top:auto;right:18px;bottom:104px;width:270px;max-height:150px;padding:9px 11px;
+  border-radius:12px;background:linear-gradient(160deg,rgba(10,16,26,.82),rgba(6,10,18,.9));
+  border:1px solid rgba(217,180,91,.28);overflow:hidden;z-index:5;pointer-events:none}
+.battle-log h4{font-size:10.5px;color:#c9a227;letter-spacing:2px;font-weight:800;margin-bottom:6px}
+#battleLog{max-height:108px;overflow:hidden;font-size:11px;line-height:1.65;color:#a9b8cc}
+#battleLog .lg.hero{color:#9ad8ff}
+#battleLog .lg.mon{color:#ff9a8f}
+#battleLog .lg.sys{color:#7f8ea3;font-size:10px}
+.skill-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;z-index:5;
+  display:flex;flex-direction:column;align-items:center;gap:7px}
+.skill-slots{display:flex;gap:10px}
+.skill-slot{width:62px;height:62px;border-radius:14px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;font-size:19px;font-weight:800;color:#fff;letter-spacing:1px;
+  border:2px solid rgba(255,255,255,.22);box-shadow:0 6px 16px rgba(0,0,0,.45),inset 0 0 18px rgba(255,255,255,.08);
+  position:relative;overflow:hidden}
+.skill-slot small{position:absolute;bottom:3px;font-size:9.5px;font-weight:700;color:#e8eef8;
+  letter-spacing:0;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.skill-slot.sk-fire{background:linear-gradient(160deg,#7a2a1e,#3a120c)}
+.skill-slot.sk-ice{background:linear-gradient(160deg,#1e4a6b,#0d2438)}
+.skill-slot.sk-heal{background:linear-gradient(160deg,#1e5a3a,#0b2a1c)}
+.skill-slot.sk-shield{background:linear-gradient(160deg,#4a3a6b,#1c1430)}
+.skill-slot.sk-basic{background:linear-gradient(160deg,#3c4557,#1a202b)}
+.skill-bar .cap{font-size:10.5px;color:#9fb0c6;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+
+/* ---------- v1.9 角色卡 / 属性格 / 装备行 ---------- */
+.hero-card{display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;margin-bottom:14px;
+  background:linear-gradient(150deg,rgba(30,42,64,.9),rgba(12,18,30,.95));border:1.5px solid rgba(217,180,91,.45);
+  box-shadow:0 8px 24px rgba(0,0,0,.4),inset 0 0 30px rgba(217,180,91,.05)}
+.hero-portrait{width:76px;height:96px;border-radius:10px;overflow:hidden;flex:0 0 auto;
+  background:radial-gradient(circle at 50% 30%,#2a3a56,#101828);border:1px solid rgba(217,180,91,.4);
+  display:flex;align-items:center;justify-content:center}
+.hero-portrait img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6))}
+.hero-brief{flex:1;min-width:0}
+.hb-name{font-size:16px;font-weight:800;color:#f4ead0;letter-spacing:.5px;display:flex;align-items:baseline;gap:8px}
+.hb-name em{font-style:normal;font-size:11px;color:#8fa0b8;font-weight:600;letter-spacing:0}
+.hb-lv{font-size:13px;color:#f0d590;font-weight:800;margin:5px 0 7px;display:flex;align-items:center;gap:8px}
+.hb-lv span{font-size:10.5px;color:#8fa0b8;font-weight:600}
+.hb-exp{position:relative;height:12px;border-radius:7px;background:rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(255,255,255,.12)}
+.hb-exp i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#4fa3e3,#7fd0ff);transition:width .3s}
+.hb-exp span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#eaf4ff;text-shadow:0 1px 2px #000}
+.hero-power{flex:0 0 auto;text-align:center;padding:6px 10px;border-radius:10px;background:rgba(217,180,91,.12);border:1px solid rgba(217,180,91,.4)}
+.hero-power em{display:block;font-style:normal;font-size:9.5px;color:#c9a227;letter-spacing:2px}
+.hero-power b{font-size:18px;color:#ffe6a3;letter-spacing:.5px}
+.attr-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.attr-cell{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:9px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)}
+.attr-cell .ak{font-size:12px;color:#9fb0c6}
+.attr-cell .av{font-size:13.5px;font-weight:800;color:#f4ead0}
+.eq-row{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;border-radius:10px;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-left-width:3px}
+.eq-ico{flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;background:rgba(240,213,144,.08);border:1px solid rgba(240,213,144,.22)}
+.eq-name{font-size:13px;font-weight:800;display:flex;align-items:baseline;gap:7px}
+.eq-name em{font-style:normal;font-size:10px;font-weight:600;color:#8fa0b8}
+.eq-sub{font-size:10.5px;color:#8fa0b8;margin-top:3px}
+.eq-btn{flex:0 0 auto;padding:5px 12px;border-radius:8px;font-size:11.5px;font-weight:800;
+  color:#dfe8f2;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}
+.eq-btn.gold{color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);border-color:#f0d590;box-shadow:0 2px 0 #8a641f}
+
+/* ---------- v1.9 技能卡 / 动态列表 / 头像裁切 ---------- */
+.hero-portrait img{height:116%;object-fit:contain;object-position:top center;margin-bottom:-14%}
+.skill-card{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;min-height:62px}
+.sk-ico{flex:0 0 auto;width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.18)}
+.lib-item{display:flex;align-items:center;gap:7px;padding:9px 10px;border-radius:9px;font-size:12.5px}
+.li-name{flex:1;min-width:0;font-weight:700}
+.li-cd{font-size:10px;color:#8fa0b8}
+.li-ico{display:flex;align-items:center;justify-content:center;width:20px}
+.log-list{display:flex;flex-direction:column;gap:5px;margin-top:4px}
+.log-row{display:flex;gap:9px;font-size:11.5px;color:#9fb0c6;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.03)}
+.log-row .lr-t{flex:0 0 auto;color:#6f7f95;font-variant-numeric:tabular-nums}
+.log-row .lr-e{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

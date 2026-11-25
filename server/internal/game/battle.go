@@ -197,8 +197,10 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		if mon.IsBoss {
 			mult = 5
 		}
-		rep.Exp = int(mon.Exp * float64(req.MonsterLv) / 10 * mult)
-		rep.Gold = int(mon.Gold * float64(req.MonsterLv) / 10 * mult)
+		// 等级系数：Lv1 = 1.0 倍，之后每级 +20%（原公式 Lv1 只有 0.1 倍，前期收益几乎为零）
+		lvMult := 1 + 0.2*float64(req.MonsterLv-1)
+		rep.Exp = int(mon.Exp * lvMult * mult)
+		rep.Gold = int(mon.Gold * lvMult * mult)
 		rep.Drops = rollDrops(req, mon, rng)
 		rep.Log = "服务端权威结算：胜利，经验/金币/掉落已入账"
 	} else {

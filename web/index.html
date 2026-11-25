@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>杖剑传说</title>
-<link rel="stylesheet" href="/res/css/style.css?v=1.8.0">
+<link rel="stylesheet" href="/res/css/style.css?v=1.9.0">
 </head>
 <body>
 <div id="stage">
@@ -52,6 +52,7 @@
           <div class="mp-lv" id="worldLv">Lv.44 · 战力 1,248</div>
         </div>
       </div>
+      <div class="exp-strip" id="expStrip" title="经验进度"><i id="expFill"></i><span id="expTxt">0 / 100</span></div>
       <div class="world-scene-name"><span id="worldSceneName">翡翠草原 · 大世界</span><em>探索中</em></div>
     </div>
     <!-- 底部 5 入口导航（v1.6：角色/副本/家园(中)/公会/地图，唯一功能入口） -->
@@ -73,6 +74,8 @@
       <span id="worldTitle">W1 · 青草平原</span>
       <span class="online-badge" id="onlineBadge">● 在线 1</span>
     </div>
+    <!-- 主线任务追踪（右侧常驻） -->
+    <div class="quest-tracker" id="questTracker"></div>
     <!-- 交互提示条（靠近实体时出现） -->
     <div class="interact-hint hidden" id="interactHint"></div>
     <div class="perf-badge" id="perfBadge">--</div>
@@ -83,23 +86,32 @@
   <!-- ============ 视图③：战斗（独立场景，零输入自动演出） ============ -->
   <div class="view hidden" id="battleView">
     <canvas id="cvBattle" width="1280" height="720"></canvas>
-    <div class="battle-top">
-      <div class="round-box"><div class="lbl">回合</div><div class="val" id="roundVal">1 / 30</div></div>
-      <div class="hp-block">
-        <div class="hp-row"><span class="hp-name gold" id="monName">甲虫将军</span>
-          <div class="hp-track"><div class="hp-fill mon" id="monHpFill" style="width:100%"></div><span class="hp-num" id="monHpNum">420 / 680</span></div></div>
-        <div class="hp-row"><span class="hp-name" id="heroName">艾琳 Lv.44</span>
-          <div class="hp-track"><div class="hp-fill hero" id="heroHpFill" style="width:100%"></div><span class="hp-num" id="heroHpNum">486 / 640</span></div></div>
+    <!-- 顶部：双方信息 + 回合 -->
+    <div class="bt-bar">
+      <div class="bt-side">
+        <img class="bt-face" id="btHeroFace" src="/res/characters/cards/ui_card_mage.png" alt="">
+        <div class="bt-meta">
+          <div class="bt-name" id="heroName">艾琳 Lv.1</div>
+          <div class="bt-hp"><i class="hp-fill hero" id="heroHpFill" style="width:100%"></i><span class="bt-hpnum" id="heroHpNum">85 / 85</span></div>
+        </div>
       </div>
-      <div class="auto-tag" id="autoTag">▶ 自动战斗中</div>
-      <div class="battle-ghost-mark" id="ghostMark" style="font-size:11px;color:#9aa7bd;background:rgba(20,26,38,.7);border:1px solid #33415a;border-radius:8px;padding:5px 9px">◌ 大世界角色保留灰态标记 · 战斗结束归位</div>
+      <div class="bt-round"><em>回合</em><b id="roundVal">1 / 30</b></div>
+      <div class="bt-side right">
+        <div class="bt-meta">
+          <div class="bt-name gold" id="monName">史莱姆</div>
+          <div class="bt-hp"><i class="hp-fill mon" id="monHpFill" style="width:100%"></i><span class="bt-hpnum" id="monHpNum">214 / 214</span></div>
+        </div>
+        <div class="bt-lv" id="monLvTag">Lv.1</div>
+      </div>
+    </div>
+    <div class="battle-tools">
+      <div class="auto-tag" id="autoTag">自动战斗中</div>
       <button class="battle-pause" id="btPause">暂停</button>
     </div>
-    <div class="battle-log"><h4>战斗日志</h4><div id="battleLog"></div></div>
+    <div class="battle-log" id="battleLogBox"><h4>战斗记录</h4><div id="battleLog"></div></div>
     <div class="skill-bar">
-      <div class="cap" id="skillCap">生效技能：自动释放</div>
       <div class="skill-slots" id="skillSlots"></div>
-      <div class="tip">技能按冷却自动释放，玩家无需手动操作（决策在战前 BD 配置）</div>
+      <div class="cap" id="skillCap">生效技能：自动释放</div>
     </div>
   </div>
 
@@ -135,9 +147,11 @@
   </div>
 
 </div>
-<script src="/res/js/PartActor.js?v=1.8.0"></script>
-<script src="/res/js/deco.js?v=1.8.0"></script>
-<script src="/res/js/worldmap.js?v=1.8.0"></script>
-<script src="/res/js/app.js?v=1.8.0"></script>
+<script src="/res/js/icons.js?v=1.9.0"></script>
+<script src="/res/js/PartActor.js?v=1.9.0"></script>
+<script src="/res/js/deco.js?v=1.9.0"></script>
+<script src="/res/js/worldmap.js?v=1.9.0"></script>
+<script src="/res/js/quests.js?v=1.9.0"></script>
+<script src="/res/js/app.js?v=1.9.0"></script>
 </body>
 </html>

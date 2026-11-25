@@ -306,6 +306,7 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		Qty     int      `json:"qty"`     // deposit/withdraw
 		Slot    string   `json:"slot"`    // enhance
 		DGID    string   `json:"dungeonId"`
+		QuestID string   `json:"questId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 		http.Error(w, err.Error(), 400)
@@ -367,6 +368,20 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 			if d.ID == q.DGID { perDay = d.PerDay; break }
 		}
 		extra["remain"] = p.DungeonRemain(q.DGID, perDay)
+	case "quest_claim":
+		rw, ok := questRewards[q.QuestID]
+		if !ok { http.Error(w, "未知任务", 400); return }
+		if p.Ext == nil { p.Ext = map[string]any{} }
+		claimed, _ := p.Ext["quests"].(map[string]any)
+		if claimed == nil { claimed = map[string]any{} }
+		if claimed[q.QuestID] == true { http.Error(w, "该任务奖励已领取", 409); return }
+		claimed[q.QuestID] = true
+		p.Ext["quests"] = claimed
+		p.Core.Gold += rw.Gold
+		p.Core.Gem += rw.Gem
+		p.Core.Material += rw.Mat
+		p.GainExp(rw.Exp)
+		extra["reward"] = map[string]int{"gold": rw.Gold, "gem": rw.Gem, "exp": rw.Exp, "material": rw.Mat}
 	case "home_decorate":
 		// 家园装饰（占位升级：记录到 Home，服务端权威）
 		item := q.ItemID
@@ -384,6 +399,16 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 	extra["logs"] = logs
 	extra["state"] = p
 	jsonOut(w, extra)
+}
+
+// 主线任务奖励（服务端白名单：前端只报 questId，金额不可篡改）
+type questReward struct{ Gold, Gem, Exp, Mat int }
+var questRewards = map[string]questReward{
+	"q_kill3":    {800, 30, 300, 0},
+	"q_chest1":   {600, 20, 200, 2},
+	"q_equip4":   {900, 40, 400, 0},
+	"q_enhance1": {700, 25, 250, 1},
+	"q_travel":   {1500, 80, 800, 5},
 }
 
 // ---------- 辅助 ----------
