@@ -1,0 +1,330 @@
+{
+  "world": "W2 迷雾森林",
+  "version": "1.0",
+  "scale_anchor": {
+    "role_logic_w": 32,
+    "role_scale_root": 4,
+    "role_scene_w": 128,
+    "main_road_px": 384,
+    "ratio": "role = main_road / 3",
+    "map_pixel_to_scene": "1:1（程序按 1 图像像素=1 场景单位加载地形，不再缩放）",
+    "move_speed_px_s": 960,
+    "move_speed_note": "×4，横穿世界仍约16s",
+    "cell_map_px": 8,
+    "sub_per_design_cell": 4,
+    "unit_px": 32
+  },
+  "logical_grid": [
+    480,
+    270
+  ],
+  "world_px": [
+    15360,
+    8640
+  ],
+  "split_line_design": [
+    240,
+    135
+  ],
+  "palette_16": [
+    "#0d1b12",
+    "#162b1c",
+    "#1f3d26",
+    "#2e5636",
+    "#3f7049",
+    "#55965f",
+    "#7ab86e",
+    "#3a3226",
+    "#5a4a33",
+    "#7d6647",
+    "#a8916a",
+    "#c9b792",
+    "#4a3a63",
+    "#6d5590",
+    "#2b5f78",
+    "#4a93b5"
+  ],
+  "corridor_width_px": {
+    "main": 384,
+    "branch": 256,
+    "dark": 192
+  },
+  "mask_legend": {
+    "white_255": "可走",
+    "black_0": "墙/不可走"
+  },
+  "chunks": {
+    "NW": {
+      "file": "W2_NW.png",
+      "mask": "W2_NW_mask.png",
+      "design": [
+        0,
+        0,
+        240,
+        135
+      ],
+      "pixels": [
+        0,
+        0,
+        7680,
+        4320
+      ],
+      "edges": {
+        "top": [
+          {
+            "from": 234,
+            "to": 239,
+            "center": 236,
+            "width_cells": 6
+          }
+        ],
+        "right": [
+          {
+            "from": 0,
+            "to": 134,
+            "center": 67,
+            "width_cells": 135
+          }
+        ],
+        "bottom": [
+          {
+            "from": 0,
+            "to": 239,
+            "center": 119,
+            "width_cells": 240
+          }
+        ],
+        "left": [
+          {
+            "from": 129,
+            "to": 134,
+            "center": 131,
+            "width_cells": 6
+          }
+        ]
+      }
+    },
+    "NE": {
+      "file": "W2_NE.png",
+      "mask": "W2_NE_mask.png",
+      "design": [
+        240,
+        0,
+        480,
+        135
+      ],
+      "pixels": [
+        7680,
+        0,
+        15360,
+        4320
+      ],
+      "edges": {
+        "top": [
+          {
+            "from": 0,
+            "to": 6,
+            "center": 3,
+            "width_cells": 7
+          }
+        ],
+        "right": [
+          {
+            "from": 129,
+            "to": 134,
+            "center": 131,
+            "width_cells": 6
+          }
+        ],
+        "bottom": [
+          {
+            "from": 0,
+            "to": 239,
+            "center": 119,
+            "width_cells": 240
+          }
+        ],
+        "left": [
+          {
+            "from": 0,
+            "to": 134,
+            "center": 67,
+            "width_cells": 135
+          }
+        ]
+      }
+    },
+    "SW": {
+      "file": "W2_SW.png",
+      "mask": "W2_SW_mask.png",
+      "design": [
+        0,
+        135,
+        240,
+        270
+      ],
+      "pixels": [
+        0,
+        4320,
+        7680,
+        8640
+      ],
+      "edges": {
+        "top": [
+          {
+            "from": 0,
+            "to": 239,
+            "center": 119,
+            "width_cells": 240
+          }
+        ],
+        "right": [
+          {
+            "from": 0,
+            "to": 126,
+            "center": 63,
+            "width_cells": 127
+          }
+        ],
+        "bottom": [],
+        "left": [
+          {
+            "from": 0,
+            "to": 6,
+            "center": 3,
+            "width_cells": 7
+          }
+        ]
+      }
+    },
+    "SE": {
+      "file": "W2_SE.png",
+      "mask": "W2_SE_mask.png",
+      "design": [
+        240,
+        135,
+        480,
+        270
+      ],
+      "pixels": [
+        7680,
+        4320,
+        15360,
+        8640
+      ],
+      "edges": {
+        "top": [
+          {
+            "from": 0,
+            "to": 239,
+            "center": 119,
+            "width_cells": 240
+          }
+        ],
+        "right": [
+          {
+            "from": 0,
+            "to": 6,
+            "center": 3,
+            "width_cells": 7
+          }
+        ],
+        "bottom": [],
+        "left": [
+          {
+            "from": 0,
+            "to": 127,
+            "center": 63,
+            "width_cells": 128
+          }
+        ]
+      }
+    }
+  },
+  "portals": [
+    {
+      "id": "A",
+      "semantic": "世界西侧通道口（连前一世界）",
+      "xy": [
+        0,
+        135
+      ],
+      "edge": "left"
+    },
+    {
+      "id": "B",
+      "semantic": "世界东侧通道口（连下一世界）",
+      "xy": [
+        479,
+        135
+      ],
+      "edge": "right"
+    },
+    {
+      "id": "C",
+      "semantic": "世界北侧通道口（高阶捷径）",
+      "xy": [
+        240,
+        0
+      ],
+      "edge": "top"
+    }
+  ],
+  "points": [
+    {
+      "id": "SAFE",
+      "semantic": "中央安全区/传送锚点",
+      "xy": [
+        240,
+        135
+      ],
+      "kind": "safe"
+    },
+    {
+      "id": "N02",
+      "semantic": "上部中环左上拐角",
+      "xy": [
+        170,
+        100
+      ],
+      "kind": "elite"
+    },
+    {
+      "id": "N03",
+      "semantic": "上部中环右上拐角",
+      "xy": [
+        310,
+        100
+      ],
+      "kind": "normal"
+    },
+    {
+      "id": "N05",
+      "semantic": "左下死胡同尽头",
+      "xy": [
+        205,
+        205
+      ],
+      "kind": "chest"
+    },
+    {
+      "id": "N08",
+      "semantic": "右下死胡同尽头",
+      "xy": [
+        295,
+        215
+      ],
+      "kind": "elite"
+    },
+    {
+      "id": "N09",
+      "semantic": "暗道西南尽头",
+      "xy": [
+        70,
+        135
+      ],
+      "kind": "elite"
+    }
+  ],
+  "programmer_note": "4块按 design 坐标拼成480×270设计网格(每格32px)；4块掩码白色并集=移动可行走区，据此生成碰撞/NavMesh。主通道384px=角色显示宽128px×3。"
+}
