@@ -212,7 +212,7 @@ function stamp(g,rows,x,y,cell,colorOf){
   }
 }
 /* 树：阴影 + 图案 + 树干，size=整体像素高 */
-function drawTree(g,P0,pal,x,y,size,kind,flip,dark){
+function drawTree(g,P0,pal,x,y,size,kind,flip,dark,variant){
   const pat=kind===2?P.pine:(kind===1?P.treeRound:P.tree);
   const ic=Math.max(1,Math.round(size/pat.length));
   // 落地阴影：树冠越大阴影越宽，压住林下地面，形成纵深
@@ -227,6 +227,13 @@ function drawTree(g,P0,pal,x,y,size,kind,flip,dark){
     if(dark&&ch==='2')return pal[1];
     return pal[ch]||pal[3];
   };
+  // 形态变体：0 原样 / 1 窄高 / 2 矮宽 / 3 轻微倾斜 —— 打破"同一棵球树复制粘贴"的观感
+  const v=variant|0;
+  if(v){
+    const rot=(v===3)?(((x*13+y*7)%9)-4)*Math.PI/180:0;
+    const sx=(v===1?1.16:v===2?0.86:1), sy=(v===1?0.86:v===2?1.16:1);
+    g.save(); g.translate(x,y); g.rotate(rot); g.scale(sx,sy); g.translate(-x,-y);
+  }
   if(flip){
     for(let ry=0;ry<pat.length;ry++){
       const line=pat[ry];
@@ -240,6 +247,7 @@ function drawTree(g,P0,pal,x,y,size,kind,flip,dark){
   }else{
     stamp(g,pat,x0,y0,ic,colorOf);
   }
+  if(v)g.restore();
 }
 /* 草簇：暗底 + 亮尖，避免在草地上"看不见" */
 function drawGrassTuft(g,rnd,pal,x,y){
@@ -304,6 +312,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
       const kind=rnd()<0.62?0:(rnd()<0.55?1:2);
       const flip=rnd()<0.5;
       const dark=dist>44;
+      const variant=Math.floor(rnd()*4);
       if(th==='desert'){
         // 沙漠：风化岩堆（宽底、分层、带投影），比"细柱"更像峡谷地貌
         const sz=size*0.72;
@@ -321,7 +330,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
         stamp(g,P.spire,Math.round(x-sz*0.42),Math.round(y-sz*0.86),Math.max(2,Math.round(sz/16)),
               ch=>ch==='6'?'#7fb6e8':ch==='5'?'#3f4f78':pal[ch]);
       }else{
-        trees.push({x,y,size,kind,flip,dark});
+        trees.push({x,y,size,kind,flip,dark,variant});
       }
     }
   }
@@ -342,12 +351,12 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
       }
       if(!edge||rnd()<0.32)continue;
       if(rnd()<0.86)drawGrassTuft(g,rnd,pal,px,py);
-      else stamp(g,P.stone,Math.round(px),Math.round(py-8),3,ch=>ch==='1'?'#6f767d':ch==='2'?pal.rock:'#c2cad1');
+      else stamp(g,P.stone,Math.round(px),Math.round(py-8),3,ch=>ch==='1'?'#5d646b':ch==='2'?pal.rock:'#8b9296');
     }
   }
 
   trees.sort((a,b)=>a.y-b.y);
-  for(const t of trees)drawTree(g,P,pal,t.x,t.y,t.size,t.kind,t.flip,t.dark);
+  for(const t of trees)drawTree(g,P,pal,t.x,t.y,t.size,t.kind,t.flip,t.dark,t.variant);
 
   /* ---- 2) 通道表面：草簇 / 花 / 石子 / 土粒 ---- */
   const grassN=Math.round((th==='desert'||th==='snow')?22:58);
@@ -365,19 +374,20 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
     g.fillRect(x,y,1,1);
     if(rnd()<0.25)g.fillRect(x+1,y+1,2,1);
   }
-  const flowerN=th==='desert'?2:th==='snow'?1:9;
+  const flowerN=th==='desert'?2:th==='snow'?1:4;
   for(let i=0;i<flowerN;i++){
     const x=rnd()*VW, y=rnd()*VH;
     if(!walk(ox+x,oy+y))continue;
     if(isPv(ox+x,oy+y))continue;
-    stamp(g,P.flower,Math.round(x),Math.round(y-14),3,ch=>pal[ch]||pal[5]);
+    const fcol=[pal[5],'#e8a0b8','#e9c46a'][Math.floor(rnd()*3)];
+    stamp(g,P.flower,Math.round(x),Math.round(y-14),3,ch=>ch==='5'?fcol:(pal[ch]||pal[3]));
   }
   for(let i=0;i<6;i++){
     const x=rnd()*VW, y=rnd()*VH;
     if(!walk(ox+x,oy+y))continue;
     if(isPv(ox+x,oy+y))continue;      // 石板上不放浅色碎石（会变成扎眼白点）
     const sc=rnd()<0.35?2:1;
-    stamp(g,P.stone,Math.round(x),Math.round(y-10),3*sc,ch=>ch==='1'?'#6f767d':ch==='2'?pal.rock:'#c2cad1');
+    stamp(g,P.stone,Math.round(x),Math.round(y-10),3*sc,ch=>ch==='1'?'#5d646b':ch==='2'?pal.rock:'#8b9296');
   }
   if(th==='forest'||th==='cave'){
     for(let i=0;i<5;i++){
@@ -407,7 +417,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
                  isPaved(wx-38,wy)!==here||isPaved(wx,wy-38)!==here;
       if(!near)continue;
       if(here){ if(rnd()<0.62)drawGrassTuft(g,rnd,pal,x,y); }
-      else if(rnd()<0.30)stamp(g,P.stone,Math.round(x),Math.round(y-10),3,ch=>ch==='1'?'#6f767d':ch==='2'?pal.rock:'#c2cad1');
+      else if(rnd()<0.16)stamp(g,P.stone,Math.round(x),Math.round(y-10),3,ch=>ch==='1'?'#5d646b':ch==='2'?pal.rock:'#7f868b');
     }
   }
   /* ---- 3) 水边芦苇 ---- */

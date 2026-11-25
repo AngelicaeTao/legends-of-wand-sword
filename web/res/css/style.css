@@ -153,7 +153,7 @@ input{font-family:inherit}
 .panel-head .sub{font-size:12px;color:#5a3f0d}
 .panel-back{width:34px;height:34px;padding:0;border-radius:50%;background:rgba(43,29,5,.5);border:1px solid rgba(217,180,91,.5);color:#f0d590;font-size:22px;font-weight:700;line-height:32px;text-align:center}
 .panel-back:hover{background:rgba(43,29,5,.85);border-color:#f0d590}
-.panel-body{flex:1;overflow:auto;padding:18px 20px}
+.panel-body{flex:1;overflow-y:scroll;overflow-x:hidden;padding:18px 20px;scrollbar-width:thin}
 .panel-body::-webkit-scrollbar{width:6px}
 .panel-body::-webkit-scrollbar-thumb{background:rgba(217,180,91,.4);border-radius:3px}
 /* 角色面板 tab */
@@ -550,3 +550,13 @@ input{font-family:inherit}
 #worldView.panel-open .interact-hint{opacity:.2;transition:opacity .18s;pointer-events:none}
 /* v1.9.3：面板打开时，右下角全局按钮让位（避免压在面板上） */
 body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer-events:none}
+/* ---------- v1.9.4 副本汇总条 / 公会成员滚动 ---------- */
+.dg-summary{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:9px;margin-top:12px}
+.dgs{padding:11px 14px;border-radius:11px;background:rgba(255,255,255,.045);border:1px solid rgba(217,180,91,.22)}
+.dgs em{display:block;font-style:normal;font-size:10.5px;color:#8fa0b8;letter-spacing:1px;margin-bottom:4px}
+.dgs b{font-size:15px;color:#f0d590;letter-spacing:.5px}
+/* 公会成员：超出一屏可滚动，滚动条细一点 */
+.guild-members{max-height:206px;overflow-y:auto;padding-right:4px;margin-bottom:4px}
+.guild-members::-webkit-scrollbar{width:6px}
+.guild-members::-webkit-scrollbar-thumb{background:rgba(217,180,91,.45);border-radius:3px}
+.guild-members::-webkit-scrollbar-track{background:rgba(255,255,255,.05);border-radius:3px}

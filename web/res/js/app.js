@@ -337,7 +337,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.3';
+const BUILD_VER='v1.9.4';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -738,7 +738,7 @@ function renderDungeon(){
         const dis=locked||exhausted;
         const diff=diffOf[d.id]||1;
         const stars='★'.repeat(diff)+'☆'.repeat(4-diff);
-        return `<div class="dungeon-item" style="background-image:linear-gradient(90deg,rgba(8,13,22,.94) 42%,rgba(8,13,22,.55)),url(${RES}v3/backgrounds/${bgOf[d.id]||'bg_explore_grassland'}.png)">
+        return `<div class="dungeon-item" style="background-image:linear-gradient(90deg,rgba(8,13,22,.95) 46%,rgba(8,13,22,.74) 78%,rgba(8,13,22,.62)),url(${RES}v3/backgrounds/${bgOf[d.id]||'bg_explore_grassland'}.png)">
           <div class="di-info">
             <div class="di-name">${d.name}<em class="di-star">${stars}</em></div>
             <div class="di-meta">推荐 Lv.${d.lv} · 今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次 · ${d.drop}</div>
@@ -746,6 +746,14 @@ function renderDungeon(){
           <button class="di-enter${dis?' off':''}" data-dg="${d.id}" ${dis?'disabled':''}>${locked?'等级不足':exhausted?'次数用完':'进入'}</button>
         </div>`;
       }).join('')}</div>
+      <div class="dg-summary">
+        ${(()=>{const used=dungeons.reduce((a,d)=>a+(d.perDay-(d._remain!=null?d._remain:d.perDay)),0);
+               const total=dungeons.reduce((a,d)=>a+d.perDay,0);
+               const open=dungeons.filter(d=>lv>=d.lv).length;
+               return `<div class="dgs"><em>今日已挑战</em><b>${used} / ${total}</b></div>
+                       <div class="dgs"><em>已解锁</em><b>${open} / ${dungeons.length}</b></div>
+                       <div class="dgs"><em>主要产出</em><b>材料 · 装备 · 强化石</b></div>`;})()}
+      </div>
       <div class="home-note">每日 0 点重置次数 · 结算后返回列表 · 战败不扣次数</div>`;
     body.querySelectorAll('.di-enter').forEach(btn=>{
       if(btn.disabled)return;
