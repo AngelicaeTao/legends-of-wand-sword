@@ -150,6 +150,25 @@ func stateLoad(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, map[string]any{"exists": false})
 		return
 	}
+	// 老存档迁移（v1.8）：世界分辨率由 15360×8640 折半为 7680×4320，
+	// 坐标超出新世界范围的存档按比例折半；折半后若落在旧默认出生点（中央湖内）
+	// 或边界外，统一点落回 W1 通道安全点。
+	migrated := false
+	if p.World.X > 7680 || p.World.Y > 4320 {
+		p.World.X, p.World.Y = p.World.X/2, p.World.Y/2
+		migrated = true
+	}
+	if p.World.WorldID == "W1" && p.World.X >= 3700 && p.World.X <= 4000 && p.World.Y >= 2050 && p.World.Y <= 2260 {
+		p.World.X, p.World.Y = 2560, 2176
+		migrated = true
+	}
+	if p.World.X < 32 || p.World.Y < 32 || p.World.X > 7648 || p.World.Y > 4288 {
+		p.World.X, p.World.Y = 2560, 2176
+		migrated = true
+	}
+	if migrated {
+		_ = disk.Save(q.UserID, p)
+	}
 	jsonOut(w, map[string]any{"exists": true, "state": p})
 }
 

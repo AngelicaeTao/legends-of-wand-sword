@@ -1,9 +1,10 @@
 /* ============================================================
    杖剑传说 · 6 世界通道地图引擎（v1.1 地形升级）
    ------------------------------------------------------------
-   - 每世界 15360×8640（地图设计 v1.0 放大×4），视口 1280×720 不变
-   - 地形用交付包 game_assets/maps 的真实 AI 地表全图（Wn_full.png）
-   - 移动边界读同源通行掩码（Wn_mask_small.png，白=可走/黑=墙），
+   - 每世界 7680×4320（v1.8 分辨率折半：原 15360 的 8× 像素块降到 4×，比例回到
+     "路宽≈2 个角色高"，视口 1280×720 不变），视口 1280×720 不变
+   - 地形用 game_assets/maps 的 Wn_full_half.png（15360 原图 NEAREST 折半）
+   - 移动边界读同源通行掩码（Wn_mask_half.png，白=可走/黑=墙），
      角色被硬约束在通道内——墙是硬碰撞，不是装饰
    - 移速 960px/s（×4），横穿仍约16s；主通道384px=角色显示128px×3
    - 固定点位从服务端 /api/spawn 拉取（怪世界共享 / 宝箱玩家独立），
@@ -12,11 +13,13 @@
    ============================================================ */
 (function(){
 'use strict';
-const MW=15360, MH=8640, VW=1280, VH=720;
-const MASK_W=1920, MASK_H=1080, MASK_SCALE=8; // 掩码降采样比例（15360/1920）
-const MINI_W=960, MINI_H=540, MINI_SCALE=MW/MINI_W; // 小地图兜底底图（掩码上色）：1px = 16 世界单位
-const THUMB_W=1920, THUMB_H=1080, THUMB_SCALE=MW/THUMB_W; // 小地图主底图（地形缩略）：1px = 8 世界单位
-const MOVE_SPEED=960; // 场景像素/秒（v1.0 ×4）
+const MW=7680, MH=4320, VW=1280, VH=720;
+const MASK_W=960, MASK_H=540, MASK_SCALE=8; // 掩码降采样比例（7680/960）
+const MINI_W=480, MINI_H=270, MINI_SCALE=MW/MINI_W; // 小地图兜底底图（掩码上色）：1px = 16 世界单位
+const THUMB_W=960, THUMB_H=540, THUMB_SCALE=MW/THUMB_W; // 小地图主底图（地形缩略）：1px = 8 世界单位
+const MOVE_SPEED=480; // 场景像素/秒（v1.8：世界折半，速度同比折半保持手感）
+// 安全区出生点：W1 主通道上的开阔点（旧的 7680,4320 落在地形中央蓝色圆内，视觉为水面）
+const SPAWN_X=2560, SPAWN_Y=2176;
 const RES='/res/';
 
 // 6 世界主题配置（墙元素 / 地面配色 / 障碍绘制风格）
@@ -40,11 +43,12 @@ function WMap(canvas, opts){
   this.onGate=this.opts.onGate||function(){};
   this.onTile=this.opts.onTile||function(){};
 
-  this.hero={x:MW/2,y:MH/2,dir:'down',moving:false};
+  this.hero={x:SPAWN_X,y:SPAWN_Y,dir:'down',moving:false};
   this.keys={};
   this.cam={x:0,y:0};
   this.worldId='W1';
   this.theme=THEMES.grassland;
+  this.themeKey='grassland';
 
   this.obstacles=[];  // 保留字段兼容，地形升级后不再用精灵墙，墙由掩码判定
   this.monsters=[];   // {x,y,nodeId,type,name,state:'idle'|'dead',r,alert,actor,phase}
@@ -58,7 +62,12 @@ function WMap(canvas, opts){
   this.ground=null;     // 真实地形全图 Image（仅 createImageBitmap 不可用时的兜底分块源）
   this.groundBmp=null;  // 真实地形全图 ImageBitmap（首选：解码/裁剪走解码线程，不占主线程）
   this.maskData=null;   // 通行掩码 ImageData（降采样）
+  this.maskCv=null;     // 不可通行区域遮罩（盖住地形图的棋盘格底，勾出可走通道）
+  this.paintCv=null;    // 可走区补绘（棋盘格底纹替换为主题地面色）
   this.tiles=null;      // 当前世界分块纹理 Map："tx,ty" -> ImageBitmap/canvas(1280×720)
+  this.deco=null;       // 地表装饰层（v1.8：草/花/石/灌木/林缘树，按块烘焙）
+  this._decoPending=null;
+  this.pal=null;        // 地形自身采样出的配色（补绘/森林纹理取色，保证无缝）
   this._pending=null;   // 异步建块去重 Set
   this._pwToken=0;      // 世界任务令牌：切世界后作废旧异步建块
   this.mapCache={};     // worldId -> {maskData}（只存小掩码；全图不跨世界缓存）
@@ -78,7 +87,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   } else {
     const base=RES+'maps/'+worldId+'_';
     const loadImg=(src)=>new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('地形加载失败:'+src));im.src=src;});
-    const maskImg=await loadImg(base+'mask_small.png');
+    const maskImg=await loadImg(base+'mask_half.png');
     const mc=document.createElement('canvas');mc.width=MASK_W;mc.height=MASK_H;
     const mg=mc.getContext('2d',{willReadFrequently:true});mg.drawImage(maskImg,0,0);
     this.maskData=mg.getImageData(0,0,MASK_W,MASK_H).data;
@@ -88,7 +97,9 @@ WMap.prototype.loadTerrain=async function(worldId){
   // 注意：先置空 tiles 再关位图——后续 await 期间渲染会走底色兜底，
   // 否则渲染会取到已关闭(detached)的位图导致 drawImage 报错
   this._pwToken++;
-  if(this.thumb&&this.thumb.close){try{this.thumb.close();}catch(e){}} this.thumb=null; this.miniCv=null;
+  if(this.thumb&&this.thumb.close){try{this.thumb.close();}catch(e){}} this.thumb=null; this.miniCv=null; this.maskCv=null; this.paintCv=null;
+  if(this.deco)this.deco.clear();
+  this.deco=null; this._decoPending=null; this.pal=null;
   const oldTiles=this.tiles;
   this.tiles=null;this._pending=null;
   if(oldTiles)for(const t of oldTiles.values()){if(t.close)t.close();}
@@ -96,7 +107,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   this.groundBmp=null;this.ground=null;
   // 全图：仅当前世界持有。优先 fetch→createImageBitmap：
   // 解码与后续按块裁剪均在浏览器解码线程完成，主线程零大图采样（消除预热期掉帧）
-  const url=RES+'maps/'+worldId+'_full.png';
+  const url=RES+'maps/'+worldId+'_full_half.png';
   try{
     const resp=await fetch(url,{cache:'force-cache'});
     const blob=await resp.blob();
@@ -113,8 +124,204 @@ WMap.prototype.loadTerrain=async function(worldId){
     const src=this.groundBmp||this.ground;
     this.thumb=await createImageBitmap(src,{resizeWidth:THUMB_W,resizeHeight:THUMB_H,resizeQuality:'low'});
   }catch(e){ this.thumb=null; }
+  // 水域修正：地形图里的蓝色水面在掩码中被误标为可走 → 按颜色改为不可走，
+  // 让"湖"在视觉与碰撞上一致（角色被挡在岸边，不会站到水面上）
+  this.waterFlag=null;
+  if(this.thumb&&this.maskData){
+    const W=MASK_W,H=MASK_H;
+    const tc=document.createElement('canvas');tc.width=W;tc.height=H;
+    const tg=tc.getContext('2d',{willReadFrequently:true});
+    tg.drawImage(this.thumb,0,0,W,H);
+    const px=tg.getImageData(0,0,W,H).data;
+    const md=this.maskData, wf=new Uint8Array(W*H);
+    let wn=0;
+    for(let i=0,p=0;i<px.length;i+=4,p++){
+      const r=px[i],g=px[i+1],b=px[i+2];
+      if(b>r+45&&b>85&&b>=g-10){
+        wf[p]=1;
+        if(md[i]>127){md[i]=0;md[i+1]=0;md[i+2]=0;md[i+3]=255;wn++;}
+      }
+    }
+    this.waterFlag=wf; this.waterPixels=wn;
+  }
   // 底图（兜底）：缩略失败时用通行掩码上色，保证小地图仍可用
   this.miniCv=this.thumb?null:this.buildMiniMap();
+  // 取色：直接从地形图自身采样「草地色 / 林地色」，补绘与遮罩用它作基色，
+  // 与真实地形同色系 → 交界不再出现浅米色/深绿硬块
+  this.samplePalette();
+  // 地表装饰层（草簇/花/石子/灌木/林缘树）：按块惰性烘焙，1:1 像素细节
+  this.deco=new window.DecoLayer(this.worldId,this.themeKey);
+  this._decoPending=new Set();
+  // 场景遮罩：不可通行区域 → 林地（真实地形色 + 树冠斑驳纹理）
+  this.maskCv=this.buildMaskLayer();
+  // 补绘层：未绘制的棋盘格底 → 与地形同色的草地（含颗粒噪点）
+  this.paintCv=this.buildPaintLayer();
+};
+
+/* 未绘制底检测：地形图未绘制处是"纯色棋盘格"，而 AI 绘制的地表每像素都有噪点。
+   以 3×3 邻域完全同色为判据（排除蓝色水面），得到 solid 掩码，供取色/补绘使用。 */
+WMap.prototype.detectSolid=function(src,W,H){
+  const N=W*H, solid=new Uint8Array(N);
+  for(let y=1;y<H-1;y++){
+    const row=y*W;
+    for(let x=1;x<W-1;x++){
+      const p=row+x, i=p*4;
+      const r=src[i],g=src[i+1],b=src[i+2];
+      if(b>r+45&&b>85)continue;                       // 水不参与
+      const i2=(p+1)*4, i3=(p+W)*4;
+      if(r===src[i2]&&g===src[i2+1]&&b===src[i2+2]&&r===src[i3]&&g===src[i3+1]&&b===src[i3+2]) solid[p]=1;
+    }
+  }
+  return solid;
+};
+
+/* 从地形缩略图采样配色：可走非棋盘区 → 草地均色；不可走非水区 → 林地均色 */
+WMap.prototype.samplePalette=function(){
+  const pal={ground:[121,173,74],forest:[32,54,34]};
+  this.pal=pal;
+  if(!this.thumb||!this.maskData)return pal;
+  const W=MASK_W,H=MASK_H;
+  const tc=document.createElement('canvas');tc.width=W;tc.height=H;
+  const tg=tc.getContext('2d',{willReadFrequently:true});
+  tg.drawImage(this.thumb,0,0,W,H);
+  const src=tg.getImageData(0,0,W,H).data;
+  const md=this.maskData;
+  const solid=this.solidMask=this.detectSolid(src,W,H);
+  let gr=0,gg=0,gb=0,gn=0, fr=0,fg=0,fb=0,fn=0;
+  for(let i=0,p=0;i<src.length;i+=4,p++){
+    const r=src[i],g=src[i+1],b=src[i+2];
+    if(md[i]>127){                       // 可走
+      if(solid[p])continue;              // 未绘制的纯色棋盘底不参与取色
+      gr+=r;gg+=g;gb+=b;gn++;
+    }else{                               // 不可走
+      if(b>r+45&&b>85)continue;          // 水不参与
+      fr+=r;fg+=g;fb+=b;fn++;
+    }
+  }
+  if(gn>500){pal.ground=[Math.round(gr/gn),Math.round(gg/gn),Math.round(gb/gn)];}
+  if(fn>500){pal.forest=[Math.round(fr/fn),Math.round(fg/fn),Math.round(fb/fn)];}
+  return pal;
+};
+
+/* 可走区补绘：把"未绘制的纯色棋盘底"就地补成周围地形的颜色（简易 inpainting）
+   —— 不依赖固定色值，也不依赖主题配色：把已知像素向外扩散 8 轮，
+   补出的颜色天然与周边一致，因此接缝几乎不可见；再叠细颗粒避免死板 */
+WMap.prototype.buildPaintLayer=function(){
+  if(!this.thumb||!this.maskData)return null;
+  const W=MASK_W,H=MASK_H,N=W*H;
+  const tc=document.createElement('canvas');tc.width=W;tc.height=H;
+  const tg=tc.getContext('2d',{willReadFrequently:true});
+  tg.drawImage(this.thumb,0,0,W,H);
+  const src=tg.getImageData(0,0,W,H).data;
+  const md=this.maskData;
+  // 未绘制底 = 纯色棋盘格（3×3 全同色），逐世界自适应
+  const solid=this.solidMask||this.detectSolid(src,W,H);
+  // 膨胀 1 圈：棋盘格的"格缝"像素本身不是纯色，需一并纳入补绘，否则留下网格线
+  const hit=new Uint8Array(N);
+  let raw=0;
+  for(let y=1;y<H-1;y++){
+    const row=y*W;
+    for(let x=1;x<W-1;x++){
+      const p=row+x;
+      if(!solid[p]||!(md[p*4]>127))continue;
+      hit[p]=1;hit[p-1]=1;hit[p+1]=1;hit[p-W]=1;hit[p+W]=1;raw++;
+    }
+  }
+  if(!raw)return null;
+  // 颜色传播：known=1 的像素有颜色，其余从 8 邻域已知像素取平均，迭代 10 轮
+  const R=new Float32Array(N),G=new Float32Array(N),B=new Float32Array(N),known=new Uint8Array(N);
+  for(let p=0;p<N;p++){
+    const i=p*4;
+    if(!hit[p]){ R[p]=src[i];G[p]=src[i+1];B[p]=src[i+2];known[p]=1; }
+  }
+  for(let it=0;it<10;it++){
+    let changed=0;
+    for(let y=1;y<H-1;y++){
+      const row=y*W;
+      for(let x=1;x<W-1;x++){
+        const p=row+x;
+        if(known[p])continue;
+        let r=0,g=0,b=0,n=0;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          const q=p+dy*W+dx;
+          if(known[q]){r+=R[q];g+=G[q];b+=B[q];n++;}
+        }
+        if(n){ R[p]=r/n;G[p]=g/n;B[p]=b/n;known[p]=1;changed++; }
+      }
+    }
+    if(!changed)break;
+  }
+  const pc=(this.pal&&this.pal.ground)||[121,173,74];
+  const out=new ImageData(W,H), d=out.data;
+  let hits=0;
+  for(let p=0;p<N;p++){
+    const i=p*4;
+    if(!hit[p]){ d[i+3]=0; continue; }
+    const x=p%W, y=(p/W)|0;
+    const n1=((x*13+y*7)%11)-5, n2=(((x>>2)*29+(y>>2)*17)%9)-4;
+    const n=n1*0.6+n2*0.8;
+    const cr=known[p]?R[p]:pc[0], cg=known[p]?G[p]:pc[1], cb=known[p]?B[p]:pc[2];
+    const shade=((x*31+y*17)%23)<3?-6:0;         // 稀疏暗斑（踩踏痕迹），避免死板纯色
+    d[i]=Math.max(0,Math.min(255,cr+n+shade));
+    d[i+1]=Math.max(0,Math.min(255,cg+n+shade));
+    d[i+2]=Math.max(0,Math.min(255,cb+n+shade));
+    d[i+3]=252;
+    hits++;
+  }
+  this.paintHits=hits; this.paintRaw=raw;
+  const ctx2=tc.getContext('2d');
+  ctx2.putImageData(out,0,0);
+  return tc;
+};
+
+/* 由 maskData 生成不可通行区域遮罩（与掩码同尺寸 1920×1080，放大 8× 绘制）
+   v1.8：不再是纯色深绿，而是「地形自身林色 + 多层树冠斑驳」——远看是森林，
+   边缘由装饰层的灌木/树冠进一步柔化，与可走草地自然咬合 */
+WMap.prototype.buildMaskLayer=function(){
+  const src=this.maskData;
+  if(!src)return null;
+  const W=MASK_W,H=MASK_H;
+  // 1) 形状层：可走=透明，不可走=不透明（水保持透明，露出湖水原色）
+  const sc=document.createElement('canvas');sc.width=W;sc.height=H;
+  const sg=sc.getContext('2d');
+  const so=sg.createImageData(W,H), sd=so.data;
+  const wf=this.waterFlag;
+  for(let y=0;y<H;y++){
+    const row=y*W;
+    for(let x=0;x<W;x++){
+      const i=(row+x)*4;
+      if(src[i]>127){ sd[i+3]=0; continue; }
+      if(wf&&wf[row+x]){ sd[i+3]=0; continue; }
+      sd[i]=255; sd[i+1]=255; sd[i+2]=255; sd[i+3]=255;
+    }
+  }
+  sg.putImageData(so,0,0);
+  // 2) 纹理层：林地底色 + 低频明暗（树冠间隙的林下光斑），按形状层裁剪
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const cg=cv.getContext('2d');
+  const pc=(this.pal&&this.pal.forest)||[32,54,34];
+  cg.fillStyle=`rgb(${pc[0]},${pc[1]},${pc[2]})`;
+  cg.fillRect(0,0,W,H);
+  const img=cg.getImageData(0,0,W,H), d=img.data;
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const i=(y*W+x)*4;
+      // 低频噪声：4px 网格 → 放大 8× 后是 32px 的柔和林冠明暗
+      const hx=x>>2, hy=y>>2;
+      let v=((hx*374761393+hy*668265263)^(hx*hy*69069))>>>0;
+      v=(v^(v>>>13))>>>0;
+      const n=((v%13)-6);
+      d[i]=Math.max(0,pc[0]+n);
+      d[i+1]=Math.max(0,pc[1]+n+1);
+      d[i+2]=Math.max(0,pc[2]+n);
+      d[i+3]=255;
+    }
+  }
+  cg.putImageData(img,0,0);
+  cg.globalCompositeOperation='destination-in';
+  cg.drawImage(sc,0,0);
+  cg.globalCompositeOperation='source-over';
+  return cv;
 };
 
 /* 由 maskData 生成小地图底图（960×540，1px = 16 世界单位），2×2 采样平均 */
@@ -149,7 +356,7 @@ WMap.prototype.buildMiniMap=function(){
 };
 
 /* 分块纹理：异步创建（createImageBitmap 走解码线程）+ LRU（上限36块≈133MB） */
-WMap.prototype.TILE_MAX=36;
+WMap.prototype.TILE_MAX=24;
 WMap.prototype.requestTile=function(tx,ty){ // 请求异步建块（去重），不阻塞渲染
   if(!this.tiles)return;
   if(tx<0||ty<0||tx>=MW/VW||ty>=MH/VH)return;
@@ -193,6 +400,27 @@ WMap.prototype.ensureTile=function(tx,ty){ // 渲染取块：命中返回纹理�
   return null;
 };
 
+/* 装饰块：首次访问异步烘焙（下一帧就绪），避免同步生成卡住当前帧 */
+WMap.prototype.ensureDeco=function(tx,ty){
+  if(!this.deco)return null;
+  if(tx<0||ty<0||tx>=MW/VW||ty>=MH/VH)return null;
+  const key=tx+','+ty;
+  const hit=this.deco.tiles.get(key);
+  if(hit){ this.deco.tiles.delete(key);this.deco.tiles.set(key,hit); return hit; }
+  if(this._decoPending.has(key))return null;
+  this._decoPending.add(key);
+  const token=this._pwToken, self=this;
+  const job=()=>{
+    self._decoPending.delete(key);
+    if(token!==self._pwToken||!self.deco)return;
+    const walk=(x,y)=>self.isWalkable(x,y);
+    self.deco.get(tx,ty,VW,VH,walk);
+  };
+  if(window.requestIdleCallback)requestIdleCallback(job,{timeout:120});
+  else setTimeout(job,16);
+  return null;
+};
+
 /* ---------- 初始化（只建一次角色 actor） ---------- */
 WMap.prototype.load=async function(){
   const self=this;
@@ -213,14 +441,15 @@ WMap.prototype.switchWorld=async function(worldId, spots, heroX, heroY){
   this.worldId=worldId;
   const wdef=(this.opts.worldDefs||[]).find(w=>w.id===worldId);
   const themeKey=wdef?wdef.theme:'grassland';
+  this.themeKey=themeKey;
   this.theme=THEMES[themeKey]||THEMES.grassland;
   await this.loadTerrain(worldId);
   // 重置实体
   this.monsters=[];this.chests=[];this.gates=[];this.anchors=[];this.drops=[];
   if(heroX!=null&&heroY!=null){this.hero.x=heroX;this.hero.y=heroY;}
-  else {this.hero.x=MW/2;this.hero.y=MH/2;} // 默认落安全区中心
+  else {this.hero.x=SPAWN_X;this.hero.y=SPAWN_Y;} // 默认落安全区
   // 若存档坐标落在墙里（旧存档），修正到安全区
-  if(this.blocked(this.hero.x,this.hero.y,8)){this.hero.x=MW/2;this.hero.y=MH/2;}
+  if(this.blocked(this.hero.x,this.hero.y,8)){this.hero.x=SPAWN_X;this.hero.y=SPAWN_Y;}
   this.applySpots(spots||[]);
   this.centerCam();
   this.prewarmTiles(); // 后台预热分块，避免移动跨块时同步建块掉帧
@@ -504,6 +733,35 @@ WMap.prototype.render=function(now){
     }
   }
   else {g.fillStyle='#3a5a2a';g.fillRect(0,0,VW,VH);}
+  // 不可通行区域遮罩：盖住地形图的棋盘格/透明底，只留出可走通道（与碰撞一致）
+  if(this.maskCv){
+    const ms=MASK_SCALE;
+    let sx=cx/ms, sy=cy/ms, sw=VW/ms, sh=VH/ms;
+    if(sx<0){sw+=sx;sx=0;}
+    if(sy<0){sh+=sy;sy=0;}
+    if(sx+sw>MASK_W)sw=MASK_W-sx;
+    if(sy+sh>MASK_H)sh=MASK_H-sy;
+    if(sw>0&&sh>0)g.drawImage(this.maskCv,sx,sy,sw,sh,sx*ms-cx,sy*ms-cy,sw*ms,sh*ms);
+  }
+  // 可走区补绘（棋盘格底纹 → 主题地面色）
+  if(this.paintCv){
+    const ms=MASK_SCALE;
+    let sx=cx/ms, sy=cy/ms, sw=VW/ms, sh=VH/ms;
+    if(sx<0){sw+=sx;sx=0;}
+    if(sy<0){sh+=sy;sy=0;}
+    if(sx+sw>MASK_W)sw=MASK_W-sx;
+    if(sy+sh>MASK_H)sh=MASK_H-sy;
+    if(sw>0&&sh>0)g.drawImage(this.paintCv,sx,sy,sw,sh,sx*ms-cx,sy*ms-cy,sw*ms,sh*ms);
+  }
+  // 地表装饰（草簇/花/石子/灌木/林缘树）：按块 1:1 烘焙，异步建块不阻塞渲染
+  if(this.deco){
+    const dx0=Math.floor(cx/VW),dy0=Math.floor(cy/VH);
+    const dx1=Math.floor((cx+VW-0.001)/VW),dy1=Math.floor((cy+VH-0.001)/VH);
+    for(let ty=dy0;ty<=dy1;ty++)for(let tx=dx0;tx<=dx1;tx++){
+      const dc=this.ensureDeco(tx,ty);
+      if(dc)g.drawImage(dc,tx*VW-cx,ty*VH-cy);
+    }
+  }
   const items=[];
   // 墙已含在地形图中，不再渲染障碍物精灵
   for(const m of this.monsters)if(m.state==='idle')items.push({y:m.y,k:'m',o:m});

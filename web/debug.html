@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>杖剑传说 · 权威服务端初跑验证页</title>
+<style>
+  :root{
+    --bg:#11151d; --panel:#1b2130; --panel2:#242c3e; --line:#39445c;
+    --text:#e6ecf7; --muted:#93a0b8; --accent:#5b9cff; --gold:#ffce5a;
+    --danger:#ff6b6b; --ok:#5fd38a; --purple:#b388ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;font-size:14px;line-height:1.5;padding:18px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:20px;color:var(--accent);margin-bottom:4px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+  .status{display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:4px 12px;font-size:12px;margin-bottom:14px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  .dot.on{background:var(--ok)} .dot.off{background:var(--danger)}
+  .grid{display:grid;grid-template-columns:300px 1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+  .card h2{font-size:14px;color:var(--gold);margin-bottom:10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  label{display:block;color:var(--muted);font-size:12px;margin:8px 0 3px}
+  select,input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:7px 9px;font-size:13px}
+  .skills{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px}
+  .skills label{margin:0;display:flex;align-items:center;gap:5px;color:var(--text);font-size:12px}
+  .skills input[type=checkbox]{width:auto}
+  button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:9px 14px;font-size:13px;cursor:pointer;margin-top:10px;width:100%}
+  button:hover{filter:brightness(1.15)} button.ghost{background:var(--panel2);border:1px solid var(--line)}
+  .row{display:flex;gap:8px} .row button{margin-top:8px}
+  .stat{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .stat b{color:var(--accent)}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .tabs button{width:auto;margin:0;padding:6px 12px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+  .tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .log{background:#0c0f16;border-radius:6px;padding:10px;max-height:340px;overflow:auto;font-family:Consolas,monospace;font-size:12px}
+  .log div{padding:2px 0;border-bottom:1px solid #1a2030}
+  .hero-r{color:var(--accent)} .mon-r{color:var(--danger)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;margin-left:6px}
+  .badge.win{background:rgba(95,211,138,.2);color:var(--ok)} .badge.lose{background:rgba(255,107,107,.2);color:var(--danger)}
+  .note{color:var(--muted);font-size:11px;margin-top:6px}
+  code{background:var(--panel2);padding:1px 5px;border-radius:3px;color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>杖剑传说 · 权威服务端初跑验证页</h1>
+  <div class="sub">前端零游戏逻辑：所有属性、战斗、离线结算都由 Go 服务端权威计算，本页只发请求 + 展示战报。改 <code>configs/*.json</code> 即可调数值。</div>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">连接中…</span></div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>💾 存档角色（服务端权威持久化）</h2>
+    <div class="note">创角后角色存于 <code>data/saves/&lt;ID&gt;.json</code>；交战/离线均走落库端点，刷新页面后读档可恢复。留空则用 anonymous。</div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="userId" placeholder="用户ID，如 hero_001" value="web_hero" style="flex:1">
+      <button id="createBtn" class="ghost">创角</button>
+      <button id="loadBtn" class="ghost">读档</button>
+    </div>
+    <div id="saveBox" style="margin-top:10px"></div>
+  </div>
+
+  <div class="grid">
+    <!-- 左：配置区 -->
+    <div>
+      <div class="card">
+        <h2>角色配置（战前 BD 决策）</h2>
+        <label>职业</label><select id="classSel"></select>
+        <label>等级</label><input type="number" id="level" value="10" min="1" max="200">
+        <label>技能 BD（4 槽，战斗中零输入）</label>
+        <div class="skills" id="skillBox"></div>
+        <button id="calcBtn">计算属性（服务端）</button>
+        <div id="statBox" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>离线结算（服务端时间戳）</h2>
+        <label>离线时长（小时）</label><input type="number" id="idleHours" value="10" step="0.5" min="0">
+        <button id="idleBtn" class="ghost">纯结算（不落库）</button>
+        <button id="idleFinalBtn" class="ghost">结算并入账（落库）</button>
+        <div id="idleBox" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- 右：战斗区 -->
+    <div>
+      <div class="card">
+        <h2>大世界 · 遭遇战斗</h2>
+        <div class="row">
+          <select id="monsterSel" style="flex:1"></select>
+          <select id="eliteSel" style="width:110px">
+            <option value="">普通怪</option>
+            <option value="elite">精英</option>
+            <option value="rareElite">稀有精英</option>
+          </select>
+          <input type="number" id="monLv" value="5" min="1" max="200" style="width:80px">
+        </div>
+        <button id="battleBtn">⚔️ 纯结算（回放用）</button>
+        <button id="fightBtn">⚔️ 交战并入账（落库）</button>
+        <div class="note">战斗为自动演出，玩家零输入；底部技能为只读回显。「纯结算」可复现战报，「交战并入账」会把奖励写进存档角色。</div>
+        <div id="resultBox" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>战报（服务端下发，客户端只表现）</h2>
+        <div class="tabs">
+          <button class="active" data-tab="log">战斗日志</button>
+          <button data-tab="raw">原始战报 JSON</button>
+        </div>
+        <div class="log" id="logBox">尚未战斗。点击上方「交战」开始。</div>
+        <pre class="log" id="rawBox" style="display:none"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = location.protocol === 'file:' ? 'http://127.0.0.1:8080' : '';
+let CFG = null, lastReport = null;
+
+async function api(path, body){
+  const opt = body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {};
+  const r = await fetch(API+path, opt);
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+function el(id){return document.getElementById(id)}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+
+async function init(){
+  try{
+    await api('/health');
+    CFG = await api('/api/config');
+    el('dot').className='dot on'; el('statusText').textContent='服务端已连接 · 配置已加载（'+CFG.classes.classes.length+' 职业 / '+CFG.monsters.monsters.length+' 怪物 / '+CFG.worlds.worlds.length+' 世界）';
+    // 职业下拉
+    el('classSel').innerHTML = CFG.classes.classes.map(c=>'<option value="'+c.id+'">'+c.name+'（'+c.desc+'）</option>').join('');
+    // 技能多选
+    el('skillBox').innerHTML = CFG.skills.skills.map((s,i)=>'<label><input type="checkbox" value="'+s.id+'" '+(i<4?'checked':'')+'>'+s.name+'</label>').join('');
+    // 怪物下拉
+    el('monsterSel').innerHTML = CFG.monsters.monsters.map(m=>'<option value="'+m.id+'">'+m.icon+' '+m.name+(m.isBoss?' 👑BOSS':'')+'</option>').join('');
+    el('classSel').onchange=calcStats;
+    el('level').onchange=calcStats;
+    // 记住上次存档 ID，刷新后自动回填
+    try{ const saved=localStorage.getItem('zjcs_uid'); if(saved) el('userId').value=saved; }catch(e){}
+    await calcStats();
+  }catch(e){
+    el('dot').className='dot off';
+    el('statusText').textContent='服务端未连接：请先在 server/ 目录运行 go run main.go';
+  }
+}
+function avatar(){
+  const bd=[...document.querySelectorAll('#skillBox input:checked')].map(x=>x.value).slice(0,4);
+  return {level:+el('level').value||1, classId:el('classSel').value, equip:[], bd};
+}
+function uid(){const v=el('userId').value.trim()||'anonymous'; try{localStorage.setItem('zjcs_uid',el('userId').value.trim())}catch(e){} return v}
+function showState(p){
+  const c=p.core, w=p.world;
+  el('saveBox').innerHTML=[
+    ['ID',p.userId],['名字',c.name||'—'],['职业',c.classId],['等级 / 经验','Lv.'+c.level+' / '+c.exp],
+    ['金币 / 材料',c.gold+' / '+c.material],['战力',c.battlePower],['世界 / 坐标',w.worldId+' ('+w.x+','+w.y+')'],
+    ['装备数',p.equip.length+' 件'],['日志',p.logs.length+' 条']
+  ].map(([k,v])=>'<div class="stat"><span>'+esc(k)+'</span><b>'+esc(String(v))+'</b></div>').join('');
+}
+el('createBtn').onclick=async()=>{
+  try{
+    const p=await api('/api/character/new',{userId:uid(),name:'新英雄',classId:el('classSel').value});
+    showState(p);
+    el('saveBox').innerHTML+='<div class="note">✅ 已创角并落盘</div>';
+  }catch(e){el('saveBox').innerHTML='<div class="note">创角失败：'+e.message+'</div>'}
+};
+el('loadBtn').onclick=async()=>{
+  try{
+    const d=await api('/api/state/load',{userId:uid()});
+    if(!d.exists){el('saveBox').innerHTML='<div class="note">该 ID 无存档，请先创角。</div>';return}
+    showState(d.state);
+    const c=d.state.core;
+    el('level').value=c.level; el('classSel').value=c.classId;
+    el('saveBox').innerHTML+='<div class="note">✅ 已从磁盘读档，等级/职业已同步到左侧配置</div>';
+  }catch(e){el('saveBox').innerHTML='<div class="note">读档失败：'+e.message+'</div>'}
+};
+async function calcStats(){
+  try{
+    const st=await api('/api/stats/calc', avatar());
+    el('statBox').innerHTML=[
+      ['生命',Math.round(st.hp)],['攻击',Math.round(st.atk)],['防御',Math.round(st.def)],
+      ['暴击',(st.crit*100).toFixed(1)+'%'],['速度',st.spd],['战力',st.power]
+    ].map(([k,v])=>'<div class="stat"><span>'+k+'</span><b>'+v+'</b></div>').join('');
+  }catch(e){}
+}
+el('calcBtn').onclick=calcStats;
+
+el('idleBtn').onclick=async()=>{
+  try{
+    const h=+el('idleHours').value||0;
+    const now=Math.floor(Date.now()/1000);
+    const r=await api('/api/idle/settle',{now, lastSeen:now-h*3600, level:+el('level').value});
+    el('idleBox').innerHTML=[
+      ['结算时长',r.hours+' 小时'+(r.capped?'（已封顶8h）':'')],
+      ['经验','+'+r.exp],['金币','+'+r.gold],['材料','+'+r.material]
+    ].map(([k,v])=>'<div class="stat"><span>'+k+'</span><b>'+v+'</b></div>').join('')+
+    '<div class="note">'+r.log+'</div>';
+  }catch(e){el('idleBox').innerHTML='<div class="note">结算失败：'+e.message+'</div>'}
+};
+
+el('idleFinalBtn').onclick=async()=>{
+  try{
+    const d=await api('/api/idle/finalize',{userId:uid()});
+    el('idleBox').innerHTML=[
+      ['结算时长',d.result.hours+' 小时'+(d.result.capped?'（已封顶8h）':'')],
+      ['经验','+'+d.result.exp],['金币','+'+d.result.gold],['材料','+'+d.result.material]
+    ].map(([k,v])=>'<div class="stat"><span>'+k+'</span><b>'+v+'</b></div>').join('')+
+    '<div class="note">'+d.result.log+' ｜ 已入账，金币='+d.state.core.gold+'</div>';
+    showState(d.state);
+  }catch(e){el('idleBox').innerHTML='<div class="note">入账失败：'+e.message+'</div>'}
+};
+
+el('battleBtn').onclick=async()=>{
+  const a=avatar();
+  const btn=el('battleBtn'); btn.disabled=true; btn.textContent='结算中…';
+  try{
+    const req={userId:'web-test', avatar:a, bd:a.bd, monsterId:el('monsterSel').value, monsterLv:+el('monLv').value||1, elite:el('eliteSel').value};
+    const rep=await api('/api/battle/resolve', req);
+    renderReport(rep);
+  }catch(e){el('logBox').innerHTML='结算失败：'+e.message}
+  finally{btn.disabled=false; btn.textContent='⚔️ 纯结算（回放用）'}
+};
+
+function renderReport(rep){
+  lastReport=rep;
+  const win=rep.result==='win';
+  el('resultBox').innerHTML='<div class="stat"><span>战斗结果</span><b>'+(win?'胜利':'战败')+' <span class="badge '+rep.result+'">'+(win?'WIN':'LOSE')+'</span></b></div>'+
+    '<div class="stat"><span>回合 / 时长</span><b>'+rep.rounds.length+' 回合 · '+rep.seconds+'s</b></div>'+
+    (win?'<div class="stat"><span>经验 / 金币</span><b>+'+rep.exp+' / +'+rep.gold+'</b></div>' +
+         '<div class="stat"><span>装备掉落</span><b>'+rep.drops.length+' 件</b></div>':'')+
+    '<div class="note">'+rep.log+'</div>';
+  el('logBox').innerHTML=rep.rounds.map(r=>{
+    const cls=r.actor==='hero'?'hero-r':'mon-r';
+    const who=r.actor==='hero'?'我方':'敌方';
+    const act=r.damage>0?('造成 '+r.damage+' 伤害'):(r.heal>0?('回复 '+r.heal+' 生命'):'施放 '+r.skillName);
+    const label=r.damage>0||r.heal>0||r.actor==='hero'?(who+' · '+r.skillName+' → '+act):(who+' → '+act);
+    return '<div class="'+cls+'">#'+r.n+' '+label+' ｜ 我方HP '+r.heroHp+' / 敌方HP '+r.monHp+'</div>';
+  }).join('');
+  el('rawBox').textContent=JSON.stringify(rep,null,2);
+}
+
+el('fightBtn').onclick=async()=>{
+  const btn=el('fightBtn'); btn.disabled=true; btn.textContent='结算并落库…';
+  try{
+    const a=avatar();
+    const bd=[...document.querySelectorAll('#skillBox input:checked')].map(x=>x.value).slice(0,4);
+    const d=await api('/api/battle/fight',{
+      userId:uid(), bd, monsterId:el('monsterSel').value, monsterLv:+el('monLv').value||1, elite:el('eliteSel').value
+    });
+    renderReport(d.report);
+    el('resultBox').innerHTML+='<div class="note">💾 已入账：'+(d.logs.join('；')||'无变更')+'</div>';
+    showState(d.state);
+  }catch(e){el('logBox').innerHTML='交战失败：'+e.message}
+  finally{btn.disabled=false; btn.textContent='⚔️ 交战并入账（落库）'}
+};
+
+// tab 切换
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  el('logBox').style.display=b.dataset.tab==='log'?'block':'none';
+  el('rawBox').style.display=b.dataset.tab==='raw'?'block':'none';
+});
+
+init();
+</script>
+</body>
+</html>

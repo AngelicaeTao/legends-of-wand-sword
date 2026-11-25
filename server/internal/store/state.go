@@ -74,7 +74,7 @@ func NewPlayer(userID, name, classID string) *PlayerState {
 	return &PlayerState{
 		UserID:    userID,
 		Core:      Core{Name: name, Level: 1, ClassID: classID, Gold: 3000, Gem: 900, Material: 20, Stamina: 86},
-		World:     World{WorldID: "W1", X: 7680, Y: 4320, Unlocked: []string{"W1"}, LastSeen: 0},
+		World:     World{WorldID: "W1", X: 2560, Y: 2176, Unlocked: []string{"W1"}, LastSeen: 0},
 		// 初始仓库：12 占用（交付包占位口径），含材料与 4 件基础装备
 		Warehouse: []Item{
 			{ID: "钢锭", Qty: 24, Kind: "材料"}, {ID: "精铁", Qty: 8, Kind: "材料"},

@@ -63,8 +63,8 @@
   },
   "worldMap": {
     "worldSize": {
-      "w": 15360,
-      "h": 8640
+      "w": 7680,
+      "h": 4320
     },
     "moveSpeed": 960,
     "corridorWidth": 384,
