@@ -1,0 +1,50 @@
+{
+  "_readme": "经济与全局数值。全部为 [PLACEHOLDER]，按需求文档表4与地图设计第七节，待 playtest 后用本表 tuning。",
+  "idle": {
+    "maxHours": 8,
+    "efficiency": 1.0,
+    "expPerMinute": 6,
+    "goldPerMinute": 4,
+    "materialPerMinute": 0.5,
+    "_note": "离线收益 = 时长 * 速率 * 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。"
+  },
+  "stamina": {
+    "max": 120,
+    "recoverMinutes": 30,
+    "perRecover": 1,
+    "costPerBattle": 0,
+    "costPerDungeon": 10,
+    "_note": "挂机/普通交战不消耗体力；副本消耗体力。原型展示值 86/120。"
+  },
+  "battle": {
+    "minSeconds": 15, "maxSeconds": 30,
+    "tickMs": 1000,
+    "_note": "服务端按累计时间驱动自动战斗；回合数仅作UI展示，不作终止条件。种子由服务端生成随战报记录。"
+  },
+  "drop": {
+    "equipChanceNormal": 0.16,
+    "equipChanceElite": 0.45,
+    "equipChanceBoss": 1.0,
+    "bossDiamondMin": 50, "bossDiamondMax": 100,
+    "chest": { "wood": { "gold": [40,120], "gem": [2,8] }, "silver": { "gold": [120,300], "gem": [8,20] }, "gold": { "gold": [300,800], "gem": [20,50] } }
+  },
+  "worldMap": {
+    "worldSize": { "w": 3840, "h": 2160 },
+    "moveSpeed": 240,
+    "corridorWidth": 96,
+    "triggerRadius": 48,
+    "aggroRadius": 120,
+    "renderRadiusScreens": 1,
+    "_note": "逻辑分辨率基准见 rendering.logicSize（须与原型图 1536×1024 一致）。复杂度靠路网拓扑非面积。"
+  },
+  "rendering": {
+    "logicSize": { "w": 1536, "h": 1024 },
+    "_note": "16:9，等比缩放。注意：地图设计 v0.4 曾写 1280×720，已在修订说明 R-01 标注为待统一，本初跑版以原型图实物 1536×1024 为准。"
+  },
+  "multiplayer": {
+    "channelCapacity": 40,
+    "moveBroadcastHz": 10,
+    "heartbeatMs": 5000,
+    "reconnectBackoffMs": [1000, 2000, 4000, 8000]
+  }
+}

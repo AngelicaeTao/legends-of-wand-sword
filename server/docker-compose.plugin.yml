@@ -1,0 +1,50 @@
+# 【可选】带权威 RPC 插件的 Nakama 栈。
+# ⚠️ 前置：plugins/zjcs.so 必须用官方 nakama-pluginbuilder:3.24.0 镜像构建，
+#    否则会因 Go 版本/编译环境不一致导致 Nakama 启动崩溃（no plugin module data / goarch mismatch）。
+#    构建命令见 scripts/build-plugin.sh。
+#
+# 启动：docker compose -f docker-compose.plugin.yml up -d
+# 提供 RPC：get_config / character_create / state_load / battle_resolve / idle_settle / transfer_class
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-localdb}
+      POSTGRES_DB: nakama
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [game]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nakama"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nakama:
+    image: heroiclabs/nakama:3.24.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: |
+      /bin/sh -c "
+      /nakama/nakama migrate up --database.address postgres:localdb@postgres:5432/nakama &&
+      exec /nakama/nakama --config /nakama/data/config.yml --database.address postgres:localdb@postgres:5432/nakama --runtime.path /nakama/data/modules
+      "
+    environment:
+      ZJCS_CONFIG_DIR: /nakama/data/configs
+    ports:
+      - "7350:7350"
+      - "7351:7351"
+    volumes:
+      - ./nakama/config.yml:/nakama/data/config.yml:ro
+      - ./plugins/zjcs.so:/nakama/data/modules/zjcs.so:ro
+      - ./configs_shared:/nakama/data/configs:ro
+      - nkdata:/nakama/data
+    networks: [game]
+
+volumes:
+  pgdata:
+  nkdata:
+networks:
+  game:

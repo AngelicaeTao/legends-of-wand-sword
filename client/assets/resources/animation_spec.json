@@ -1,0 +1,349 @@
+{
+  "version": "1.0",
+  "style": "pixel_32x48_nearest4x",
+  "naming_rule": "{category}_{subject}_{state}_{fNN}.png",
+  "scale": 4,
+  "palette_max_per_set": 16,
+  "animations": [
+    {
+      "id": "mage_idle",
+      "category": "char",
+      "subject": "hero_mage",
+      "state": "idle",
+      "frames": 4,
+      "fps": 6,
+      "loop": true,
+      "file_pattern": "characters/char_hero_mage_idle_f{00-03}.png"
+    },
+    {
+      "id": "mage_walk",
+      "category": "char",
+      "subject": "hero_mage",
+      "state": "walk",
+      "frames": 6,
+      "fps": 12,
+      "loop": true,
+      "file_pattern": "characters/char_hero_mage_walk_f{00-05}.png"
+    },
+    {
+      "id": "mage_attack",
+      "category": "char",
+      "subject": "hero_mage",
+      "state": "attack",
+      "frames": 4,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "characters/char_hero_mage_attack_f{00-03}.png"
+    },
+    {
+      "id": "mage_hit",
+      "category": "char",
+      "subject": "hero_mage",
+      "state": "hit",
+      "frames": 2,
+      "fps": 10,
+      "loop": false,
+      "file_pattern": "characters/char_hero_mage_hit_f{00-01}.png"
+    },
+    {
+      "id": "mage_die",
+      "category": "char",
+      "subject": "hero_mage",
+      "state": "die",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "characters/char_hero_mage_die_f{00-03}.png"
+    },
+    {
+      "id": "slime_idle",
+      "category": "mon",
+      "subject": "slime",
+      "state": "idle",
+      "frames": 4,
+      "fps": 6,
+      "loop": true,
+      "file_pattern": "monsters/mon_slime_idle_f{00-03}.png"
+    },
+    {
+      "id": "slime_attack",
+      "category": "mon",
+      "subject": "slime",
+      "state": "attack",
+      "frames": 4,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "monsters/mon_slime_attack_f{00-03}.png"
+    },
+    {
+      "id": "slime_hit",
+      "category": "mon",
+      "subject": "slime",
+      "state": "hit",
+      "frames": 2,
+      "fps": 10,
+      "loop": false,
+      "file_pattern": "monsters/mon_slime_hit_f{00-01}.png"
+    },
+    {
+      "id": "slime_die",
+      "category": "mon",
+      "subject": "slime",
+      "state": "die",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "monsters/mon_slime_die_f{00-03}.png"
+    },
+    {
+      "id": "skeleton_idle",
+      "category": "mon",
+      "subject": "skeleton",
+      "state": "idle",
+      "frames": 4,
+      "fps": 6,
+      "loop": true,
+      "file_pattern": "monsters/mon_skeleton_idle_f{00-03}.png"
+    },
+    {
+      "id": "skeleton_attack",
+      "category": "mon",
+      "subject": "skeleton",
+      "state": "attack",
+      "frames": 4,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "monsters/mon_skeleton_attack_f{00-03}.png"
+    },
+    {
+      "id": "skeleton_hit",
+      "category": "mon",
+      "subject": "skeleton",
+      "state": "hit",
+      "frames": 2,
+      "fps": 10,
+      "loop": false,
+      "file_pattern": "monsters/mon_skeleton_hit_f{00-01}.png"
+    },
+    {
+      "id": "skeleton_die",
+      "category": "mon",
+      "subject": "skeleton",
+      "state": "die",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "monsters/mon_skeleton_die_f{00-03}.png"
+    },
+    {
+      "id": "bat_idle",
+      "category": "mon",
+      "subject": "bat",
+      "state": "idle",
+      "frames": 4,
+      "fps": 6,
+      "loop": true,
+      "file_pattern": "monsters/mon_bat_idle_f{00-03}.png"
+    },
+    {
+      "id": "bat_attack",
+      "category": "mon",
+      "subject": "bat",
+      "state": "attack",
+      "frames": 4,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "monsters/mon_bat_attack_f{00-03}.png"
+    },
+    {
+      "id": "bat_hit",
+      "category": "mon",
+      "subject": "bat",
+      "state": "hit",
+      "frames": 2,
+      "fps": 10,
+      "loop": false,
+      "file_pattern": "monsters/mon_bat_hit_f{00-01}.png"
+    },
+    {
+      "id": "bat_die",
+      "category": "mon",
+      "subject": "bat",
+      "state": "die",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "monsters/mon_bat_die_f{00-03}.png"
+    },
+    {
+      "id": "boss_beetle_idle",
+      "category": "mon",
+      "subject": "boss_beetle",
+      "state": "idle",
+      "frames": 4,
+      "fps": 6,
+      "loop": true,
+      "file_pattern": "monsters/mon_boss_beetle_idle_f{00-03}.png"
+    },
+    {
+      "id": "boss_beetle_attack",
+      "category": "mon",
+      "subject": "boss_beetle",
+      "state": "attack",
+      "frames": 4,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "monsters/mon_boss_beetle_attack_f{00-03}.png"
+    },
+    {
+      "id": "boss_beetle_hit",
+      "category": "mon",
+      "subject": "boss_beetle",
+      "state": "hit",
+      "frames": 2,
+      "fps": 10,
+      "loop": false,
+      "file_pattern": "monsters/mon_boss_beetle_hit_f{00-01}.png"
+    },
+    {
+      "id": "boss_beetle_die",
+      "category": "mon",
+      "subject": "boss_beetle",
+      "state": "die",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "monsters/mon_boss_beetle_die_f{00-03}.png"
+    },
+    {
+      "id": "chest_wood_open",
+      "category": "item",
+      "subject": "chest_wood",
+      "state": "open",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "items/item_chest_wood_open_f{00-03}.png"
+    },
+    {
+      "id": "chest_silver_open",
+      "category": "item",
+      "subject": "chest_silver",
+      "state": "open",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "items/item_chest_silver_open_f{00-03}.png"
+    },
+    {
+      "id": "chest_gold_open",
+      "category": "item",
+      "subject": "chest_gold",
+      "state": "open",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "file_pattern": "items/item_chest_gold_open_f{00-03}.png"
+    },
+    {
+      "id": "fx_dmg_normal",
+      "category": "fx",
+      "subject": "dmg_normal",
+      "state": "float",
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "fx/fx_dmg_normal_f{00-05}.png"
+    },
+    {
+      "id": "fx_dmg_crit",
+      "category": "fx",
+      "subject": "dmg_crit",
+      "state": "float",
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "fx/fx_dmg_crit_f{00-05}.png"
+    },
+    {
+      "id": "fx_gold_gain",
+      "category": "fx",
+      "subject": "gold_gain",
+      "state": "float",
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "fx/fx_gold_gain_f{00-05}.png"
+    },
+    {
+      "id": "fx_exp_gain",
+      "category": "fx",
+      "subject": "exp_gain",
+      "state": "float",
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "fx/fx_exp_gain_f{00-05}.png"
+    },
+    {
+      "id": "fx_heal",
+      "category": "fx",
+      "subject": "heal",
+      "state": "float",
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "fx/fx_heal_f{00-05}.png"
+    },
+    {
+      "id": "fx_miss",
+      "category": "fx",
+      "subject": "miss",
+      "state": "float",
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "file_pattern": "fx/fx_miss_f{00-05}.png"
+    }
+  ],
+  "statics": {
+    "backgrounds": [
+      "bg_battle_arena.png",
+      "bg_explore_cave.png",
+      "bg_explore_desert.png",
+      "bg_explore_forest.png",
+      "bg_explore_grassland.png",
+      "bg_explore_snow.png"
+    ],
+    "icons": [
+      "icon_bag.png",
+      "icon_coin.png",
+      "icon_guild.png",
+      "icon_hero.png",
+      "icon_map.png",
+      "icon_potion.png",
+      "icon_quest.png",
+      "icon_skill.png",
+      "icon_storage.png",
+      "icon_sword.png"
+    ],
+    "class_cards": [
+      "ui_card_fighter.png",
+      "ui_card_knight.png",
+      "ui_card_mage.png",
+      "ui_card_sage.png",
+      "ui_card_warlock.png",
+      "ui_card_warrior.png"
+    ],
+    "chest_closed": [
+      "item_chest_gold_closed.png",
+      "item_chest_silver_closed.png",
+      "item_chest_wood_closed.png"
+    ]
+  },
+  "summary": {
+    "total_png": 149,
+    "animation_groups": 30,
+    "total_animation_frames": 124
+  }
+}

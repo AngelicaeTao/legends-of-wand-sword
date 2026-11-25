@@ -1,0 +1,58 @@
+{
+  "_readme": "职业配置。改这个文件即可调整职业属性/转职树，无需改代码。服务端与客户端都读这份（client/assets/configs 下有同步副本）。",
+  "baseStats": {
+    "hp": 100, "atk": 12, "def": 5, "crit": 0.05, "speed": 10
+  },
+  "levelGrowth": {
+    "hpPerLevel": 18, "atkPerLevel": 3, "defPerLevel": 1.5,
+    "expBase": 60, "expGrowth": 1.18,
+    "_note": "升级所需经验 = expBase * expGrowth^(level-1)，四舍五入"
+  },
+  "classes": [
+    {
+      "id": "warrior", "name": "战士", "tier": 1, "icon": "ui_card_warrior.png",
+      "desc": "近战，抗伤与输出兼备",
+      "bonus": { "hp": 1.20, "atk": 1.05, "def": 1.15, "crit": 1.0 },
+      "skillPool": ["slash", "guard", "shield_bash", "whirlwind"]
+    },
+    {
+      "id": "mage", "name": "法师", "tier": 1, "icon": "ui_card_mage.png",
+      "desc": "远程输出与控制，攻击范围大",
+      "bonus": { "hp": 0.85, "atk": 1.30, "def": 0.90, "crit": 1.15 },
+      "skillPool": ["fireball", "heal", "frost_nova", "arcane_bolt"]
+    },
+    {
+      "id": "fighter", "name": "斗士", "tier": 2, "icon": "ui_card_fighter.png",
+      "desc": "极致速度与爆发",
+      "bonus": { "hp": 1.05, "atk": 1.35, "def": 0.95, "crit": 1.30 },
+      "skillPool": ["slash", "whirlwind", "rage", "execute"]
+    },
+    {
+      "id": "knight", "name": "骑士", "tier": 2, "icon": "ui_card_knight.png",
+      "desc": "护盾与格挡，团队之盾",
+      "bonus": { "hp": 1.40, "atk": 0.95, "def": 1.45, "crit": 0.9 },
+      "skillPool": ["guard", "shield_bash", "taunt", "holy_guard"]
+    },
+    {
+      "id": "sage", "name": "贤者", "tier": 2, "icon": "ui_card_sage.png",
+      "desc": "召唤、治疗、控制",
+      "bonus": { "hp": 0.90, "atk": 1.15, "def": 1.0, "crit": 1.05 },
+      "skillPool": ["heal", "frost_nova", "summon", "arcane_bolt"]
+    },
+    {
+      "id": "warlock", "name": "术士", "tier": 2, "icon": "ui_card_warlock.png",
+      "desc": "大范围群伤，破坏力惊人",
+      "bonus": { "hp": 0.80, "atk": 1.50, "def": 0.85, "crit": 1.20 },
+      "skillPool": ["fireball", "frost_nova", "meteor", "curse"]
+    }
+  ],
+  "transfers": [
+    { "from": "warrior", "to": ["fighter", "knight"] },
+    { "from": "mage", "to": ["sage", "warlock"] }
+  ],
+  "transferRules": {
+    "cost": 0,
+    "firstTransferLevel": 44,
+    "_note": "44级二转（需求文档已核实）；cost=0 实现无损转职。装备随职业自动换算见 equipment.json 的 classCoefficient。"
+  }
+}

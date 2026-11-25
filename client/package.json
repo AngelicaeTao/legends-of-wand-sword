@@ -1,0 +1,12 @@
+{
+  "name": "zjcs-idle-client",
+  "uuid": "8f3b1c2a-9d14-4e6f-a0b3-5c7d9e2f1a44",
+  "version": "0.1.0",
+  "creator": {
+    "version": "3.8.0"
+  },
+  "description": "杖剑传说类放置手游 - Cocos Creator 3.8 客户端骨架（代码驱动 UI + 服务端权威）",
+  "dependencies": {
+    "@cocos/creator-types": "3.8.0"
+  }
+}

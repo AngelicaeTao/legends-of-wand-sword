@@ -1,0 +1,48 @@
+# A 方案服务端：Nakama（账号/Storage/匹配/实时消息）+ PostgreSQL
+# 一键启动：docker compose up -d
+# 客户端 API: http://127.0.0.1:7350  WebSocket: ws://127.0.0.1:7350/ws
+# 管理控制台: http://127.0.0.1:7351（仅本机，切勿暴露公网）
+#
+# 本文件是「稳定默认栈」：纯 Nakama，提供账号认证 + Storage 存档，开箱即起。
+# 若需要权威战斗/离线/转职 RPC，见 docker-compose.plugin.yml（需先用官方镜像构建插件）。
+# 注意：standalone 模式（go run main.go）已实现并实测全部存档闭环，无需 Docker。
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      # Nakama DSN 格式 postgres:<密码>@<主机>:5432/<库>，用户名固定为 postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-localdb}
+      POSTGRES_DB: nakama
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [game]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nakama"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nakama:
+    image: heroiclabs/nakama:3.24.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: |
+      /bin/sh -c "
+      /nakama/nakama migrate up --database.address postgres:localdb@postgres:5432/nakama &&
+      exec /nakama/nakama --config /nakama/data/config.yml --database.address postgres:localdb@postgres:5432/nakama
+      "
+    ports:
+      - "7350:7350"   # 客户端 API + WebSocket（公网内测经 Cloudflare 隧道转这里）
+      - "7351:7351"   # 控制台：仅本机访问，生产环境删掉此映射
+    volumes:
+      - ./nakama/config.yml:/nakama/data/config.yml:ro
+      - nkdata:/nakama/data
+    networks: [game]
+
+volumes:
+  pgdata:
+  nkdata:
+networks:
+  game:

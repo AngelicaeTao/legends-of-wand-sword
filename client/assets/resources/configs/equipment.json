@@ -1,0 +1,35 @@
+{
+  "_readme": "装备配置。slots 为4个装备槽；quality 为品级系数；classCoefficient 实现转职后装备自动换算（支柱③无损转职的关键规则）。",
+  "slots": ["weapon", "helmet", "armor", "trinket"],
+  "slotNames": { "weapon": "武器", "helmet": "头盔", "armor": "护甲", "trinket": "饰品" },
+  "quality": [
+    { "id": 0, "name": "普通", "mult": 1.0,  "color": "#9e9e9e" },
+    { "id": 1, "name": "精良", "mult": 1.25, "color": "#2196F3" },
+    { "id": 2, "name": "稀有", "mult": 1.6,  "color": "#9C27B0" },
+    { "id": 3, "name": "史诗", "mult": 2.1,  "color": "#FF9800" },
+    { "id": 4, "name": "传说", "mult": 2.8,  "color": "#F44336" }
+  ],
+  "baseStatsBySlot": {
+    "weapon":  { "atk": 10 },
+    "helmet":  { "hp": 60, "def": 3 },
+    "armor":   { "hp": 100, "def": 6 },
+    "trinket": { "crit": 0.03, "atk": 4 }
+  },
+  "enhance": {
+    "costBase": 1200,
+    "costGrowth": 1.35,
+    "statGainPerLevel": 0.08,
+    "maxLevel": 15,
+    "successRate": 1.0,
+    "_note": "强化必成功（确定性成长）；成本= costBase * costGrowth^当前等级"
+  },
+  "classCoefficient": {
+    "_note": "转职后装备属性按职业系数换算，纯函数实现。武器伤害按职业主属性重算，避免转职后装备作废。",
+    "warrior": { "atk": 1.0, "def": 1.0, "hp": 1.0 },
+    "mage":    { "atk": 1.15, "def": 0.9, "hp": 0.9 },
+    "fighter": { "atk": 1.2, "def": 0.95, "hp": 1.0 },
+    "knight":  { "atk": 0.9, "def": 1.3, "hp": 1.2 },
+    "sage":    { "atk": 1.05, "def": 1.0, "hp": 1.0 },
+    "warlock": { "atk": 1.25, "def": 0.85, "hp": 0.85 }
+  }
+}

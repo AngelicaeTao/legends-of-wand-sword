@@ -1,0 +1,27 @@
+# 编译产物与运行数据
+data/zjcs-server
+data/zjcs-server.exe
+data/*.db
+data/server.log
+data/saves/*.json
+server/plugins/*.so
+server/nakama_module/zjcs.so
+server/__pycache__/
+server/*/__pycache__/
+*.pyc
+
+# Cocos / 前端临时
+client/node_modules/
+client/library/
+client/temp/
+client/local/
+
+# 密钥（联机脚本生成，绝不入库）
+.key/
+connection_info.json
+.env
+*.pem
+
+# 系统
+.DS_Store
+Thumbs.db
