@@ -275,7 +275,7 @@ DecoLayer.prototype.distanceToWalkable=function(walk,x,y,maxR){
   return maxR+1;
 };
 
-DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
+DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
   const cv=document.createElement('canvas');
   cv.width=VW; cv.height=VH;
   const g=cv.getContext('2d');
@@ -283,6 +283,8 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
   const ox=tx*VW, oy=ty*VH;
   const rnd=mulberry32(((tx*73856093)^(ty*19349663)^((this.worldId.charCodeAt(1)||1)*83492791))>>>0);
   const pal=this.pal, th=this.themeKey;
+  // 石板广场不长草：铺装区只保留碎石，避免"石砖缝里冒草丛"的违和
+  const isPv=(wx,wy)=>isPaved?isPaved(wx,wy):false;
 
   /* ---- 1) 林缘与林内：树 ---- */
   // 网格抖动采样：越靠近通道越密，形成"森林墙"，边缘由树冠自然压住通道直角
@@ -332,6 +334,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
       const wx=ox+px, wy=oy+py;
       if(!walk(wx,wy))continue;
       if(isWater&&isWater(wx,wy))continue;
+      if(isPv(wx,wy))continue;
       let edge=false;
       for(let a=0;a<8;a++){
         const ang=a*Math.PI/4;
@@ -351,6 +354,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
   for(let i=0;i<grassN;i++){
     const x=rnd()*VW, y=rnd()*VH;
     if(!walk(ox+x,oy+y))continue;
+    if(isPv(ox+x,oy+y))continue;
     drawGrassTuft(g,rnd,pal,x,y);
   }
   // 土粒：让 4px 噪点路面有更细的颗粒层次
@@ -365,11 +369,13 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
   for(let i=0;i<flowerN;i++){
     const x=rnd()*VW, y=rnd()*VH;
     if(!walk(ox+x,oy+y))continue;
+    if(isPv(ox+x,oy+y))continue;
     stamp(g,P.flower,Math.round(x),Math.round(y-14),3,ch=>pal[ch]||pal[5]);
   }
   for(let i=0;i<6;i++){
     const x=rnd()*VW, y=rnd()*VH;
     if(!walk(ox+x,oy+y))continue;
+    if(isPv(ox+x,oy+y))continue;      // 石板上不放浅色碎石（会变成扎眼白点）
     const sc=rnd()<0.35?2:1;
     stamp(g,P.stone,Math.round(x),Math.round(y-10),3*sc,ch=>ch==='1'?'#6f767d':ch==='2'?pal.rock:'#c2cad1');
   }
@@ -377,6 +383,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
     for(let i=0;i<5;i++){
       const x=rnd()*VW,y=rnd()*VH;
       if(!walk(ox+x,oy+y))continue;
+      if(isPv(ox+x,oy+y))continue;
       stamp(g,P.mushroom,Math.round(x),Math.round(y-12),3,ch=>pal[ch]);
     }
   }
@@ -384,7 +391,23 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
     for(let i=0;i<3;i++){
       const x=rnd()*VW,y=rnd()*VH;
       if(!walk(ox+x,oy+y))continue;
+      if(isPv(ox+x,oy+y))continue;
       stamp(g,P.crystal,Math.round(x),Math.round(y-14),3,ch=>pal[ch]);
+    }
+  }
+  /* ---- 2b) 铺装边缘：石板与草地的接缝撒杂草/碎石，柔化圆形广场的硬边 ---- */
+  if(isPaved){
+    for(let i=0;i<44;i++){
+      const x=rnd()*VW, y=rnd()*VH;
+      const wx=ox+x, wy=oy+y;
+      if(!walk(wx,wy))continue;
+      if(isWater&&isWater(wx,wy))continue;
+      const here=isPaved(wx,wy)?1:0;
+      const near=isPaved(wx+38,wy)!==here||isPaved(wx,wy+38)!==here||
+                 isPaved(wx-38,wy)!==here||isPaved(wx,wy-38)!==here;
+      if(!near)continue;
+      if(here){ if(rnd()<0.62)drawGrassTuft(g,rnd,pal,x,y); }
+      else if(rnd()<0.30)stamp(g,P.stone,Math.round(x),Math.round(y-10),3,ch=>ch==='1'?'#6f767d':ch==='2'?pal.rock:'#c2cad1');
     }
   }
   /* ---- 3) 水边芦苇 ---- */
@@ -405,11 +428,11 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater){
   }
   return cv;
 };
-DecoLayer.prototype.get=function(tx,ty,VW,VH,walk,isWater){
+DecoLayer.prototype.get=function(tx,ty,VW,VH,walk,isWater,isPaved){
   const key=tx+','+ty;
   let c=this.tiles.get(key);
   if(c){ this.tiles.delete(key); this.tiles.set(key,c); return c; }
-  c=this.bake(tx,ty,VW,VH,walk,isWater);
+  c=this.bake(tx,ty,VW,VH,walk,isWater,isPaved);
   this.tiles.set(key,c);
   while(this.tiles.size>this.max){ this.tiles.delete(this.tiles.keys().next().value); }
   return c;

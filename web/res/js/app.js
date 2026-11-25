@@ -192,56 +192,116 @@ function ensureBattleActors(){
     battleMonActor.init().then(()=>battleMonActor.play('idle'));
   }
 }
-/* 战斗背景：程序化"远景 + 地面 + 前景剪影"，按当前世界主题换色。
-   比静态 arena 图更贴合场景，也避免"所有战斗都在同一个紫色舞台"的违和。 */
+/* 战斗背景：程序化"天空光晕 + 三层山脊 + 草叶地面 + 前景剪影"，按世界主题换色。
+   静态部分烘焙到离屏 canvas 缓存（每帧只做一次 drawImage），动态光尘另画。 */
 const BG_PAL={
-  grassland:{sky:['#7ea9c9','#cfe0b4'],far:'#5b7f53',near:'#3d5c37',ground:'#87a45c',groundD:'#6d8a49'},
-  forest:   {sky:['#3d5a4c','#7c9a74'],far:'#2f4b31',near:'#20361f',ground:'#4f6b3d',groundD:'#3b5330'},
-  desert:   {sky:['#c98f5c','#f2d7a8'],far:'#a5794a',near:'#7d5630',ground:'#c09159',groundD:'#a2764a'},
-  snow:     {sky:['#8fb0c8','#e8f4fb'],far:'#8fa8bb',near:'#6c8496',ground:'#c6d9e5',groundD:'#a9c0d0'},
-  cave:     {sky:['#4a3f2e','#8a7756'],far:'#4e4232',near:'#33291c',ground:'#7b6a4f',groundD:'#5f5240'},
-  arena:    {sky:['#241f38','#4d4468'],far:'#332c4a',near:'#1e1a2c',ground:'#4b4560',groundD:'#37324a'}
+  grassland:{sky:['#4d7da6','#8fb8cc','#e2ecc6'],sun:'rgba(255,240,198,.5)',
+    far:'#74976b',mid:'#53764f',near:'#3a5b3a',ground:'#7fa055',groundD:'#5d7d41',haze:'rgba(233,244,210,.30)'},
+  forest:{sky:['#2f4a3f','#5c7f6a','#9dbb96'],sun:'rgba(206,240,180,.28)',
+    far:'#3d5f3d',mid:'#2b472c',near:'#1c311c',ground:'#496639',groundD:'#35502c',haze:'rgba(176,212,182,.24)'},
+  desert:{sky:['#b8773f','#dda86b','#f7e2b4'],sun:'rgba(255,226,150,.55)',
+    far:'#b08a58',mid:'#96713f',near:'#775430',ground:'#c79660',groundD:'#a1764a',haze:'rgba(255,226,178,.30)'},
+  snow:{sky:['#6d93b3','#a9c6da','#eaf4fb'],sun:'rgba(255,255,255,.5)',
+    far:'#a3b9ca',mid:'#839db1',near:'#647d92',ground:'#c9dbe8',groundD:'#a5bdcd',haze:'rgba(240,250,255,.34)'},
+  cave:{sky:['#332b1e','#5c4d36','#95805d'],sun:'rgba(255,205,130,.3)',
+    far:'#4a3f2e',mid:'#382f22',near:'#251f15',ground:'#74644a',groundD:'#584a36',haze:'rgba(196,168,124,.22)'},
+  arena:{sky:['#171325','#2f2746','#52476f'],sun:'rgba(180,160,255,.35)',
+    far:'#312a47',mid:'#241f36',near:'#161227',ground:'#4b4560',groundD:'#37324a',haze:'rgba(150,130,200,.22)'}
 };
-function drawBattleBg(key){
+const _bgCache={};
+function buildBattleBg(g,key){
   const p=BG_PAL[key]||BG_PAL.grassland;
-  // 1) 天空
-  const sky=cvb.createLinearGradient(0,0,0,470);
-  sky.addColorStop(0,p.sky[0]);sky.addColorStop(1,p.sky[1]);
-  cvb.fillStyle=sky;cvb.fillRect(0,0,1280,470);
-  // 2) 远景山脊（两层）
-  const ridge=(yBase,amp,color,seed)=>{
-    cvb.fillStyle=color;cvb.beginPath();cvb.moveTo(0,yBase);
-    for(let x=0;x<=1280;x+=40){
-      const h=Math.sin((x+seed)*0.006)*amp+Math.sin((x+seed)*0.017)*amp*0.45;
-      cvb.lineTo(x,yBase-h);
+  const HZ=470; // 地平线
+  // 1) 天空三段渐变
+  const sky=g.createLinearGradient(0,0,0,HZ);
+  sky.addColorStop(0,p.sky[0]);sky.addColorStop(.62,p.sky[1]);sky.addColorStop(1,p.sky[2]);
+  g.fillStyle=sky;g.fillRect(0,0,1280,HZ);
+  // 2) 日晕（左上斜射光）
+  const sun=g.createRadialGradient(960,120,10,960,120,520);
+  sun.addColorStop(0,p.sun);sun.addColorStop(.42,'rgba(255,246,214,.12)');sun.addColorStop(1,'rgba(255,246,214,0)');
+  g.fillStyle=sun;g.fillRect(0,0,1280,HZ);
+  // 3) 云带（三层，越远越淡；blur 让边缘化开，不像叠加的椭圆）
+  const canBlur=typeof g.filter==='string';
+  if(canBlur)g.filter='blur(9px)';
+  for(let i=0;i<3;i++){
+    const y=90+i*74, a=.10-i*.022, w=210+i*130, h=26+i*8;
+    g.fillStyle=`rgba(255,255,255,${a})`;
+    for(let k=0;k<4;k++){
+      const cx=((i*317+k*263)%1420)-90;
+      g.beginPath();g.ellipse(cx,y+k*5,w*(0.6+((k*37)%40)/100),h,0,0,7);g.fill();
     }
-    cvb.lineTo(1280,470);cvb.lineTo(0,470);cvb.closePath();cvb.fill();
+  }
+  if(canBlur)g.filter='none';
+  // 4) 三层山脊 + 谷雾
+  const ridge=(yBase,amp,color,seed,step)=>{
+    g.fillStyle=color;g.beginPath();g.moveTo(0,yBase+80);
+    for(let x=0;x<=1280;x+=step){
+      const h=Math.sin((x+seed)*0.0055)*amp+Math.sin((x+seed)*0.016)*amp*0.42+Math.sin((x+seed)*0.041)*amp*0.16;
+      g.lineTo(x,yBase-h);
+    }
+    g.lineTo(1280,yBase+80);g.closePath();g.fill();
   };
-  ridge(400,46,p.far,0); ridge(440,28,p.near,120);
-  // 3) 地面
-  cvb.fillStyle=p.ground;cvb.fillRect(0,452,1280,268);
-  const gd=cvb.createLinearGradient(0,452,0,720);
-  gd.addColorStop(0,p.groundD);gd.addColorStop(.35,p.ground);
-  cvb.fillStyle=gd;cvb.fillRect(0,452,1280,268);
-  // 4) 地面纹理：横向条带 + 稀疏颗粒（确定性）
-  cvb.strokeStyle='rgba(0,0,0,.10)';cvb.lineWidth=2;
-  for(let i=0;i<7;i++){
-    const y=470+i*34+i*i*1.2;
-    cvb.beginPath();cvb.moveTo(0,y);cvb.lineTo(1280,y+6);cvb.stroke();
+  ridge(392,58,p.far,0,26);
+  g.fillStyle=p.haze;g.fillRect(0,392,1280,34);
+  ridge(430,40,p.mid,120,22);
+  g.fillStyle=p.haze;g.fillRect(0,424,1280,26);
+  ridge(462,24,p.near,260,18);
+  // 5) 地面
+  const gd=g.createLinearGradient(0,HZ-6,0,720);
+  gd.addColorStop(0,p.groundD);gd.addColorStop(.22,p.ground);gd.addColorStop(1,p.groundD);
+  g.fillStyle=gd;g.fillRect(0,HZ-6,1280,720-HZ+6);
+  // 6) 地平线亮带（压住山与地的接缝）
+  const hl=g.createLinearGradient(0,HZ-10,0,HZ+26);
+  hl.addColorStop(0,'rgba(255,255,255,0)');hl.addColorStop(.5,'rgba(255,255,255,.16)');hl.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=hl;g.fillRect(0,HZ-10,1280,36);
+  // 7) 地面横纹 + 草叶（近大远小，确定性随机）
+  g.strokeStyle='rgba(0,0,0,.09)';g.lineWidth=2;
+  for(let i=0;i<8;i++){
+    const y=HZ+16+i*i*3.4+i*16;
+    g.beginPath();g.moveTo(0,y);g.lineTo(1280,y+5);g.stroke();
   }
-  for(let i=0;i<220;i++){
-    const x=(i*197)%1280, y=458+((i*137)%262);
-    cvb.fillStyle=(i%3)?'rgba(255,255,255,.05)':'rgba(0,0,0,.07)';
-    cvb.fillRect(x,y,2,1);
+  for(let i=0;i<520;i++){
+    const rnd=(n)=>{const v=Math.sin((i*12.9898+n*78.233))*43758.5453;return v-Math.floor(v);};
+    const y=HZ+6+Math.pow(rnd(1),1.7)*250;              // 越近越密
+    const x=rnd(2)*1280, sc=(y-HZ)/250;                  // 0 远 → 1 近
+    const hgt=2+sc*9, tone=rnd(3);
+    g.strokeStyle=tone>.72?'rgba(255,255,255,.16)':(tone>.4?'rgba(0,0,0,.16)':'rgba(0,0,0,.09)');
+    g.lineWidth=sc>.6?1.6:1;
+    g.beginPath();g.moveTo(x,y);g.lineTo(x+(rnd(4)-.5)*5*sc,y-hgt);g.stroke();
   }
-  // 5) 战斗区地面光斑
-  const spot=cvb.createRadialGradient(640,540,20,640,540,420);
-  spot.addColorStop(0,'rgba(255,240,200,.10)');spot.addColorStop(1,'rgba(255,240,200,0)');
-  cvb.fillStyle=spot;cvb.fillRect(0,440,1280,280);
+  // 8) 中央战斗区光斑
+  const spot=g.createRadialGradient(640,560,30,640,560,430);
+  spot.addColorStop(0,'rgba(255,242,206,.13)');spot.addColorStop(1,'rgba(255,242,206,0)');
+  g.fillStyle=spot;g.fillRect(0,430,1280,290);
+  // 9) 前景草丛剪影
+  g.fillStyle='rgba(10,20,12,.5)';
+  g.beginPath();g.moveTo(0,720);
+  for(let x=0;x<=1280;x+=10){
+    const h=16+Math.sin(x*0.07)*6+Math.sin(x*0.23)*4;
+    g.lineTo(x,720-h);
+  }
+  g.lineTo(1280,720);g.closePath();g.fill();
+}
+function drawBattleBg(key,t){
+  let c=_bgCache[key];
+  if(!c){
+    c=document.createElement('canvas');c.width=1280;c.height=720;
+    buildBattleBg(c.getContext('2d'),key);
+    _bgCache[key]=c;
+  }
+  cvb.drawImage(c,0,0);
+  // 动态：漂浮光尘（确定性循环，不占内存）
+  for(let i=0;i<16;i++){
+    const ph=(t*0.18+i*0.61)%1;
+    const x=(i*173+ph*40)%1280, y=470-ph*300;
+    const a=Math.sin(ph*Math.PI)*0.30;
+    cvb.fillStyle=`rgba(255,246,206,${a})`;
+    cvb.fillRect(x,y,2,2);
+  }
 }
 function drawBattle(t,now){
   const key=(worldMap&&worldMap.themeKey)||'grassland';
-  drawBattleBg(key);
+  drawBattleBg(key,t);
   ensureBattleActors();
   if(curBAnim('hero')==='idle'&&battleHeroActor&&battleHeroActor.state!=='idle')battleHeroActor.play('idle');
   if(curBAnim('mon')==='idle'&&battleMonActor&&battleMonActor.state!=='idle')battleMonActor.play('idle');
@@ -277,7 +337,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.2';
+const BUILD_VER='v1.9.3';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -291,18 +351,27 @@ function perfTick(now){
       }catch(e){_texMax='无WebGL';}
     }
     const el=$('perfBadge');
-    if(el)el.textContent=`${BUILD_VER} · ${_perfFps} FPS · 纹理上限 ${_texMax}`;
+    if(el)el.textContent=`${BUILD_VER} · ${_perfFps} FPS`;
+    // 纹理上限仅开发者排查用，玩家侧不展示（太技术、也无意义）
+    if(el)el.title=`纹理上限 ${_texMax}`;
   }
 }
-// 靠近实体时的交互提示
+// 靠近实体时的交互提示（跟随角色头顶，10Hz 更新；仅在内容变化时重写 innerHTML）
+let _hintKey='';
 function updateInteractHint(){
   const h=worldMap.hero, el=$('interactHint');
-  if(!h||!worldMap.ready){el.classList.add('hidden');return;}
+  if(!h||!worldMap.ready){el.classList.add('hidden');_hintKey='';return;}
   const mon=worldMap.nearestMonster(h.x,h.y,90);
   const ch=worldMap.nearestChest(h.x,h.y,80);
-  if(mon){el.textContent='⚔ 点击「'+mon.name+'」交战';el.classList.remove('hidden');}
-  else if(ch){el.textContent='📦 点击宝箱开启（'+({wood:'木',silver:'银',gold:'金'}[ch.tier])+'）';el.classList.remove('hidden');}
-  else el.classList.add('hidden');
+  let key='',html='';
+  if(mon){key='m'+mon.nodeId;html=ICON.sword(15,'#f0d590')+'<span>点击「'+mon.name+'」交战</span>';}
+  else if(ch){key='c'+ch.nodeId;html=ICON.chest(15,'#f0d590')+'<span>点击宝箱开启（'+({wood:'木',silver:'银',gold:'金'}[ch.tier])+'）</span>';}
+  if(!key){el.classList.add('hidden');_hintKey='';return;}
+  if(key!==_hintKey){_hintKey=key;el.innerHTML=html;}
+  el.classList.remove('hidden');
+  // 锚在角色头顶 86px：视线不用来回跳
+  el.style.left=Math.round(h.x-worldMap.cam.x)+'px';
+  el.style.top=Math.round(h.y-worldMap.cam.y-86)+'px';
 }
 
 /* ============================================================
@@ -314,6 +383,10 @@ function showModal(html){ $('modalBox').innerHTML=html; $('modalLayer').classLis
 // 切换到顶层视图：离开 world 时强制收起所有面板与遇怪弹窗
 function showView(v){
   view=v;
+  const inWorld=(v==='world');
+  const lo=$('logoutBtn'), sb=$('sfxBtn');
+  if(lo){ lo.classList.toggle('hidden', v==='login'); lo.style.opacity=(v==='battle')?'0.35':''; }
+  if(sb)sb.classList.toggle('hidden', v!=='world');
   $('loginView').classList.toggle('hidden', v!=='login');
   $('worldView').classList.toggle('hidden', v!=='world');
   $('battleView').classList.toggle('hidden', v!=='battle');
@@ -514,12 +587,16 @@ function openPanel(key){
   $('panelSub').textContent='';
   renderPanel();
   $('panelLayer').classList.remove('hidden');
+  $('worldView').classList.add('panel-open');   // HUD 退到背景，避免"没盖住"的观感
+  document.body.classList.add('panel-open');    // 全局出口按钮（退出登录）也要让位
 }
 // 面板唯一出口：返回大世界
 function closePanel(){
   if(view!=='world') return;
   panel=null; equipDetailSlot=null; homeSub=null;
   $('panelLayer').classList.add('hidden');
+  $('worldView').classList.remove('panel-open');
+  document.body.classList.remove('panel-open');
   worldMap.active=true;                                         // 恢复地图
 }
 
@@ -765,6 +842,21 @@ function renderGuild(){
     };
   });
 }
+/* 角色页"装备概览"：4 槽横向小卡，避免信息页下半屏留白 */
+function quickEquip(eq){
+  const order=[['weapon','武器',ICON.sword],['helmet','头盔',ICON.helmet],
+               ['armor','护甲',ICON.armor],['trinket','饰品',ICON.ring]];
+  const cells=order.map(([slot,cn,ico])=>{
+    const e=(eq||[]).find(x=>x.slot===slot&&x.equipped);
+    const q=e?Math.max(0,Math.min(4,e.quality||0)):-1;
+    return `<div class="qeq ${e?'on':''}" style="${e?'border-color:'+QCOLOR[q]:''}">
+      <div class="qeq-i">${ico(22,e?QCOLOR[q]:'#66748c')}</div>
+      <div class="qeq-t">${cn}</div>
+      <div class="qeq-s" style="${e?'color:'+QCOLOR[q]:''}">${e?('+'+((e.enhance|0))):'空'}</div>
+    </div>`;
+  }).join('');
+  return `<div class="sec-title">装备概览</div><div class="qeq-grid">${cells}</div>`;
+}
 function renderRole(){
   const body=$('panelBody');
   if(!state||!state.core){body.innerHTML='<div class="sec-sub">存档未就绪</div>';return;}
@@ -786,6 +878,7 @@ function renderRole(){
         <div class="hero-power"><em>战力</em><b>${fmt((heroStats&&heroStats.power)||c.battlePower)}</b></div>
       </div>
       <div class="sec-title">基础属性</div>${attrRows()}
+      ${quickEquip(eq)}
       ${recentLogs()}`;
   } else if(roleTab==='equip'){
     const eq=state.equip||[];
@@ -1154,15 +1247,15 @@ function showBattleResult(rep,mon){
   const win=rep.result==='win';
   if(win&&window.Quest)Quest.progress('kill',1);
   const slotCN={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
-  const drops=(rep.drops||[]).map(d=>`<div class="reward-row"><span class="rk">装备掉落</span><span class="rv g">${slotCN[d.slot]||d.slot}${d.quality!=null?' · '+['普通','精良','稀有','史诗','传说'][Math.min(4,d.quality)]:''}</span></div>`).join('');
+  const drops=(rep.drops||[]).map(d=>`<div class="reward-row"><span class="rk">${ICON.bag(14,'#c9a4e8')}<em>装备掉落</em></span><span class="rv g">${slotCN[d.slot]||d.slot}${d.quality!=null?' · '+['普通','精良','稀有','史诗','传说'][Math.min(4,d.quality)]:''}</span></div>`).join('');
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
     <div class="msub">${win?'击败':'被击败于'} ${mon.name} · 用时 ${rep.seconds||0} 秒</div>
     <div class="divider"></div>
     ${win?`
-      <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(rep.exp)}</span></div>
-      <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(rep.gold)}</span></div>
+      <div class="reward-row"><span class="rk">${ICON.book(14,'#8fb6e0')}<em>经验</em></span><span class="rv">+${fmt(rep.exp)}</span></div>
+      <div class="reward-row"><span class="rk">${ICON.gold(14,'#f0c040')}<em>金币</em></span><span class="rv">+${fmt(rep.gold)}</span></div>
       ${drops}
-      <button class="big-btn" id="resBtn">领取奖励 · 返回大世界</button>`:`
+      <button class="big-btn goldbtn" id="resBtn">领取奖励 · 返回大世界</button>`:`
       <div class="ghost-line">变强指引<br>① 强化装备　② 调整技能 BD　③ 转职</div>
       <button class="big-btn" id="resBtn">返回大世界</button>`}`);
   $('resBtn').onclick=()=>{
@@ -1225,7 +1318,7 @@ async function playBattle(rep,mon,bd){
   }
   const cdef=CFG.classes.classes.find(x=>x.id===(state&&state.core&&state.core.classId));
   if(cdef&&cdef.icon&&$('btHeroFace'))$('btHeroFace').src=RES+'characters/cards/'+cdef.icon;
-  $('autoTag').textContent='▶ 自动战斗中';$('btPause').textContent='暂停';
+  $('autoTag').classList.remove('paused');$('autoTag').textContent='自动战斗中';$('btPause').textContent='暂停';
   showView('battle');
   const hMax=Math.max(50,...rep.rounds.map(r=>r.heroHp));
   const mMax=Math.max(50,...rep.rounds.map(r=>r.monHp));
@@ -1264,7 +1357,7 @@ async function playBattle(rep,mon,bd){
   battlePlaying=false;
   if(view!=='battle') return;  // 已退出登录
   const win=rep.result==='win';
-  if(win){setBAnim('mon','die',600);spawnFx('+EXP',858,410,'#f0d590');spawnFx('+GOLD',818,378,'#ffd76b');}
+  if(win){setBAnim('mon','die',600);spawnFx('+经验',858,468,'#f0d590');spawnFx('+金币',858,506,'#ffd76b');}
   else setBAnim('hero','die',600);
   const toast=document.createElement('div');
   toast.className='toast-win'+(win?'':' lose');toast.textContent=win?'战 斗 胜 利':'战 斗 失 败';
@@ -1323,11 +1416,11 @@ async function doFight(mon){
   }catch(e){toastModal('交战失败',e.message);worldMap.active=true;}
 }
 // 战斗控制
-$('btPause').onclick=()=>{paused=!paused;$('btPause').textContent=paused?'继续':'暂停';$('autoTag').textContent=paused?'⏸ 已暂停':'▶ 自动战斗中';};
+$('btPause').onclick=()=>{paused=!paused;$('btPause').textContent=paused?'继续':'暂停';$('autoTag').classList.toggle('paused',paused);$('autoTag').textContent=paused?'已暂停':'自动战斗中';};
 // B05：战斗/面板期间页面失焦自动暂停战斗时钟，防止后台演出
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden && battlePlaying && !paused){
-    paused=true;$('btPause').textContent='继续';$('autoTag').textContent='⏸ 已暂停（切出页面）';
+    paused=true;$('btPause').textContent='继续';$('autoTag').classList.add('paused');$('autoTag').textContent='已暂停（切出页面）';
   }
 });
 

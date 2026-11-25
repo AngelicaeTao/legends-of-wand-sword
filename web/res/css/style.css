@@ -29,11 +29,16 @@ input{font-family:inherit}
    ① 登录页（唯一入口）
    ============================================================ */
 #loginView{display:flex;align-items:center;justify-content:center}
-.login-bg{position:absolute;inset:0;background:linear-gradient(160deg,#101a2c 0%,#0a1220 45%,#141b12 100%);}
-.login-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 32%,rgba(217,180,91,.16),transparent 55%),radial-gradient(ellipse at 50% 100%,rgba(74,120,60,.22),transparent 60%);}
-.login-card{position:relative;width:460px;padding:38px 44px 34px;border-radius:20px;text-align:center;background:linear-gradient(155deg,rgba(22,31,49,.97),rgba(9,14,24,.98));border:2px solid #d9b45b;box-shadow:0 20px 70px rgba(0,0,0,.75),inset 0 0 50px rgba(217,180,91,.06)}
+.login-bg{position:absolute;inset:0;
+  background-image:linear-gradient(160deg,rgba(10,16,28,.62) 0%,rgba(8,13,22,.72) 42%,rgba(10,20,14,.8) 100%),url(/res/v3/backgrounds/bg_explore_grassland.png);
+  background-size:cover;background-position:center 62%;filter:saturate(.92) contrast(1.03)}
+/* 暗角 + 地面暖光：中景留出可视的草原场景，四周压暗让登录卡浮起来 */
+.login-bg::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse 62% 58% at 50% 46%,transparent 22%,rgba(4,8,16,.62) 100%)}
+.login-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(217,180,91,.14),transparent 56%),radial-gradient(ellipse at 50% 104%,rgba(88,138,66,.3),transparent 58%),linear-gradient(0deg,rgba(6,12,8,.34),transparent 42%)}
+.login-card{position:relative;width:460px;padding:38px 44px 34px;border-radius:20px;text-align:center;background:linear-gradient(155deg,rgba(24,34,53,.93),rgba(10,16,27,.95));border:2px solid #d9b45b;box-shadow:0 22px 70px rgba(0,0,0,.8),0 0 0 6px rgba(217,180,91,.05),inset 0 0 50px rgba(217,180,91,.07)}
 .login-emblem{width:64px;height:64px;margin:0 auto 10px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;color:#3b2600;background:radial-gradient(circle at 35% 30%,#f6dda0,#c99a3f);border:2px solid #f0d590;box-shadow:0 6px 22px rgba(217,180,91,.4)}
-.login-title{font-size:42px;font-weight:900;letter-spacing:8px;color:#f0d590;text-shadow:0 3px 0 #6b4a13,0 0 26px rgba(240,213,144,.35)}
+.login-title{font-size:42px;font-weight:900;letter-spacing:9px;color:#f6dea6;text-shadow:0 2px 0 #6b4a13,0 3px 1px rgba(0,0,0,.55),0 10px 26px rgba(240,213,144,.28)}
 .login-sub{font-size:12px;color:#a9b8cf;letter-spacing:3px;margin-top:8px}
 .login-divider{height:1px;background:linear-gradient(90deg,transparent,#d9b45b,transparent);margin:22px 0}
 .field{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:0 16px;height:48px;border-radius:11px;background:rgba(255,255,255,.05);border:1.5px solid rgba(217,180,91,.35)}
@@ -86,7 +91,10 @@ input{font-family:inherit}
 .mm-e{right:4px;top:50%;transform:translateY(-50%)}
 .mm-progress{position:absolute;left:50%;bottom:-12px;transform:translateX(-50%);padding:3px 12px;border-radius:12px;background:rgba(9,14,24,.92);border:1px solid #d9b45b;color:#f0d590;font-size:12px;font-weight:800;white-space:nowrap}
 /* 交互提示条 */
-.interact-hint{position:absolute;left:50%;top:96px;transform:translateX(-50%);padding:10px 22px;border-radius:20px;background:linear-gradient(150deg,rgba(20,29,46,.96),rgba(9,14,24,.97));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.5);font-size:14px;color:#f0d590;font-weight:700;z-index:7;animation:popIn .2s ease}
+.interact-hint{position:absolute;left:0;top:0;transform:translate(-50%,-100%);display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:18px;background:linear-gradient(150deg,rgba(20,29,46,.96),rgba(9,14,24,.97));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.55);font-size:13.5px;color:#f0d590;font-weight:700;z-index:7;white-space:nowrap;pointer-events:none;animation:hintIn .18s ease}
+@keyframes hintIn{from{opacity:0}to{opacity:1}}
+.interact-hint::after{content:"";position:absolute;left:50%;bottom:-6px;width:9px;height:9px;transform:translateX(-50%) rotate(45deg);background:rgba(9,14,24,.97);border-right:1.5px solid #d9b45b;border-bottom:1.5px solid #d9b45b}
+.interact-hint svg{flex:0 0 auto}
 /* 世界横幅 + 在线人数 */
 .world-banner{position:absolute;left:50%;top:22px;transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 20px;border-radius:22px;background:linear-gradient(150deg,rgba(20,29,46,.92),rgba(9,14,24,.94));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:5;pointer-events:none}
 .world-banner #worldTitle{font-size:15px;color:#f0d590;font-weight:800;letter-spacing:1px}
@@ -138,7 +146,7 @@ input{font-family:inherit}
    ④ 功能面板层（只从大世界进入，唯一返回大世界）
    ============================================================ */
 #panelLayer{position:absolute;inset:0;z-index:30}
-.panel-shade{position:absolute;inset:0;background:rgba(3,6,12,.6)}
+.panel-shade{position:absolute;inset:0;background:rgba(3,6,12,.72);backdrop-filter:blur(2px)}
 .side-panel{position:absolute;right:26px;top:20px;bottom:20px;width:620px;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;animation:slideIn .24s ease}
 .panel-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:13px 20px;background:linear-gradient(90deg,#d9b45b,#b98a35)}
 .panel-head h3{font-size:19px;font-weight:800;color:#2b1d05;letter-spacing:2px}
@@ -174,6 +182,7 @@ input{font-family:inherit}
 .class-card.sel{border-color:#f0d590}
 .class-card .cn{font-size:16px;font-weight:800;color:#fff}.class-card .cd{font-size:12px;color:rgba(255,255,255,.85);margin-top:3px}
 .class-card .chk{font-size:22px;color:#fff}
+/* v1.9.3：结算主按钮改金色（原红色与金色主题冲突） */
 .big-btn{width:100%;padding:13px 0;border-radius:11px;font-size:16px;font-weight:800;margin-top:12px;background:linear-gradient(180deg,#e35d4f,#bf3a2c);color:#fff;box-shadow:0 3px 0 #8e2a20}
 .big-btn.goldbtn{background:linear-gradient(180deg,#e8c86e,#b98a35);color:#3b2600;box-shadow:0 3px 0 #8a641f}
 .big-btn:active{transform:translateY(2px)}
@@ -205,17 +214,20 @@ input{font-family:inherit}
    ⑤ 弹窗（结算 / 收益 / 提示）
    ============================================================ */
 #modalLayer{position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center}
-.modal-shade{position:absolute;inset:0;background:rgba(3,6,12,.65)}
+.modal-shade{position:absolute;inset:0;background:rgba(3,6,12,.72);backdrop-filter:blur(2px)}
 .modal-box{position:relative;width:520px;padding:26px 32px 30px;border-radius:18px;text-align:center;background:linear-gradient(150deg,rgba(20,29,46,.98),rgba(9,14,24,.99));border:2px solid #d9b45b;box-shadow:0 16px 60px rgba(0,0,0,.75),inset 0 0 40px rgba(217,180,91,.06);animation:popIn .3s ease}
 .modal-box h2{font-size:30px;font-weight:900;color:#f0d590;letter-spacing:3px;text-shadow:0 2px 12px rgba(240,213,144,.4)}
 .modal-box h2.fail{color:#ff8a8a;text-shadow:0 2px 12px rgba(255,90,90,.4)}
 .modal-box .msub{font-size:13px;color:#c8d4e6;margin:10px 0 18px;line-height:1.6}
 .modal-box .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(217,180,91,.6),transparent);margin:14px 0}
 .reward-row{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-radius:9px;background:rgba(255,255,255,.045);margin-bottom:9px;font-size:15px}
-.reward-row .rk{color:#dce5f3}.reward-row .rv{font-weight:800;color:#f0d590;font-size:17px}.reward-row .rv.g{color:#7fe0a0}
+.reward-row .rk{color:#dce5f3;display:flex;align-items:center;gap:8px}
+.reward-row .rk em{font-style:normal}
+.reward-row .rk svg{flex:0 0 auto;opacity:.95}.reward-row .rv{font-weight:800;color:#f0d590;font-size:17px}.reward-row .rv.g{color:#7fe0a0}
 .modal-box .note{font-size:11px;color:#9fb0c8;margin:12px 0}
 .modal-box .ghost-line{padding:11px;border-radius:9px;background:rgba(217,180,91,.1);border:1px solid rgba(217,180,91,.4);font-size:13px;color:#e8d49a;margin-top:12px;text-align:left;line-height:1.8}
-.modal-box .big-btn{margin-top:16px}
+.modal-box /* v1.9.3：结算主按钮改金色（原红色与金色主题冲突） */
+.big-btn{margin-top:16px}
 
 /* ============================================================
    ⑥ 全局退出登录（唯一出口，右下角）
@@ -230,7 +242,7 @@ input{font-family:inherit}
 .dmg-float{position:absolute;font-size:30px;font-weight:900;color:#ff8a8a;text-shadow:0 2px 0 #5a0000,0 0 12px rgba(255,90,90,.6);animation:floatUp .9s ease-out forwards}
 .dmg-float.heal{color:#7fe0a0;text-shadow:0 2px 0 #0b4a22,0 0 12px rgba(90,220,130,.6)}
 @keyframes floatUp{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(-70px) scale(1.25)}}
-.toast-win{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:16;font-size:56px;font-weight:900;letter-spacing:10px;color:#f0d590;text-shadow:0 4px 0 #7a4a00,0 0 30px rgba(240,213,144,.7);pointer-events:none;animation:toastPop 1.2s ease}
+.toast-win{position:absolute;left:50%;top:31%;transform:translate(-50%,-50%);z-index:16;font-size:56px;font-weight:900;letter-spacing:10px;color:#f0d590;text-shadow:0 4px 0 #7a4a00,0 0 30px rgba(240,213,144,.7);pointer-events:none;animation:toastPop 1.2s ease}
 .toast-win.lose{color:#ff8a8a;text-shadow:0 4px 0 #5a0000,0 0 30px rgba(255,90,90,.6)}
 @keyframes toastPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
 
@@ -347,17 +359,18 @@ input{font-family:inherit}
 .bt-side.right{justify-content:flex-end}
 .bt-face{width:44px;height:44px;border-radius:10px;object-fit:cover;image-rendering:pixelated;
   border:1.5px solid rgba(217,180,91,.65);background:#1b2334;box-shadow:0 3px 10px rgba(0,0,0,.5)}
-.bt-meta{flex:1;min-width:0;max-width:330px}
+.bt-meta{flex:1;min-width:0;max-width:368px}
 .bt-name{font-size:13px;font-weight:800;color:#eef3fb;letter-spacing:.4px;margin-bottom:5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bt-name.gold{color:#f0d590;text-align:right}
-.bt-hp{position:relative;height:16px;border-radius:9px;background:rgba(8,12,20,.9);
+.bt-hp{position:relative;height:19px;border-radius:10px;background:rgba(8,12,20,.9);
   border:1px solid rgba(255,255,255,.16);overflow:hidden}
 .bt-hp .hp-fill{position:absolute;left:0;top:0;bottom:0;display:block;transition:width .25s ease;border-radius:9px}
 .hp-fill.hero{background:linear-gradient(180deg,#63c78a,#2f9d5c)}
 .hp-fill.mon{background:linear-gradient(180deg,#e35d4f,#b33328)}
-.bt-hpnum{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:10.5px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.9);letter-spacing:.3px}
+.bt-hpnum{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;
+  font-size:11.5px;font-weight:900;color:#fff;letter-spacing:.4px;
+  text-shadow:0 1px 0 rgba(0,0,0,.85),0 0 4px rgba(0,0,0,.7)}
 .bt-round{flex:0 0 auto;text-align:center;padding:4px 12px;border-radius:10px;
   background:rgba(12,18,30,.85);border:1px solid rgba(217,180,91,.5)}
 .bt-round em{display:block;font-style:normal;font-size:10px;color:#c9a227;letter-spacing:2px}
@@ -366,7 +379,11 @@ input{font-family:inherit}
   font-size:12px;font-weight:800;color:#ffd590;background:rgba(30,20,10,.8);border:1.5px solid rgba(217,180,91,.5)}
 .battle-tools{position:absolute;right:18px;top:76px;display:flex;gap:8px;z-index:6}
 .auto-tag{font-size:11.5px;font-weight:800;color:#7fe0a0;padding:6px 12px;border-radius:9px;
-  background:rgba(10,26,18,.82);border:1px solid rgba(127,224,160,.4)}
+  background:rgba(10,26,18,.82);border:1px solid rgba(127,224,160,.4);display:inline-flex;align-items:center;gap:6px}
+.auto-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:#7fe0a0;box-shadow:0 0 8px rgba(127,224,160,.9);animation:tagPulse 1.3s ease-in-out infinite}
+.auto-tag.paused{color:#f0d590;background:rgba(28,22,10,.85);border-color:rgba(217,180,91,.5)}
+.auto-tag.paused::before{background:#d9b45b;animation:none;box-shadow:none}
+@keyframes tagPulse{0%,100%{opacity:1}50%{opacity:.28}}
 .battle-pause{font-size:11.5px;font-weight:800;color:#f0d590;padding:6px 12px;border-radius:9px;
   background:rgba(28,22,10,.85);border:1px solid rgba(217,180,91,.5)}
 .battle-log{position:absolute;left:auto;top:auto;right:18px;bottom:104px;width:270px;max-height:150px;padding:9px 11px;
@@ -400,7 +417,7 @@ input{font-family:inherit}
 .hero-portrait{width:76px;height:96px;border-radius:10px;overflow:hidden;flex:0 0 auto;
   background:radial-gradient(circle at 50% 30%,#2a3a56,#101828);border:1px solid rgba(217,180,91,.4);
   display:flex;align-items:center;justify-content:center}
-.hero-portrait img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6))}
+.hero-portrait img{width:100%;height:100%;object-fit:cover;image-rendering:pixelated;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6))}
 .hero-brief{flex:1;min-width:0}
 .hb-name{font-size:16px;font-weight:800;color:#f4ead0;letter-spacing:.5px;display:flex;align-items:baseline;gap:8px}
 .hb-name em{font-style:normal;font-size:11px;color:#8fa0b8;font-weight:600;letter-spacing:0}
@@ -408,7 +425,8 @@ input{font-family:inherit}
 .hb-lv span{font-size:10.5px;color:#8fa0b8;font-weight:600}
 .hb-exp{position:relative;height:12px;border-radius:7px;background:rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(255,255,255,.12)}
 .hb-exp i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#4fa3e3,#7fd0ff);transition:width .3s}
-.hb-exp span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#eaf4ff;text-shadow:0 1px 2px #000}
+.hb-exp span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;color:#fff;letter-spacing:.3px;
+  text-shadow:0 1px 0 rgba(0,0,0,.9),0 0 5px rgba(0,0,0,.8)}
 .hero-power{flex:0 0 auto;text-align:center;padding:6px 10px;border-radius:10px;background:rgba(217,180,91,.12);border:1px solid rgba(217,180,91,.4)}
 .hero-power em{display:block;font-style:normal;font-size:9.5px;color:#c9a227;letter-spacing:2px}
 .hero-power b{font-size:18px;color:#ffe6a3;letter-spacing:.5px}
@@ -429,7 +447,15 @@ input{font-family:inherit}
 .eq-btn.gold{color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);border-color:#f0d590;box-shadow:0 2px 0 #8a641f}
 
 /* ---------- v1.9 技能卡 / 动态列表 / 头像裁切 ---------- */
-.hero-portrait img{height:116%;object-fit:contain;object-position:top center;margin-bottom:-14%}
+.hero-portrait img{width:100%;height:100%;object-fit:cover;transform:scale(1.34);transform-origin:50% 48%}
+/* 装备概览 4 槽（角色信息页） */
+.qeq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.qeq{padding:10px 8px 9px;border-radius:11px;text-align:center;background:rgba(255,255,255,.04);
+  border:1.5px solid rgba(255,255,255,.08);transition:border-color .15s}
+.qeq.on{background:rgba(255,255,255,.06);box-shadow:inset 0 0 18px rgba(255,255,255,.04)}
+.qeq-i{height:26px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+.qeq-t{font-size:11px;color:#9fb0c8;font-weight:700;letter-spacing:.5px}
+.qeq-s{font-size:12px;font-weight:800;color:#5d6c82;margin-top:3px}
 .skill-card{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;min-height:62px}
 .sk-ico{flex:0 0 auto;width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;
   background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.18)}
@@ -449,12 +475,13 @@ input{font-family:inherit}
 .sfx-btn.off{color:#8fa0b8;border-color:rgba(143,160,184,.4)}
 
 /* ---------- v1.9.1 副本 / 世界地图卡片 ---------- */
-.dungeon-item{background-size:cover;background-position:center;border-radius:12px;position:relative;overflow:hidden}
+.dungeon-item{background-size:cover;background-position:center 62%;border-radius:12px;position:relative;overflow:hidden;
+  background-blend-mode:multiply;box-shadow:inset 0 0 40px rgba(6,10,18,.75)}
 .di-name{display:flex;align-items:center;gap:8px}
 .di-star{font-style:normal;font-size:11px;color:#f0d590;letter-spacing:2px;opacity:.9}
 .di-enter.off{background:linear-gradient(180deg,#4a5568,#333c4c)!important;box-shadow:0 3px 0 #232a36!important;color:#9aa7bd!important}
-.world-map-item{position:relative;display:flex;align-items:center;gap:14px;padding:14px 16px;overflow:hidden}
-.wm-no{flex:0 0 auto;width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+.world-map-item{position:relative;display:flex;align-items:center;gap:13px;padding:10px 14px;overflow:hidden}
+.wm-no{flex:0 0 auto;width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;
   font-size:15px;font-weight:900;letter-spacing:.5px;color:#f0d590;
   background:rgba(12,18,30,.72);border:1.5px solid rgba(217,180,91,.55)}
 .wm-txt{flex:1;min-width:0}
@@ -493,7 +520,8 @@ input{font-family:inherit}
 .gd-t{font-size:13px;font-weight:800;color:#f4ead0}
 .gd-t b{color:#f0d590}
 .gd-s{font-size:10.5px;color:#93a3b8;margin-top:3px}
-.guild-donate .big-btn{width:auto;padding:10px 26px;margin:0}
+.guild-donate /* v1.9.3：结算主按钮改金色（原红色与金色主题冲突） */
+.big-btn{width:auto;padding:10px 26px;margin:0}
 .guild-shop{display:flex;flex-direction:column;gap:8px}
 .gs-item{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;
   background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}
@@ -512,3 +540,13 @@ input{font-family:inherit}
 .gm-role{color:#93a3b8;font-size:10.5px}
 .gm-lv{color:#f0d590;font-weight:700;font-size:11px;min-width:44px;text-align:right}
 .qt-bar.full i{background:linear-gradient(90deg,#2f9d5c,#7fe0a0)}
+
+/* v1.9.3：面板打开时 HUD 退后，避免小地图/任务卡"浮在遮罩之上" */
+#worldView.panel-open .minimap,
+#worldView.panel-open .world-hud-left,
+#worldView.panel-open .quest-tracker,
+#worldView.panel-open .world-banner,
+#worldView.panel-open .hint-bar,
+#worldView.panel-open .interact-hint{opacity:.2;transition:opacity .18s;pointer-events:none}
+/* v1.9.3：面板打开时，右下角全局按钮让位（避免压在面板上） */
+body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer-events:none}

@@ -56,6 +56,8 @@ function WMap(canvas, opts){
   this.gates=[];      // {x,y,nodeId,to,requireLevel,label}
   this.anchors=[];
   this.drops=[];
+  this.dust=[];
+  this._dustTs=0;
   this.visited=new Set();
   this.remote={};     // 多人：clientId -> {x,y,name,actor}
 
@@ -87,7 +89,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   } else {
     const base=RES+'maps/'+worldId+'_';
     const loadImg=(src)=>new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('地形加载失败:'+src));im.src=src;});
-    const maskImg=await loadImg(base+'mask_half.png?v=1.9.2');
+    const maskImg=await loadImg(base+'mask_half.png?v=1.9.3');
     const mc=document.createElement('canvas');mc.width=MASK_W;mc.height=MASK_H;
     const mg=mc.getContext('2d',{willReadFrequently:true});mg.drawImage(maskImg,0,0);
     this.maskData=mg.getImageData(0,0,MASK_W,MASK_H).data;
@@ -108,7 +110,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   this.groundBmp=null;this.ground=null;
   // 全图：仅当前世界持有。优先 fetch→createImageBitmap：
   // 解码与后续按块裁剪均在浏览器解码线程完成，主线程零大图采样（消除预热期掉帧）
-  const url=RES+'maps/'+worldId+'_full_half.png?v=1.9.2';
+  const url=RES+'maps/'+worldId+'_full_half.webp?v=1.9.3';
   try{
     const resp=await fetch(url,{cache:'force-cache'});
     const blob=await resp.blob();
@@ -162,7 +164,10 @@ WMap.prototype.loadTerrain=async function(worldId){
 };
 
 /* 未绘制底检测：地形图未绘制处是"纯色棋盘格"，而 AI 绘制的地表每像素都有噪点。
-   以 3×3 邻域完全同色为判据（排除蓝色水面），得到 solid 掩码，供取色/补绘使用。 */
+   v1.9.3：判据由「3×3 完全同色」放宽为「3×3 每通道极差 ≤ 5」——原判据对带轻微
+   压缩噪声/渐变的棋盘块会漏检（W1 右侧、W4 雪原均出现漏检的整片米色底），
+   漏检块既不会被补绘、也不受掩码遮盖，在大世界里就是硬边直角的"沙地怪块"。
+   水面（蓝通道显著高于红）不参与，避免把湖水当纯色底补掉。 */
 WMap.prototype.detectSolid=function(src,W,H){
   const N=W*H, solid=new Uint8Array(N);
   for(let y=1;y<H-1;y++){
@@ -171,8 +176,18 @@ WMap.prototype.detectSolid=function(src,W,H){
       const p=row+x, i=p*4;
       const r=src[i],g=src[i+1],b=src[i+2];
       if(b>r+45&&b>85)continue;                       // 水不参与
-      const i2=(p+1)*4, i3=(p+W)*4;
-      if(r===src[i2]&&g===src[i2+1]&&b===src[i2+2]&&r===src[i3]&&g===src[i3+1]&&b===src[i3+2]) solid[p]=1;
+      let rmin=255,rmax=0,gmin=255,gmax=0,bmin=255,bmax=0;
+      for(let dy=-1;dy<=1;dy++){
+        const q=(p+dy*W)*4-4;
+        for(let dx=0;dx<3;dx++){
+          const j=q+dx*4;
+          const rr=src[j],gg=src[j+1],bb=src[j+2];
+          if(rr<rmin)rmin=rr; if(rr>rmax)rmax=rr;
+          if(gg<gmin)gmin=gg; if(gg>gmax)gmax=gg;
+          if(bb<bmin)bmin=bb; if(bb>bmax)bmax=bb;
+        }
+      }
+      if(rmax-rmin<=5&&gmax-gmin<=5&&bmax-bmin<=5) solid[p]=1;
     }
   }
   return solid;
@@ -203,6 +218,14 @@ WMap.prototype.samplePalette=function(){
   }
   if(gn>500){pal.ground=[Math.round(gr/gn),Math.round(gg/gn),Math.round(gb/gn)];}
   if(fn>500){pal.forest=[Math.round(fr/fn),Math.round(fg/fn),Math.round(fb/fn)];}
+  // 铺装面（石板广场 / 雪地等低饱和亮面）：装饰层据此跳过草丛与花，避免"砖缝里长草"
+  const pv=new Uint8Array(W*H);
+  for(let q=0;q<W*H;q++){
+    const i=q*4, r=src[i],g=src[i+1],b=src[i+2];
+    const mx=r>g?(r>b?r:b):(g>b?g:b), mn=r<g?(r<b?r:b):(g<b?g:b);
+    pv[q]=(mx-mn<=26&&(r+g+b)/3>=118)?1:0;
+  }
+  this.pavedMask=pv;
   return pal;
 };
 
@@ -268,7 +291,7 @@ WMap.prototype.buildPaintLayer=function(){
     d[i]=Math.max(0,Math.min(255,cr+n+shade));
     d[i+1]=Math.max(0,Math.min(255,cg+n+shade));
     d[i+2]=Math.max(0,Math.min(255,cb+n+shade));
-    d[i+3]=252;
+    d[i+3]=255;   // 完全不透明：252 会让下层原图的碎石噪点透出来
     hits++;
   }
   this.paintHits=hits; this.paintRaw=raw;
@@ -463,7 +486,8 @@ WMap.prototype.ensureDeco=function(tx,ty){
     if(token!==self._pwToken||!self.deco)return;
     const walk=(x,y)=>self.isWalkable(x,y);
     const isW=(x,y)=>self.isWaterAt(x,y);
-    self.deco.get(tx,ty,VW,VH,walk,isW);
+    const isPv=(x,y)=>self.isPavedAt(x,y);
+    self.deco.get(tx,ty,VW,VH,walk,isW,isPv);
   };
   if(window.requestIdleCallback)requestIdleCallback(job,{timeout:120});
   else setTimeout(job,16);
@@ -659,6 +683,12 @@ WMap.prototype.isWaterAt=function(x,y){
   if(mx<0||my<0||mx>=MASK_W||my>=MASK_H)return false;
   return this.waterFlag[my*MASK_W+mx]===1;
 };
+WMap.prototype.isPavedAt=function(x,y){
+  if(!this.pavedMask)return false;
+  const mx=Math.floor(x/MASK_SCALE),my=Math.floor(y/MASK_SCALE);
+  if(mx<0||my<0||mx>=MASK_W||my>=MASK_H)return false;
+  return this.pavedMask[my*MASK_W+mx]===1;
+};
 WMap.prototype.isWalkable=function(x,y){
   if(!this.maskData)return true; // 掩码未加载时不阻挡（避免卡死）
   const mx=Math.floor(x/MASK_SCALE),my=Math.floor(y/MASK_SCALE);
@@ -726,6 +756,14 @@ WMap.prototype.update=function(dt){
     const tx=Math.floor(h.x/640),ty=Math.floor(h.y/640);
     this.onTile&&this.onTile(tx+','+ty);this.visited.add(tx+','+ty);
   } else if(this.heroActor&&this.heroActor.state==='walk'){this.heroActor.play('idle');}
+  // 走路扬尘：每 90ms 在脚后生成一粒，短寿命淡出
+  if(h.moving&&this.time-(this._dustTs||0)>0.09){
+    this._dustTs=this.time;
+    this.dust.push({x:h.x+(Math.random()-0.5)*18,y:h.y+4,vx:(Math.random()-0.5)*14,vy:-14-Math.random()*10,life:0.55,max:0.55,r:2+Math.random()*2.5});
+    if(this.dust.length>26)this.dust.shift();
+  }
+  for(const d of this.dust){ d.x+=d.vx*dt; d.y+=d.vy*dt; d.vy+=26*dt; d.life-=dt; }
+  this.dust=this.dust.filter(d=>d.life>0);
   this.centerCam();
   // 掉落物理
   for(const d of this.drops){
@@ -836,6 +874,13 @@ WMap.prototype.render=function(now){
   for(const id in this.remote){const r=this.remote[id];items.push({y:r.y,k:'r',o:r});}
   items.push({y:this.hero.y,k:'h',o:this.hero});
   items.sort((a,b)=>a.y-b.y);
+  for(const d of this.dust){
+    const sx=d.x-cx, sy=d.y-cy;
+    const k=Math.max(0,d.life/d.max);
+    const a=k*0.5;
+    g.fillStyle=`rgba(232,216,180,${a})`;
+    g.beginPath();g.arc(sx,sy,d.r*(2.0-k),0,Math.PI*2);g.fill();
+  }
   for(const it of items){
     const sx=it.o.x-cx,sy=it.o.y-cy;
     if(sx<-180||sx>VW+180||sy<-180||sy>VH+180)continue;
