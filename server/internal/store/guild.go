@@ -93,7 +93,7 @@ func Guilds() *GuildRegistry { return guildReg }
 
 const (
 	guildMaxMembers = 30
-	guildCreateCost = 5000 // 创建公会消耗金币
+	guildCreateCost = 3000 // 创建公会消耗金币（v1.9.41 由 5000 下调）
 )
 
 // 供 net 包使用的导出常量与方法（appendLogs / guildCreateCost 为包内私有）。

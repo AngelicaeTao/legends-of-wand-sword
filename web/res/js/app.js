@@ -607,12 +607,14 @@ async function finishEnter(){
       onState:(st)=>{ state=st; refreshStats().then(syncHud); },
       toast:(t,s)=>{window.SFX&&SFX.quest();toastModal(t,s);}
     });
-    // v1.9.27 回血药水快用按钮（HUD）
+    // v1.9.27 回血药水快用按钮（HUD）；v1.9.41 满血本地预检（不发请求）+ 去掉多余 refreshStats（降交互延迟）
     const pb=$('usePotionBtn');
+    const hpFull=()=>{ const maxHp=(heroStats&&heroStats.hp)||0; const hp=(state&&state.core&&typeof state.core.hp==='number'&&state.core.hp>0)?state.core.hp:maxHp; return maxHp>0&&hp>=maxHp; };
     if(pb)pb.onclick=async()=>{
+      if(hpFull()){ window.SFX&&SFX.fail(); toastModal('血量已满','当前血量已满，无需使用药水'); return; }
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'use_potion',itemId:'potion_s'});
-        if(r.state){state=r.state;await refreshStats();syncHud();}
+        if(r.state){state=r.state;syncHud();}
         window.SFX&&SFX.heal();
         toastModal('已使用回血药水','血量回复 +'+Math.round(r.healed||0)+'（当前 '+Math.round(r.hp||0)+'/'+Math.round(r.maxHp||0)+'）');
       }catch(e){window.SFX&&SFX.fail();toastModal('无法使用',e.message);}
@@ -849,6 +851,9 @@ function syncHud(){
   if(ht){ ht.textContent=maxHp>0?`${Math.ceil(curHp)} / ${Math.ceil(maxHp)}`:'-- / --'; }
   const pc=$('potionCnt');
   if(pc){ pc.textContent=(state.warehouse||[]).filter(it=>it.kind==='consume'&&it.id==='potion_s').reduce((s,it)=>s+it.qty,0); }
+  // v1.9.41 满血检测修复：血条满时 HUD 快用按钮置灰，视觉上直接明确"不需要喝"
+  const pb=$('usePotionBtn');
+  if(pb){ const full=maxHp>0&&curHp>=maxHp; pb.classList.toggle('hp-full',full); pb.title=full?'血量已满':'使用回血药水'; }
 }
 async function refreshStats(){
   if(!state||!state.core)return;
@@ -1096,11 +1101,15 @@ function renderBag(){
   };
   $('bagQtyInput').onkeydown=(e)=>{ if(e.key==='Enter')$('bagYes').click(); };
   // 药水：点击直接喝（v1.9.37：仓库/背包合并计数，任意地点可用，服务端先扣仓库再扣背包）
+  // v1.9.41：满血本地预检（不发请求）+ 去掉多余 refreshStats（use_potion 不改属性，降交互延迟）
   body.querySelectorAll('.wg-cell[data-pot]').forEach(el=>el.onclick=async()=>{
     const id=el.dataset.pot;
+    const maxHp=(heroStats&&heroStats.hp)||0;
+    const hp=(state&&state.core&&typeof state.core.hp==='number'&&state.core.hp>0)?state.core.hp:maxHp;
+    if(maxHp>0&&hp>=maxHp){ window.SFX&&SFX.fail(); flash('血量已满（'+Math.ceil(hp)+'/'+Math.ceil(maxHp)+'），无需喝药水'); return; }
     try{
       const r=await api('/api/player/action',{userId:uid(),action:'use_potion',itemId:id});
-      if(r.state){state=r.state;await refreshStats();syncHud();}
+      if(r.state){state=r.state;syncHud();}
       window.SFX&&SFX.heal(); renderPanel();
       flash('已喝下 '+(itemCN(id)||id)+' · 回复 '+Math.round(r.healed||0)+' 血量（当前 '+Math.round(r.hp||0)+'/'+Math.round(r.maxHp||0)+'）');
     }catch(e){window.SFX&&SFX.fail();flash('无法使用：'+e.message);}
@@ -1694,14 +1703,14 @@ function renderWarehouse(){
     <div class="sec-title">背包 · 材料与消耗品 <span class="sec-sub" style="display:inline">（点击选择数量存入）</span></div>
     <div class="wg-grid">${bagGoods.map(([id,n])=>`
       <div class="wg-cell" data-gin="${id}" data-n="${n|0}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
-    <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · 点击装备取出 · 点 ♻ 分解换金币）</span><button class="wh-batch" id="batchOut">⇩ 批量取出（装备+材料）</button></div>
+    <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · 点击装备取出 · 点 ♻ 分解换金币/材料）</span><button class="wh-batch" id="batchDec" ${whEq.length?'':'disabled style="opacity:.45"'}>♻ 批量分解全部（${whEq.length} 件）</button><button class="wh-batch" id="batchOut">⇩ 批量取出（装备+材料）</button></div>
     <div class="wg-grid">${whEq.map(it=>{
       const e=it.equip||{};
-      const DEC=[40,120,300,800,2000], qi=Math.max(0,Math.min(4,e.quality||0));
+      const DEC=[40,120,300,800,2000], MAT=[10,30,80,200,500], qi=Math.max(0,Math.min(4,e.quality||0));
       return `<div class="wg-cell equip" data-out="${it.id}">
         <div class="wgi" style="background:#b8862f">${slotIco[e.slot]||ICON.sword(24,'#2a1c08')}</div>${eqCN(e)}${e.enhance?(' +'+e.enhance):''}<div class="wq">x1</div>
         ${pwBadge(it.equip)||''}
-        <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金</span>
+        <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金+${MAT[qi]||10}材</span>
       </div>`;}).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
     <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · 点击选择数量取出）</span></div>
     <div class="wg-grid">${whGoods.map(it=>`
@@ -1738,16 +1747,17 @@ function renderWarehouse(){
     await doWh(op.action,op.id,q,op.name);
   };
   $('whQtyInput').onkeydown=(e)=>{ if(e.key==='Enter')$('whYes').click(); };
-  // v1.9.40 分解仓库装备：确认弹窗 → 服务端权威结算 → 金币入账
+  // v1.9.40 分解仓库装备 / v1.9.41 加材料返还：确认弹窗 → 服务端权威结算 → 金币/材料入账
+  const decEst=(e)=>{ const DEC=[40,120,300,800,2000], MAT=[10,30,80,200,500], qi=Math.max(0,Math.min(4,e.quality||0));
+    return {gold:Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15)), mat:MAT[qi]||10}; };
   body.querySelectorAll('.wg-detail.dec').forEach(el=>{
     el.onclick=(ev)=>{
       ev.stopPropagation();  // 不触发外层"取出"
       const id=el.dataset.dec;
       const it=(state.warehouse||[]).find(x=>x.id===id&&!x.hidden&&x.kind==='equip');
       const e=it&&it.equip||{};
-      const DEC=[40,120,300,800,2000], qi=Math.max(0,Math.min(4,e.quality||0));
-      const est=Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15));
-      showModal(`<h2>分解装备</h2><div class="msub">将 <b style="color:#f0d590">${eqCN(e)}${e.enhance?(' +'+e.enhance):''}</b> 分解为金币？<br>预计返还 <b style="color:#ffd76b">${fmt(est)} 金币</b>（分解后装备消失，无法找回）</div>
+      const est=decEst(e);
+      showModal(`<h2>分解装备</h2><div class="msub">将 <b style="color:#f0d590">${eqCN(e)}${e.enhance?(' +'+e.enhance):''}</b> 分解为金币与材料？<br>预计返还 <b style="color:#ffd76b">${fmt(est.gold)} 金币</b> + <b style="color:#9ad6ff">${est.mat} 材料</b>（分解后装备消失，无法找回）</div>
         <div class="divider"></div>
         <div class="enc-btns"><button class="btn-red" id="doDec">确认分解</button><button class="btn-gray" id="cancelDec">再想想</button></div>`);
       $('cancelDec').onclick=hideModal;
@@ -1757,12 +1767,34 @@ function renderWarehouse(){
           hideModal();
           if(r.state){state=r.state;syncHud();}
           window.SFX&&SFX.coin&&SFX.coin();
-          toastModal('分解成功',eqCN(e)+(e.enhance?(' +'+e.enhance):'')+' → 金币 +'+fmt(r.goldGain||est));
+          toastModal('分解成功',eqCN(e)+(e.enhance?(' +'+e.enhance):'')+' → 金币 +'+fmt(r.goldGain||est.gold)+' · 材料 +'+(r.matGain||est.mat));
           renderPanel();
         }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('分解失败',err.message); }
       };
     };
   });
+  // v1.9.41 批量分解：仓库全部装备一键分解（弹窗汇总总收益，服务端权威）
+  const bdBtn=$('batchDec');
+  if(bdBtn)bdBtn.onclick=async()=>{
+    const list=(state.warehouse||[]).filter(x=>x.kind==='equip'&&!x.hidden);
+    if(!list.length){ flash('仓库没有装备可分解'); return; }
+    let tg=0,tm=0;
+    list.forEach(x=>{ const s=decEst(x.equip||{}); tg+=s.gold; tm+=s.mat; });
+    showModal(`<h2>批量分解装备</h2><div class="msub">将仓库全部 <b style="color:#f0d590">${list.length} 件装备</b> 一次性分解？<br>预计返还 <b style="color:#ffd76b">${fmt(tg)} 金币</b> + <b style="color:#9ad6ff">${tm} 材料</b><br><span style="font-size:12px;color:#8a93a6">分解后全部装备消失，无法找回</span></div>
+      <div class="divider"></div>
+      <div class="enc-btns"><button class="btn-red" id="doBatchDec">全部分解（${list.length} 件）</button><button class="btn-gray" id="cancelBatchDec">再想想</button></div>`);
+    $('cancelBatchDec').onclick=hideModal;
+    $('doBatchDec').onclick=async()=>{
+      try{
+        const r=await api('/api/player/action',{userId:uid(),action:'storage_decompose',all:true});
+        hideModal();
+        if(r.state){state=r.state;syncHud();}
+        window.SFX&&SFX.coin&&SFX.coin();
+        toastModal('批量分解成功','分解 '+r.decomposed+' 件装备 → 金币 +'+fmt(r.goldGain)+' · 材料 +'+r.matGain);
+        renderPanel();
+      }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('批量分解失败',err.message); }
+    };
+  };
   const openForgeBtn=$('openForge');
   if(openForgeBtn)openForgeBtn.onclick=()=>{forgeSub=true;forgeSel=null;window.SFX&&SFX.tab();renderWarehouse();};
   // 背包装备 → 点击直接存入；仓库装备 → 点击直接取出（不可堆叠，无需数量确认，不弹窗）

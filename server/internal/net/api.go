@@ -25,6 +25,12 @@ func Handler(cfgDir string) http.Handler {
 }
 
 // HandlerWithWeb 聚合所有 API 路由，并可托管前端页面与静态资源（同源部署，单端口）。
+// FlushSaves 优雅关闭前刷盘（v1.9.41 异步落盘配套）。
+func FlushSaves() error {
+	if disk == nil { return nil }
+	return disk.FlushAll()
+}
+
 func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 	webFile = webFileArg
 	webResDir = resDir
@@ -449,7 +455,8 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		Action   string            `json:"action"`
 		Slots    []string          `json:"slots"`    // submit_bd
 		SkillID  string            `json:"skillId"`  // unlock_skill
-		ItemID   string            `json:"itemId"`   // equip/unequip/deposit/withdraw
+		ItemID   string            `json:"itemId"`   // equip/unequip/deposit/withdraw/storage_decompose
+		All      bool              `json:"all"`      // storage_decompose 批量分解全部
 		Qty      int               `json:"qty"`      // deposit/withdraw
 		Slot     string            `json:"slot"`     // enhance
 		DGID     string            `json:"dungeonId"`
@@ -535,7 +542,7 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		if v, ok := enh["costBase"].(float64); ok { goldBase = int(v) }
 		growth := 1.35
 		if v, ok := enh["costGrowth"].(float64); ok { growth = v }
-		matCost := 2
+		matCost := 1 // v1.9.41 由 2 下调
 		curLv := 0
 		for _, e := range p.Equip {
 			if (q.ItemID != "" && e.ID == q.ItemID) || (q.ItemID == "" && e.Slot == q.Slot) { curLv = e.Enhance; break }
@@ -565,15 +572,32 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		if err = p.WarehouseEquipIn(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
 	case "wh_equip_out": // 仓库装备 → 背包（点击仓库装备取出）
 		if err = p.WarehouseEquipOut(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
-	case "storage_decompose": // v1.9.40 分解仓库装备：按品质+强化等级返还金币（服务端权威）
+	case "storage_decompose": // v1.9.40 分解仓库装备 / v1.9.41 加材料返还 + 批量分解
 		cfg, _ := game.C().Economy.Drop["decompose"].(map[string]any)
 		base := []any{40.0, 120.0, 300.0, 800.0, 2000.0}
+		matBase := []any{10.0, 30.0, 80.0, 200.0, 500.0}
 		enhMult := 0.15
 		if cfg != nil {
 			if b, ok := cfg["goldBase"].([]any); ok && len(b) > 0 { base = b }
+			if b, ok := cfg["matBase"].([]any); ok && len(b) > 0 { matBase = b }
 			if v, ok := cfg["enhanceMult"].(float64); ok { enhMult = v }
 		}
-		gain := 40
+		// 把配置同步给 store 包（批量分解同源公式）
+		gb := make([]int, len(base))
+		for i, v := range base { gb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
+		mb := make([]int, len(matBase))
+		for i, v := range matBase { mb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
+		store.SetDecomposeConfig(gb, mb, enhMult)
+		if q.All { // 批量：分解仓库全部装备
+			n, gold, mat := p.WarehouseDecomposeAll()
+			if n == 0 { http.Error(w, "仓库中没有装备可分解", 400); return }
+			extra["decomposed"] = n
+			extra["goldGain"] = gold
+			extra["matGain"] = mat
+			extra["gold"] = p.Core.Gold
+			extra["material"] = p.Core.Material
+			break
+		}
 		var target *store.Equip
 		for i := range p.Warehouse {
 			it := p.Warehouse[i]
@@ -582,16 +606,21 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+		qi, goldGain, matGain := 0, 40, 10
 		if target != nil {
-			qi := target.Quality
+			qi = target.Quality
 			if qi < 0 || qi >= len(base) { qi = 0 }
 			g, _ := base[qi].(float64)
-			gain = int(g * (1 + float64(target.Enhance)*enhMult))
+			m, _ := matBase[qi].(float64)
+			goldGain = int(g * (1 + float64(target.Enhance)*enhMult))
+			matGain = int(m)
 		}
-		goldGain, e := p.WarehouseDecompose(q.ItemID, gain)
+		gGain, mGain, e := p.WarehouseDecompose(q.ItemID, goldGain, matGain)
 		if e != nil { http.Error(w, e.Error(), 400); return }
-		extra["goldGain"] = goldGain
+		extra["goldGain"] = gGain
+		extra["matGain"] = mGain
 		extra["gold"] = p.Core.Gold
+		extra["material"] = p.Core.Material
 	case "dungeon_enter":
 		perDay := 0
 		var mon string; var elite bool; var lvReq int
@@ -622,7 +651,7 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		donated := 0
 		if v, ok := p.Ext["guildDonated"].(float64); ok { donated = int(v) }
 		if donated >= 3 { http.Error(w, "今日捐献次数已用完（3/3）", 409); return }
-		const cost = 1000
+		const cost = 600 // v1.9.41 由 1000 下调
 		if p.Core.Gold < cost { http.Error(w, "金币不足（需 1,000）", 400); return }
 		p.Core.Gold -= cost
 		coin := 0
@@ -675,10 +704,10 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		switch item {
 		case "cart":
 			lv = p.Home.Cart
-			cost = 800 * (lv + 1) // 800/1600/2400...
+			cost = 550 * (lv + 1) // 550/1100/1650...（v1.9.41 由 800 下调）
 		case "bed":
 			lv = p.Home.Bed
-			cost = 1000 * (lv + 1)
+			cost = 700 * (lv + 1) // v1.9.41 由 1000 下调
 		default:
 			http.Error(w, "未知装饰", 400)
 			return

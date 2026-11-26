@@ -127,6 +127,11 @@ func (p *PlayerState) UsePotion(itemID string, healPct float64, maxHp float64) (
 	if maxHp <= 0 {
 		return 0, fmt.Errorf("属性计算异常，请稍后再试")
 	}
+	// v1.9.41 满血检测修复：先把血量截断到当前最大血量（换装/降级后可能残留 HP>maxHp，
+	// 否则永久误判"血量已满"且血条溢出），再做满血判定。
+	if p.Core.HP > maxHp {
+		p.Core.HP = maxHp
+	}
 	if p.Core.HP >= maxHp {
 		return 0, fmt.Errorf("血量已满（%.0f/%.0f），无需使用药水", p.Core.HP, maxHp)
 	}

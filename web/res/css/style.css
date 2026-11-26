@@ -923,3 +923,6 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .wc-tag{display:inline-block;margin-top:3px;padding:1px 7px;font-size:10px;font-weight:700;border-radius:9px;vertical-align:middle}
 .wc-tag.w{color:#ffb26b;background:rgba(224,140,60,.14);border:1px solid rgba(224,150,80,.5)}
 .wc-tag.m{color:#8fc8ff;background:rgba(80,140,224,.14);border:1px solid rgba(110,160,230,.5)}
+
+/* v1.9.41 满血检测：HUD 回血药水快用按钮满血置灰 */
+.hp-potion.hp-full{opacity:.45;filter:grayscale(.7);cursor:default}

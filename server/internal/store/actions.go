@@ -227,23 +227,73 @@ func (p *PlayerState) WarehouseEquipIn(itemID string) error {
 	return fmt.Errorf("背包中没有该装备：%s", itemID)
 }
 
-// WarehouseDecompose 分解仓库中的装备（v1.9.40）：按品质+强化等级返还金币（金额由 net 层按
-// economy.drop.decompose 配置算好传入，服务端权威校验与入账）。返回实际入账金币。
-func (p *PlayerState) WarehouseDecompose(itemID string, goldGain int) (int, error) {
-	if goldGain < 0 { return 0, fmt.Errorf("分解金额配置无效") }
+// WarehouseDecompose 分解仓库中的装备（v1.9.40 金币 / v1.9.41 加材料返还）：
+// 返还金额由 net 层按 economy.drop.decompose 配置算好传入，服务端权威校验与入账。
+// 返回实际入账（金币, 材料）。
+func (p *PlayerState) WarehouseDecompose(itemID string, goldGain, matGain int) (int, int, error) {
+	if goldGain < 0 || matGain < 0 { return 0, 0, fmt.Errorf("分解收益配置无效") }
 	for i := range p.Warehouse {
 		if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == itemID {
 			e := p.Warehouse[i].Equip
 			name := itemID
 			if e != nil { name = e.ID }
-			gain := goldGain
-			p.Core.Gold += gain
+			p.Core.Gold += goldGain
+			p.Core.Material += matGain
 			p.Warehouse = append(p.Warehouse[:i], p.Warehouse[i+1:]...)
-			p.appendLogs([]string{fmt.Sprintf("分解仓库装备：%s（金币 +%d）", name, gain)})
-			return gain, nil
+			p.appendLogs([]string{fmt.Sprintf("分解仓库装备：%s（金币 +%d，材料 +%d）", name, goldGain, matGain)})
+			return goldGain, matGain, nil
 		}
 	}
-	return 0, fmt.Errorf("仓库中没有该装备：%s", itemID)
+	return 0, 0, fmt.Errorf("仓库中没有该装备：%s", itemID)
+}
+
+// WarehouseDecomposeAll 批量分解仓库全部装备（v1.9.41）：逐件入账，返回（件数, 金币合计, 材料合计）。
+func (p *PlayerState) WarehouseDecomposeAll() (int, int, int) {
+	n, gold, mat := 0, 0, 0
+	kept := p.Warehouse[:0]
+	for _, it := range p.Warehouse {
+		if it.Kind == "equip" {
+			n++
+			g, m := decomposeGoldOf(it.Equip), decomposeMatOf(it.Equip)
+			gold += g
+			mat += m
+			name := it.ID
+			if it.Equip != nil { name = it.Equip.ID }
+			p.appendLogs([]string{fmt.Sprintf("分解仓库装备：%s（金币 +%d，材料 +%d）", name, g, m)})
+			continue
+		}
+		kept = append(kept, it)
+	}
+	p.Warehouse = kept
+	p.Core.Gold += gold
+	p.Core.Material += mat
+	return n, gold, mat
+}
+
+// SetDecomposeConfig 注入分解收益基准表（net 层从 economy 配置同步进来，v1.9.41）。
+func SetDecomposeConfig(goldBase, matBase []int, enhMult float64) {
+	if len(goldBase) > 0 { decomposeGoldBase = goldBase }
+	if len(matBase) > 0 { decomposeMatBase = matBase }
+	if enhMult > 0 { decomposeEnhMult = enhMult }
+}
+
+// decomposeGoldOf / decomposeMatOf 按品质+强化等级算分解收益（与 net 层单件公式同源）。
+// 注：金额基准表由 config 注入（economy.drop.decompose），这里用包级变量由 init 配置同步。
+var decomposeGoldBase = []int{40, 120, 300, 800, 2000}
+var decomposeMatBase = []int{10, 30, 80, 200, 500}
+var decomposeEnhMult = 0.15
+
+func decomposeGoldOf(e *Equip) int {
+	if e == nil { return decomposeGoldBase[0] }
+	q := e.Quality
+	if q < 0 || q >= len(decomposeGoldBase) { q = 0 }
+	return int(float64(decomposeGoldBase[q]) * (1 + float64(e.Enhance)*decomposeEnhMult))
+}
+func decomposeMatOf(e *Equip) int {
+	if e == nil { return decomposeMatBase[0] }
+	q := e.Quality
+	if q < 0 || q >= len(decomposeMatBase) { q = 0 }
+	return decomposeMatBase[q]
 }
 
 // WarehouseEquipOut 仓库装备 → 背包（取出一件，未穿戴状态）。

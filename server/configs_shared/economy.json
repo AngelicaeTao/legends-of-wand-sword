@@ -5,8 +5,8 @@
     "efficiency": 1.0,
     "expPerMinute": 6,
     "goldPerMinute": 4,
-    "materialPerMinute": 0.5,
-    "_note": "离线收益 = 时长 * 速率 * 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。；v1.9.27 每30分钟额外产出1瓶回血药水",
+    "materialPerMinute": 0.25,
+    "_note": "离线收益 = 时长 * 速率 * 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。；v1.9.27 每30分钟额外产出1瓶回血药水；v1.9.41 挂机材料 0.5→0.25/分钟",
     "potionPerHalfHour": 1
   },
   "stamina": {
@@ -24,8 +24,8 @@
     "_note": "服务端按累计时间驱动自动战斗；回合数仅作UI展示，不作终止条件。种子由服务端生成随战报记录。"
   },
   "drop": {
-    "equipChanceNormal": 0.16,
-    "equipChanceElite": 0.45,
+    "equipChanceNormal": 0.3,
+    "equipChanceElite": 0.65,
     "equipChanceBoss": 1.0,
     "bossDiamondMin": 50,
     "bossDiamondMax": 100,
@@ -75,7 +75,7 @@
       "armor": 0.2,
       "trinket": 0.2
     },
-    "_note": "v1.9.30 slotWeights 武器加权：武器占掉落 40%（原四槽均等 25%）",
+    "_note": "v1.9.41 装备掉率 0.16/0.45→0.30/0.65；宝箱材料比例 0.1→0.05",
     "decompose": {
       "goldBase": [
         40,
@@ -85,8 +85,17 @@
         2000
       ],
       "enhanceMult": 0.15,
-      "_note": "分解仓库装备返还金币：goldBase[品质] × (1+强化等级×enhanceMult)"
-    }
+      "_note": "分解仓库装备返还：金币 goldBase[品质]×(1+强化×0.15) + 材料 matBase[品质]",
+      "matBase": [
+        10,
+        30,
+        80,
+        200,
+        500
+      ]
+    },
+    "chestExpRatio": 1.5,
+    "chestMatRatio": 0.05
   },
   "worldMap": {
     "worldSize": {

@@ -13,6 +13,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"zjcs/server/internal/net"
 )
@@ -38,5 +40,16 @@ func main() {
 	log.Printf("权威服务启动 addr=%s config=%s web=%q res=%q", listen, *cfgDir, *webFile, *resDir)
 	srv := &http.Server{Addr: listen, Handler: net.HandlerWithWeb(*cfgDir, *webFile, *resDir)}
 	fmt.Printf("listening on %s\n", listen)
+	// v1.9.41 优雅关闭：退出前把异步去抖落盘的存档全部刷盘（防丢最近 400ms 变更）
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+		log.Println("收到退出信号，刷新存档…")
+		if err := net.FlushSaves(); err != nil {
+			log.Printf("刷盘异常: %v", err)
+		}
+		srv.Close()
+	}()
 	log.Fatal(srv.ListenAndServe())
 }
