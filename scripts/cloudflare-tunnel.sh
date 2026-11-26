@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cloudflare 快速隧道联机（无需账号；地址每次启动随机，正式使用请改命名隧道绑域名）
+# Cloudflare 命名隧道（固定域名）：https://game.nantong519.dpdns.org
+# 隧道名 zjcs-legend（账号 29eb61d5...，ingress 在 Cloudflare 远端配置：game.* → localhost:3000）
 # 用法：先启动游戏 ./data/zjcs-server -addr :3000 ...，再执行本脚本
-command -v cloudflared >/dev/null || { echo "未安装 cloudflared"; exit 1; }
-cloudflared tunnel --url http://localhost:3000 --no-autoupdate
+cloudflared --no-autoupdate tunnel run --token "$(cat /root/.cloudflared/zjcs-legend.token)"
