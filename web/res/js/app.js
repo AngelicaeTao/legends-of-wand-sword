@@ -340,7 +340,8 @@ function renderLoop(now){
   const t=now/1000;
   perfTick(now);
   if(view==='world'){
-    worldMap.render(now);
+    // 面板/弹窗打开时大世界被完全遮住，继续每帧重绘纯属浪费（实测面板页会掉到 41 FPS）
+    if(!panel && document.getElementById('modalLayer').classList.contains('hidden')) worldMap.render(now);
     // 小地图/交互提示降频 10Hz：避免每帧重绘小画布 + DOM 写入造成卡顿
     if(now-(renderLoop._auxTs||0)>100){
       renderLoop._auxTs=now;
