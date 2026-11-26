@@ -521,8 +521,12 @@ WMap.prototype.switchWorld=async function(worldId, spots, heroX, heroY){
   this.monsters=[];this.chests=[];this.gates=[];this.anchors=[];this.drops=[];
   if(heroX!=null&&heroY!=null){this.hero.x=heroX;this.hero.y=heroY;}
   else {this.hero.x=SPAWN_X;this.hero.y=SPAWN_Y;} // 默认落安全区
-  // 若存档坐标落在墙里（旧存档），修正到安全区
-  if(this.blocked(this.hero.x,this.hero.y,8)){this.hero.x=SPAWN_X;this.hero.y=SPAWN_Y;}
+  // 若存档坐标落在墙里（旧存档 / 锚点压在掩码边界上），就近找一块可站立的地面，
+  // 而不是粗暴回落到 W1 的 SPAWN 坐标（那会在 W6 之类的世界里直接落进湖里/墙里）
+  if(this.blocked(this.hero.x,this.hero.y,24)){
+    const fixed=this.findWalkableNear(this.hero.x,this.hero.y,720);
+    this.hero.x=fixed.x;this.hero.y=fixed.y;
+  }
   this.applySpots(spots||[]);
   this.centerCam();
   this.prewarmTiles(); // 后台预热分块，避免移动跨块时同步建块掉帧
@@ -547,7 +551,10 @@ WMap.prototype.applySpots=function(spots){
   for(const s of spots){
     if(s.type==='ANCHOR'){this.anchors.push(s);continue;}
     if(s.type==='GATE'){
-      this.gates.push({x:s.x,y:s.y,nodeId:s.nodeId,to:s.to,requireLevel:s.reqLevel||s.requireLevel||0,label:'通往 '+(s.to||'?')});
+      const wdefs=(this.opts&&this.opts.worldDefs)||[];
+      const tw=wdefs.find(w=>w.id===s.to);
+      this.gates.push({x:s.x,y:s.y,nodeId:s.nodeId,to:s.to,requireLevel:s.reqLevel||s.requireLevel||0,
+        label:'通往 '+(tw?tw.name:(s.to||'?')),worldName:tw?tw.name:s.to});
       continue;
     }
     if(s.type==='MOB'||s.type==='ELITE'||s.type==='BOSS'){
@@ -706,6 +713,19 @@ WMap.prototype.centerCam=function(){
   this.cam.x=Math.max(0,Math.min(MW-VW,this.hero.x-VW/2));
   this.cam.y=Math.max(0,Math.min(MH-VH,this.hero.y-VH/2));
 };
+/* 就近可站立点：以 (x,y) 为心螺旋外扩，返回第一个碰撞半径 24 全通的位置 */
+WMap.prototype.findWalkableNear=function(x,y,maxR){
+  const lim=maxR||720;
+  for(let r=16;r<=lim;r+=16){
+    for(let a=0;a<360;a+=18){
+      const rad=a*Math.PI/180;
+      const nx=x+Math.cos(rad)*r, ny=y+Math.sin(rad)*r;
+      if(nx<40||ny<40||nx>MW-40||ny>MH-40)continue;
+      if(!this.blocked(nx,ny,24))return {x:nx,y:ny};
+    }
+  }
+  return {x:Math.max(40,Math.min(MW-40,x)),y:Math.max(40,Math.min(MH-40,y))};
+};
 
 /* ---------- 输入 ---------- */
 WMap.prototype.bindInput=function(){
@@ -747,6 +767,8 @@ WMap.prototype.update=function(dt){
   h.moving=(dx!==0||dy!==0);
   if(h.moving){
     if(h.moving&&this.heroActor&&this.heroActor.state!=='walk')this.heroActor.play('walk');
+    // 朝向：连续角度（小地图指针按此旋转，8 方向都不会被压成 4 档）
+    if(dx||dy)h.ang=Math.atan2(dy,dx);
     if(Math.abs(dx)>Math.abs(dy))h.dir=dx>0?'right':'left';else h.dir=dy>0?'down':'up';
     const nx=h.x+dx*spd,ny=h.y+dy*spd;
     // 掩码精度8px，角色碰撞半径取24（≈显示半宽，保证不穿墙）
@@ -761,6 +783,11 @@ WMap.prototype.update=function(dt){
     this._dustTs=this.time;
     this.dust.push({x:h.x+(Math.random()-0.5)*18,y:h.y+4,vx:(Math.random()-0.5)*14,vy:-14-Math.random()*10,life:0.55,max:0.55,r:2+Math.random()*2.5});
     if(this.dust.length>26)this.dust.shift();
+  }
+  // 脚步声：与扬尘同源但更慢（约 3 步/秒），音量极低，只提供"脚踩地面"的存在感
+  if(h.moving&&this.time-(this._stepTs||0)>0.33){
+    this._stepTs=this.time;
+    if(window.SFX&&SFX.step)SFX.step();
   }
   for(const d of this.dust){ d.x+=d.vx*dt; d.y+=d.vy*dt; d.vy+=26*dt; d.life-=dt; }
   this.dust=this.dust.filter(d=>d.life>0);

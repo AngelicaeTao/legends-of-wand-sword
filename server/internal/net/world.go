@@ -145,7 +145,17 @@ func worldTravel(w http.ResponseWriter, r *http.Request) {
 	if uid == "" { http.Error(w, "未授权", 401); return }
 	p, err := loadOrCreate(uid)
 	if err != nil { http.Error(w, err.Error(), 500); return }
-	// 找 GATE 校验门槛
+	// 目标世界必须存在
+	var target *game.WorldDef
+	for i := range game.C().Worlds.Worlds {
+		if game.C().Worlds.Worlds[i].ID == q.To { target = &game.C().Worlds.Worlds[i] }
+	}
+	if target == nil { http.Error(w, "目标世界不存在", 400); return }
+	if q.To == p.World.WorldID { http.Error(w, "已在当前世界", 400); return }
+	// 找当前世界通往目标的 GATE：有通道 → 校验等级门槛；
+	// 没有通道但目标已解锁（回访已探索世界）→ 允许直接传送。
+	// 旧逻辑只认 GATE，导致"从迷雾森林回青草平原"被判成"无通道"，与面板上
+	// "点已解锁世界可直接传送"的说明自相矛盾。
 	var gate *game.SpawnDef
 	for _, wd := range game.C().Worlds.Worlds {
 		if wd.ID != p.World.WorldID { continue }
@@ -153,11 +163,15 @@ func worldTravel(w http.ResponseWriter, r *http.Request) {
 			if s.Type == "GATE" && s.To == q.To { gate = &wd.Spawns[i] }
 		}
 	}
-	if gate == nil { http.Error(w, "无通往该世界的通道", 400); return }
-	if p.Core.Level < gate.RequireLevel {
+	if gate == nil {
+		if !containsStr(p.World.Unlocked, q.To) {
+			http.Error(w, "尚未解锁该世界：请沿世界通道推进", 400)
+			return
+		}
+	} else if p.Core.Level < gate.RequireLevel {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(403)
-		_ = json.NewEncoder(w).Encode(map[string]any{"error": fmt.Sprintf("等级不足：当前 Lv.%d，前往 %s 需 Lv.%d，请先打怪或挂机升级", p.Core.Level, q.To, gate.RequireLevel)})
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": fmt.Sprintf("等级不足：当前 Lv.%d，前往 %s 需 Lv.%d，请先打怪或挂机升级", p.Core.Level, target.Name, gate.RequireLevel)})
 		return
 	}
 	// 传送 CD：服务端记录上次传送时间（放 Ext）

@@ -112,6 +112,10 @@ const worldMap=new WorldMap($('cvExplore'),{
   onTile:(k)=>{ /* 记录探索格子 */ }
 });
 window.__wm=worldMap; // 调试钩子：便于自动化读取实体坐标（不影响玩法）
+// 调试钩子：战斗倒地状态（自动化验证"死亡后不会自己站起来"）
+window.__bt=()=>{const a=battleHeroActor;return {b:bAnim.hero,state:a?a.state:null,sy:a&&a.cur&&a.cur.root?+a.cur.root.sy.toFixed(3):null,
+  modal:!document.getElementById('modalLayer').classList.contains('hidden'),
+  modalTxt:document.getElementById('modalLayer').innerText.replace(/\n/g,'|').slice(0,40)};};
 const miniCtx=$('miniMapCv').getContext('2d');
 
 // 小地图：真实雷达（以角色为中心，与通行掩码同源，北向上）
@@ -153,14 +157,34 @@ function drawMiniMap(){
   for(const c of worldMap.chests)dot(c.x,c.y,'#f0d590',3);
   // 其他玩家（青）
   for(const k2 in (worldMap.remote||{})){const r=worldMap.remote[k2];if(r)dot(r.x,r.y,'#8fd8ff',3.5);}
-  // ---- 角色：圆心绿点 + 朝向三角 ----
-  g.fillStyle='#7fe0a0';g.beginPath();g.arc(C,C,5.5,0,Math.PI*2);g.fill();
-  g.strokeStyle='#fff';g.lineWidth=1.6;g.stroke();
-  const dir=worldMap.hero.facing||worldMap.hero.dir||'down';
-  const ang={up:-Math.PI/2,down:Math.PI/2,left:Math.PI,right:0}[dir]||Math.PI/2;
+  // ---- 角色：连续角度指针（8 方向/斜向都能正确指示，不再退化成 3 个方向） ----
+  // v1.9.6：旧版只有 4 个离散角度 + 三角形从圆心画起，被绿点盖住大半 —— 玩家实际
+  // 只能看到右/左/下三个方向的尖角，上方向几乎完全被圆点遮住，看起来像"只有三个方向"。
+  // 改为：以移动向量 atan2 得到的连续角度驱动，指针整体位于圆点之外并加深色描边。
+  const hd=worldMap.hero;
+  let ang=(typeof hd.ang==='number'&&isFinite(hd.ang))?hd.ang:null;
+  if(ang===null){
+    const d4=hd.facing||hd.dir||'down';
+    ang={up:-Math.PI/2,down:Math.PI/2,left:Math.PI,right:0}[d4];
+    if(ang==null)ang=Math.PI/2;
+  }
   g.save();g.translate(C,C);g.rotate(ang);
-  g.fillStyle='#eafff3';g.beginPath();g.moveTo(10,0);g.lineTo(4,-4);g.lineTo(4,4);g.closePath();g.fill();
+  // 视野扇形（方向感的弱提示，不会盖住地形）
+  const cone=g.createRadialGradient(0,0,4,0,0,26);
+  cone.addColorStop(0,'rgba(150,255,196,.22)');
+  cone.addColorStop(.55,'rgba(150,255,196,.08)');
+  cone.addColorStop(1,'rgba(150,255,196,0)');
+  g.fillStyle=cone;g.beginPath();g.moveTo(0,0);g.arc(0,0,26,-0.44,0.44);g.closePath();g.fill();
+  // 指针：从圆点边缘起笔、末端带缺口，长短足够在浅色地形上分辨
+  g.beginPath();
+  g.moveTo(20,0);g.lineTo(7,-6.2);g.lineTo(9.6,0);g.lineTo(7,6.2);g.closePath();
+  g.fillStyle='#eafff3';
+  g.strokeStyle='rgba(8,24,15,.92)';g.lineWidth=1.6;g.lineJoin='round';
+  g.fill();g.stroke();
   g.restore();
+  // 圆心绿点（最后画，压在指针根部，形成"从圆点射出的指针"观感）
+  g.fillStyle='#7fe0a0';g.beginPath();g.arc(C,C,4.6,0,Math.PI*2);g.fill();
+  g.strokeStyle='#fff';g.lineWidth=1.5;g.stroke();
   g.restore();
   // ---- 外圈（金环 + 内细环），圆外为方向标 ----
   g.strokeStyle='rgba(217,180,91,.35)';g.lineWidth=1;
@@ -232,8 +256,7 @@ function buildBattleBg(g,key){
       g.beginPath();g.ellipse(cx,y+k*5,w*(0.6+((k*37)%40)/100),h,0,0,7);g.fill();
     }
   }
-  if(canBlur)g.filter='none';
-  // 4) 三层山脊 + 谷雾
+  if(canBlur)g.filter='none';  // 4) 三层山脊 + 谷雾
   const ridge=(yBase,amp,color,seed,step)=>{
     g.fillStyle=color;g.beginPath();g.moveTo(0,yBase+80);
     for(let x=0;x<=1280;x+=step){
@@ -304,8 +327,11 @@ function drawBattle(t,now){
   const key=(worldMap&&worldMap.themeKey)||'grassland';
   drawBattleBg(key,t);
   ensureBattleActors();
-  if(curBAnim('hero')==='idle'&&battleHeroActor&&battleHeroActor.state!=='idle')battleHeroActor.play('idle');
-  if(curBAnim('mon')==='idle'&&battleMonActor&&battleMonActor.state!=='idle')battleMonActor.play('idle');
+  // 死亡/战败是"非循环动作，播完保持最后一帧"：若这里按 curBAnim 到期就回 idle，
+  // 英雄会在 bAnim 时长（600ms）结束后自己站起来 —— 玩家看到"倒地后又活了"。
+  // 因此 die 状态必须由外部（下一场战斗开始 / 离开战斗）显式复位，这里不碰。
+  if(curBAnim('hero')==='idle'&&bAnim.hero!=='die'&&battleHeroActor&&battleHeroActor.state!=='idle')battleHeroActor.play('idle');
+  if(curBAnim('mon')==='idle'&&bAnim.mon!=='die'&&battleMonActor&&battleMonActor.state!=='idle')battleMonActor.play('idle');
   // 站位：英雄 420 / 怪物 860，脚底阴影贴合
   // 怪物死亡：die 动画 500ms 内压扁到 sy=0.1 —— 若继续绘制，最后一帧会被采样成
   // 一条杂色横带（玩家看到"闪一帧石堆像素"）。380ms 后直接收掉 actor，用塌陷尘团替代。
@@ -353,7 +379,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.5';
+const BUILD_VER='v1.9.6';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -475,13 +501,14 @@ async function enterGame(){
     await loadWorld(state.world.worldId||'W1', state.world.x, state.world.y);
     showView('world');
     $('sfxBtn')&&$('sfxBtn').classList.remove('hidden');
+    window.SFX&&SFX.login();
     connectWS();
     // 主线任务：绑定当前账号，注入服务端领取与状态回调
     if(window.Quest) Quest.init(uid(),{
       claim:(qid)=>api('/api/player/action',{userId:uid(),action:'quest_claim',questId:qid}),
       getState:()=>state,
       onState:(st)=>{ state=st; refreshStats().then(syncHud); },
-      toast:(t,s)=>toastModal(t,s)
+      toast:(t,s)=>{window.SFX&&SFX.quest();toastModal(t,s);}
     });
   }catch(e){ $('loadTxt').textContent='进入失败：'+e.message; $('loading').classList.remove('hidden'); }
 }
@@ -577,12 +604,14 @@ async function travelTo(gate){
     await loadWorld(gate.to, state.world.x, state.world.y);
     if(window.Quest&&gate.to==='W2')Quest.set('travel',1);
     window.SFX&&SFX.gate();
+    setTimeout(()=>{window.SFX&&SFX.arrive();},420);
     toastModal('传送成功','已抵达 '+$('worldTitle').textContent);
     if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'match_join',worldId:gate.to,name:loggedUser}));
-  }catch(e){ toastModal('传送失败',e.message); worldMap.active=true; }
+  }catch(e){ window.SFX&&SFX.fail(); toastModal('传送失败',e.message); worldMap.active=true; }
 }
 // 唯一出口：任意处 → 登录页
 function doLogout(){
+  window.SFX&&SFX.panelClose();
   setSession(null); state=null; panel=null; equipDetailSlot=null;
   if(window.Quest&&$('questTracker'))$('questTracker').innerHTML='';
   closeWS(); worldMap.active=false;
@@ -605,6 +634,7 @@ function openPanel(key){
   $('panelLayer').classList.remove('hidden');
   $('worldView').classList.add('panel-open');   // HUD 退到背景，避免"没盖住"的观感
   document.body.classList.add('panel-open');    // 全局出口按钮（退出登录）也要让位
+  window.SFX&&SFX.panelOpen();
 }
 // 面板唯一出口：返回大世界
 function closePanel(){
@@ -614,6 +644,7 @@ function closePanel(){
   $('worldView').classList.remove('panel-open');
   document.body.classList.remove('panel-open');
   worldMap.active=true;                                         // 恢复地图
+  window.SFX&&SFX.panelClose();
 }
 
 /* ---- HUD 同步（大世界左上信息） ---- */
@@ -734,8 +765,8 @@ function renderHome(){
       <div class="hst"><em>装饰总等级</em><b>${cartLv+bedLv}</b><i>级</i></div>
     </div>
     <div class="home-note">升级可提升仓库容量与离线收益上限 · 每次升级费用递增，上限 Lv.20</div>`;
-  $('hcWarehouse').onclick=()=>{homeSub='warehouse';renderHome();};
-  $('hcIdle').onclick=()=>{homeSub='idle';renderHome();};
+  $('hcWarehouse').onclick=()=>{homeSub='warehouse';window.SFX&&SFX.tab();renderHome();};
+  $('hcIdle').onclick=()=>{homeSub='idle';window.SFX&&SFX.tab();renderHome();};
   body.querySelectorAll('.deco-item').forEach(el=>el.onclick=async()=>{
     const id=el.dataset.deco, name=id==='cart'?'手推车':'营地床';
     const lv=(id==='cart'?cartLv:bedLv)+1;
@@ -743,7 +774,7 @@ function renderHome(){
     try{
       const r=await api('/api/player/action',{userId:uid(),action:'home_decorate',itemId:id});
       if(r.state){state=r.state;syncHud();}
-      if(typeof SFX!=='undefined')SFX.level();
+      if(typeof SFX!=='undefined')SFX.build();
       toastModal('装饰升级',`${name} 提升至 Lv.${lv}（消耗 ${fmt(r.cost||0)} 金币）`);
       renderHome();
     }catch(e){
@@ -812,9 +843,10 @@ function renderDungeon(){
           if(r.state){state=r.state;syncHud();}
           hideModal();
           closePanel();
+          window.SFX&&SFX.dungeon();
           const mon={x:0,y:0,type:r.monsterId||d.mon,monId:r.monsterId||d.mon,name:d.name,elite:r.elite!=null?r.elite:d.elite,state:'idle',nodeId:'dungeon_'+d.id};
           doFight(mon);
-        }catch(e){ toastModal('无法进入',e.message); }
+        }catch(e){ window.SFX&&SFX.fail(); toastModal('无法进入',e.message); }
       };
     });
   });
@@ -878,10 +910,10 @@ function renderGuild(){
     try{
       const r=await api('/api/player/action',{userId:uid(),action:'guild_donate'});
       if(r.state){state=r.state;await refreshStats();syncHud();}
-      window.SFX&&SFX.chest();
+      window.SFX&&SFX.donate();
       toastModal('捐献成功','公会币 +50 · 经验 +60');
       renderGuild();
-    }catch(e){ toastModal('捐献失败',e.message); }
+    }catch(e){ window.SFX&&SFX.fail(); toastModal('捐献失败',e.message); }
   };
   body.querySelectorAll('.gs-buy').forEach(b=>{
     if(b.disabled)return;
@@ -889,10 +921,10 @@ function renderGuild(){
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'guild_buy',itemId:b.dataset.item});
         if(r.state){state=r.state;await refreshStats();syncHud();}
-        window.SFX&&SFX.chest();
+        window.SFX&&SFX.buy();
         toastModal('兑换成功',GUILD_SHOP.find(x=>x.id===b.dataset.item).name);
         renderGuild();
-      }catch(e){ toastModal('兑换失败',e.message); }
+      }catch(e){ window.SFX&&SFX.fail(); toastModal('兑换失败',e.message); }
     };
   });
 }
@@ -1010,7 +1042,7 @@ function renderRole(){
       <button class="big-btn" id="doTransfer">确认转职</button>`;
   }
   body.innerHTML=html;
-  body.querySelectorAll('[data-rtab]').forEach(el=>el.onclick=()=>{roleTab=el.dataset.rtab;window._bdDraft=null;renderRole();});
+  body.querySelectorAll('[data-rtab]').forEach(el=>el.onclick=()=>{roleTab=el.dataset.rtab;window._bdDraft=null;window.SFX&&SFX.tab();renderRole();});
   if(roleTab==='skill'){
     // 装配：点技能库
     body.querySelectorAll('.lib-item[data-skill]').forEach(el=>el.onclick=async()=>{
@@ -1020,17 +1052,18 @@ function renderRole(){
         try{
           const r=await api('/api/player/action',{userId:uid(),action:'unlock_skill',skillId:sid});
           if(r.state){state=r.state;syncHud();}
+          window.SFX&&SFX.rune();
           toastModal('技能解锁',CFG.skills.skills.find(s=>s.id===sid)?.name+' 已解锁（-300 钻石）');
           renderRole();
-        }catch(e){toastModal('解锁失败',e.message);}
+        }catch(e){window.SFX&&SFX.fail();toastModal('解锁失败',e.message);}
         return;
       }
       if(window._bdDraft.length>=4){toastModal('槽位已满','先卸下一个技能再装配');return;}
-      window._bdDraft.push(sid);renderRole();
+      window._bdDraft.push(sid);window.SFX&&SFX.rune();renderRole();
     });
     // 卸下：点槽位
     body.querySelectorAll('.skill-card[data-slot]').forEach(el=>el.onclick=()=>{
-      window._bdDraft.splice(parseInt(el.dataset.slot),1);renderRole();
+      window._bdDraft.splice(parseInt(el.dataset.slot),1);window.SFX&&SFX.unequip();renderRole();
     });
     // 提交 BD
     const sb=$('submitBD');
@@ -1039,9 +1072,10 @@ function renderRole(){
         const r=await api('/api/player/action',{userId:uid(),action:'submit_bd',slots:window._bdDraft});
         if(r.state){state=r.state;await refreshStats();syncHud();}
         window._bdDraft=null;
+        window.SFX&&SFX.config();
         toastModal('BD 已保存',(r.slots||[]).length+' 个技能已生效');
         renderRole();
-      }catch(e){toastModal('保存失败',e.message);}
+      }catch(e){window.SFX&&SFX.fail();toastModal('保存失败',e.message);}
     };
   }
   if(roleTab==='equip'){
@@ -1052,20 +1086,22 @@ function renderRole(){
       try{
         const r=await api('/api/player/action',{userId:uid(),action:act,itemId:b.dataset.eqid});
         if(r.state){state=r.state;await refreshStats();syncHud();}
+        window.SFX&&(act==='equip'?SFX.equip():SFX.unequip());
         toastModal(act==='equip'?'已穿戴':'已卸下',b.dataset.eqid);
         if(window.Quest&&state.equip)Quest.set('equip',state.equip.filter(x=>x.equipped).length);
         renderRole();
-      }catch(err){toastModal('操作失败',err.message);}
+      }catch(err){window.SFX&&SFX.fail();toastModal('操作失败',err.message);}
     });
     // 强化
     body.querySelectorAll('.eq-enh').forEach(b=>b.onclick=async()=>{
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'enhance',slot:b.dataset.slot});
         if(r.state){state=r.state;await refreshStats();syncHud();}
+        window.SFX&&SFX.forge();
         toastModal('强化成功',b.dataset.slot+' +'+(r.enhanceLevel||'?'));
         if(window.Quest)Quest.progress('enhance',1);
         renderRole();
-      }catch(err){toastModal('强化失败',err.message);}
+      }catch(err){window.SFX&&SFX.fail();toastModal('强化失败',err.message);}
     });
   }
   if(roleTab==='class'){
@@ -1078,8 +1114,9 @@ function renderRole(){
       try{
         const r=await api('/api/transfer',{userId:uid(),to:pick});
         if(r.state){state=r.state;await refreshStats();syncHud();}
+        window.SFX&&SFX.transfer();
         toastModal('转职成功',r.message||'装备属性已按新职业换算');renderRole();
-      }catch(e){toastModal('转职失败',e.message);}
+      }catch(e){window.SFX&&SFX.fail();toastModal('转职失败',e.message);}
     };
   }
 }
@@ -1116,10 +1153,11 @@ function renderWarehouse(){
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'enhance',slot:equipDetailSlot});
         if(r.state){state=r.state;await refreshStats();syncHud();}
+        window.SFX&&SFX.forge();
         toastModal('强化成功',equipDetailSlot+' 强化至 +'+(r.enhanceLevel||'?'));
         if(window.Quest)Quest.progress('enhance',1);
         renderWarehouse();
-      }catch(e){toastModal('强化失败',e.message);}
+      }catch(e){window.SFX&&SFX.fail();toastModal('强化失败',e.message);}
     };
     // 穿戴/卸下按钮
     const isEquipped=eq.some(x=>x.slot===equipDetailSlot&&x.equipped);
@@ -1132,8 +1170,9 @@ function renderWarehouse(){
         try{
           const r=await api('/api/player/action',{userId:uid(),action:isEquipped?'unequip':'equip',itemId:eObj.id});
           if(r.state){state=r.state;await refreshStats();syncHud();}
+          window.SFX&&(isEquipped?SFX.unequip():SFX.equip());
           toastModal(isEquipped?'已卸下':'已穿戴',eObj.id);renderWarehouse();
-        }catch(err){toastModal('操作失败',err.message);}
+        }catch(err){window.SFX&&SFX.fail();toastModal('操作失败',err.message);}
       };
       $('doEnhance').parentNode.appendChild(toggle);
     }
@@ -1180,7 +1219,7 @@ function renderWarehouse(){
       <button class="btn-gray" id="whDeposit">存入</button><button class="btn-gray" id="whWithdraw">取出</button>
     </div>`;
   body.querySelectorAll('#whFilter button').forEach(b=>b.onclick=()=>{
-    filter=b.dataset.f;
+    filter=b.dataset.f;window.SFX&&SFX.tab();
     body.querySelectorAll('#whFilter button').forEach(x=>x.classList.toggle('on',x===b));
     renderGrid();
   });
@@ -1190,9 +1229,10 @@ function renderWarehouse(){
     try{
       const r=await api('/api/player/action',{userId:uid(),action,itemId:id,qty});
       if(r.state){state=r.state;syncHud();}
+      window.SFX&&(action==='deposit'?SFX.bagIn():SFX.bagOut());
       toastModal(action==='deposit'?'存入成功':'取出成功',id+' x'+qty);
       renderPanel();
-    }catch(e){toastModal('操作失败',e.message);}
+    }catch(e){window.SFX&&SFX.fail();toastModal('操作失败',e.message);}
   };
   $('whDeposit').onclick=()=>whAction('deposit');
   $('whWithdraw').onclick=()=>whAction('withdraw');
@@ -1225,7 +1265,7 @@ function renderMap(){
     el.onclick=()=>{
       const wid=el.dataset.world;
       if(wid===cur)return;
-      if(unlocked.indexOf(wid)<0){toastModal('尚未解锁','请沿世界通道推进解锁 '+wid);return;}
+      if(unlocked.indexOf(wid)<0){window.SFX&&SFX.deny();toastModal('尚未解锁','请沿世界通道推进解锁 '+wid);return;}
       closePanel();
       travelTo({to:wid,requireLevel:0,label:wid});
     };
@@ -1243,13 +1283,13 @@ function renderIdle(){
     <div class="preview-box"><div class="pt">产出效率（每小时）</div><div class="sec-sub">经验 ~1,200 ｜ 金币 ~640 ｜ 材料 ~5</div></div>
     <div class="preview-box"><div class="pt">封顶时长</div><div class="sec-sub">8 小时（超出部分不再累计）</div></div>
     <button class="big-btn goldbtn" id="settleIdle">领取离线收益</button>`;
-  if(inHome)$('backToHome').onclick=()=>{homeSub=null;renderHome();};
+  if(inHome)$('backToHome').onclick=()=>{homeSub=null;window.SFX&&SFX.tab();renderHome();};
   $('settleIdle').onclick=async()=>{
     try{
       const r=await api('/api/idle/finalize',{userId:uid()});
       if(r.state){state=r.state;await refreshStats();syncHud();}
-      closePanel(); showIdleReward(r.result);
-    }catch(e){toastModal('结算失败',e.message);}
+      closePanel(); window.SFX&&SFX.settle(); showIdleReward(r.result);
+    }catch(e){window.SFX&&SFX.fail();toastModal('结算失败',e.message);}
   };
 }
 
@@ -1263,8 +1303,9 @@ function toastModal(title,sub){
 // 点击地图上的怪物 → 交战确认（单出口：交战进战斗 / 绕行回地图）
 function askEncounter(mon){
   if(view!=='world'||panel||battlePlaying)return;
-  currentMonster=mon;
   worldMap.active=false;
+  window.SFX&&SFX.alert();
+  currentMonster=mon;
   const lv=monsterLevel(mon), myLv=(state&&state.core&&state.core.level)||1;
   const d=lv-myLv;
   const risk=d>=5?['极度危险','r4','建议先练级或强化装备后再来']
@@ -1284,7 +1325,7 @@ function askEncounter(mon){
     <div class="divider"></div>
     <div class="enc-btns"><button class="${d>=3?'btn-orange':'btn-red'}" id="encFight">${d>=3?'强行挑战':'交 战'}</button><button class="btn-gray" id="encFlee">绕 行</button></div>`);
   $('encFight').onclick=()=>{ hideModal(); doFight(mon); };
-  $('encFlee').onclick=()=>{ hideModal(); currentMonster=null; worldMap.active=true; };
+  $('encFlee').onclick=()=>{ hideModal(); currentMonster=null; worldMap.active=true; window.SFX&&SFX.flee(); };
 }
 // 宝箱开启：调服务端权威接口入账（经验/金币/钻石/材料 → 存档）
 async function onChestOpened(chest){
@@ -1296,7 +1337,7 @@ async function onChestOpened(chest){
     if(r.state){state=r.state;await refreshStats();syncHud();}
   }catch(e){ reward=null; }
   if(reward&&window.Quest)Quest.progress('chest',1);
-  if(reward&&window.SFX)SFX.chest();
+  if(window.SFX){ if(reward)SFX.chest(); else SFX.deny(); }
   const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱'}[chest.tier]||'宝箱';
   setTimeout(()=>{
     const rw=reward||{exp:0,gold:0,gem:0,material:0};
@@ -1308,7 +1349,7 @@ async function onChestOpened(chest){
       <div class="reward-row"><span class="rk">钻石</span><span class="rv">+${fmt(rw.gem)}</span></div>
       <div class="reward-row"><span class="rk">材料</span><span class="rv">+${fmt(rw.material)}</span></div>
       <button class="big-btn" id="chestOk">收下 · 继续探索</button>`);
-    $('chestOk').onclick=()=>{ hideModal(); worldMap.active=true; if(panel)renderPanel(); };
+    $('chestOk').onclick=()=>{ hideModal(); worldMap.active=true; window.SFX&&SFX.coin(); if(panel)renderPanel(); };
   },520); // 等开箱动画播完
 }
 function showBattleResult(rep,mon){
@@ -1346,6 +1387,7 @@ function showBattleResult(rep,mon){
     hideModal();
     currentMonster=null;
     showView('world');
+    window.SFX&&(win?SFX.coin():SFX.panelClose());
   };  // 结算唯一出口 → 大世界
   const re=$('resEnhance');
   if(re)re.onclick=()=>{
@@ -1393,6 +1435,11 @@ function skillSlots(bd){
 async function playBattle(rep,mon,bd){
   battlePlaying=true;paused=false;
   currentMonster=mon;
+  // 上一场可能停在 die 姿态（战败倒地/怪物尸体），新战斗开始必须显式复位，
+  // 否则第一帧会出现"尸体站起来"或"英雄躺着出手"。
+  bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
+  if(battleHeroActor)battleHeroActor.play('idle');
+  if(battleMonActor)battleMonActor.play('idle');
   skillSlots(bd);
   $('battleLog').innerHTML='';
   $('monName').textContent=mon.name;
@@ -1402,35 +1449,47 @@ async function playBattle(rep,mon,bd){
   if(cdef&&cdef.icon&&$('btHeroFace'))$('btHeroFace').src=RES+'characters/cards/'+cdef.icon;
   $('autoTag').classList.remove('paused');$('autoTag').textContent='自动战斗中';$('btPause').textContent='暂停';
   showView('battle');
+  window.SFX&&SFX.battleStart();
   const hMax=Math.max(50,...rep.rounds.map(r=>r.heroHp));
   const mMax=Math.max(50,...rep.rounds.map(r=>r.monHp));
   bHp={hero:hMax,heroMax:hMax,mon:mMax,monMax:mMax};
   updateHp();
   logLine('sys',`服务端战报 seed=${rep.seed} · ${rep.rounds.length} 回合 · 自动战斗`);
+  const skills=CFG.skills.skills||[];
   for(const r of rep.rounds){
     while(paused && view==='battle') await sleep(120);
     if(view!=='battle') break;  // 中途退出登录则中止
     const roundNo=Math.min(r.n,30);
     $('roundVal').textContent=`${roundNo} / 30`;
     if(r.actor==='hero'){
+      const sk=skills.find(x=>x.id===r.action)||{};
+      const kind=sk.kind||'physical';
+      // 起手音：物理=挥砍，法术/治疗/增益=吟唱（不同音色，避免全用一个 hit）
+      if(kind==='physical') window.SFX&&SFX.slash();
+      else if(kind==='heal') window.SFX&&SFX.cast();
+      else if(kind==='shield') window.SFX&&SFX.shield();
+      else window.SFX&&SFX.cast();
       setBAnim('hero','attack',420);await sleep(150);
       if(r.damage>0){
         setBAnim('mon','hit',300);
         spawnFx('-'+Math.round(r.damage),858,430,'#ff6b6b');
-        window.SFX&&SFX.hit();
+        if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${r.skillName} → ${mon.name} -${Math.round(r.damage)}`);
       }else if(r.heal>0){
         spawnFx('+'+Math.round(r.heal),420,430,'#7fe0a0');
         window.SFX&&SFX.heal();
         logLine('hero',`R${r.n} ${r.skillName} → 恢复 +${Math.round(r.heal)}`);
       }else{
-        logLine('hero',`R${r.n} ${r.skillName}（增益/护盾）`);
+        if(kind==='buff'||kind==='debuff') window.SFX&&SFX.buff();
+        else if(kind==='shield') window.SFX&&SFX.shield();
+        logLine('hero',`R${r.n} ${r.skillName}（${kind==='shield'?'护盾':kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
       }
     }else{
+      window.SFX&&SFX.enemySlash();
       setBAnim('mon','attack',420);await sleep(150);
       setBAnim('hero','hit',300);
       spawnFx('-'+Math.round(r.damage),420,430,'#ff6b6b');
-      window.SFX&&SFX.hit();
+      window.SFX&&SFX.hurt();
       logLine('mon',`R${r.n} ${mon.name} → 英雄 -${Math.round(r.damage)}`);
     }
     bHp.hero=r.heroHp;bHp.mon=r.monHp;updateHp();
@@ -1439,8 +1498,16 @@ async function playBattle(rep,mon,bd){
   battlePlaying=false;
   if(view!=='battle') return;  // 已退出登录
   const win=rep.result==='win';
-  if(win){setBAnim('mon','die',1600);spawnFx('+经验',858,468,'#f0d590');spawnFx('+金币',858,506,'#ffd76b');}
-  else setBAnim('hero','die',600);
+  if(win){
+    setBAnim('mon','die',1600);
+    window.SFX&&SFX.victory();
+    spawnFx('+经验',858,468,'#f0d590');spawnFx('+金币',858,506,'#ffd76b');
+  }else{
+    // 600ms 只用于"HUD 提示条"的时间窗；角色动作本身是非循环 die，会一直保持倒地，
+    // 直到下一次 playBattle 或离开战斗时复位（见 drawBattle 的 die 保护）。
+    setBAnim('hero','die',600);
+    window.SFX&&SFX.death();
+  }
   const toast=document.createElement('div');
   toast.className='toast-win'+(win?'':' lose');toast.textContent=win?'战 斗 胜 利':'战 斗 失 败';
   $('fxLayer').appendChild(toast);setTimeout(()=>toast.remove(),1200);
@@ -1504,7 +1571,7 @@ async function doFight(mon){
   }catch(e){toastModal('交战失败',e.message);worldMap.active=true;}
 }
 // 战斗控制
-$('btPause').onclick=()=>{paused=!paused;$('btPause').textContent=paused?'继续':'暂停';$('autoTag').classList.toggle('paused',paused);$('autoTag').textContent=paused?'已暂停':'自动战斗中';};
+$('btPause').onclick=()=>{paused=!paused;$('btPause').textContent=paused?'继续':'暂停';$('autoTag').classList.toggle('paused',paused);$('autoTag').textContent=paused?'已暂停':'自动战斗中';window.SFX&&(paused?SFX.pause():SFX.resume());};
 // B05：战斗/面板期间页面失焦自动暂停战斗时钟，防止后台演出
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden && battlePlaying && !paused){

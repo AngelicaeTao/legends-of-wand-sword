@@ -642,3 +642,15 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .world-map-item .sec-sub{font-size:11px}
 .world-map-item .wm-lock{width:30px;height:30px;border-radius:9px}
 .world-map-item .wm-lock svg{width:14px;height:14px}
+
+/* ---------- v1.9.6 公会页：收紧纵向间距，让 5 名成员 + 底部说明一屏放下 ---------- */
+.guild-hero{padding:11px 13px;margin-bottom:10px}
+.gh-emblem{width:50px;height:50px}
+.gh-sub{margin:3px 0 5px}
+.guild-donate{padding:10px 12px}
+.panel-body:has(.guild-hero) .sec-title{margin:4px 0 7px;padding-bottom:4px}
+.guild-shop{gap:7px}
+.gs-item{padding:8px 8px 7px;gap:5px}
+.guild-members{gap:3px}
+.guild-members .gm-row{padding:4px 10px;font-size:11.5px}
+.panel-body:has(.guild-hero) .home-note{margin-top:8px}
