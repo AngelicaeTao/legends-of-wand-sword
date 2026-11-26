@@ -141,7 +141,10 @@
       ctx.translate(x + root.dx * scale, y - root.dy * scale);
       if (root.rot) ctx.rotate(root.rot * Math.PI / 180);
       ctx.scale((opts.dir || 1) * root.sx, root.sy);
-      ctx.globalAlpha = Math.max(0, Math.min(1, (tf._alpha ?? 1) * root.alpha));
+      const a0 = Math.max(0, Math.min(1, (tf._alpha ?? 1) * root.alpha));
+      // 近透明时不绘制：极小 alpha + 极扁 sy 的组合会被采样成一条杂色横带
+      if (a0 < 0.02 || Math.abs(root.sy) < 0.04) { ctx.restore(); return; }
+      ctx.globalAlpha = a0;
       const flashAll = (tf._flash || 0) > 0;
       const names = this.entry.sortedParts || Object.keys(parts); // 预排序，免每帧 sort
       for (const name of names) {

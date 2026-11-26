@@ -176,6 +176,7 @@ let bFx=[];
 let battleHeroActor=null, battleMonActor=null, battleMonBundle='';
 function setBAnim(who,s,dur){
   bAnim[who]=s;bAnim[who+'Until']=performance.now()+(dur||0);
+  bAnim[who+'Start']=performance.now();
   if(who==='hero'&&battleHeroActor)battleHeroActor.play(s);
   if(who==='mon'&&battleMonActor)battleMonActor.play(s);
 }
@@ -306,11 +307,25 @@ function drawBattle(t,now){
   if(curBAnim('hero')==='idle'&&battleHeroActor&&battleHeroActor.state!=='idle')battleHeroActor.play('idle');
   if(curBAnim('mon')==='idle'&&battleMonActor&&battleMonActor.state!=='idle')battleMonActor.play('idle');
   // 站位：英雄 420 / 怪物 860，脚底阴影贴合
-  cvb.fillStyle='rgba(0,0,0,.34)';
+  // 怪物死亡：die 动画 500ms 内压扁到 sy=0.1 —— 若继续绘制，最后一帧会被采样成
+  // 一条杂色横带（玩家看到"闪一帧石堆像素"）。380ms 后直接收掉 actor，用塌陷尘团替代。
+  const monDieT=(bAnim.mon==='die')?(now-(bAnim.monStart||now)):-1;
+  const monFade=monDieT>=0?Math.max(0,1-monDieT/380):1;
+  const monVisible=monFade>0.02;
+  cvb.fillStyle='rgba(0,0,0,'+(0.34*monFade).toFixed(3)+')';
   cvb.beginPath();cvb.ellipse(420,566,54,14,0,0,7);cvb.fill();
-  cvb.beginPath();cvb.ellipse(858,566,58,15,0,0,7);cvb.fill();
+  if(monVisible){cvb.beginPath();cvb.ellipse(858,566,58,15,0,0,7);cvb.fill();}
   if(battleHeroActor)battleHeroActor.render(cvb,420,560,3.2,{});
-  if(battleMonActor)battleMonActor.render(cvb,858,558,currentMonster&&currentMonster.type==='boss_beetle'?3.8:3.2,{dir:-1});
+  if(battleMonActor&&monVisible)battleMonActor.render(cvb,858,558,currentMonster&&currentMonster.type==='boss_beetle'?3.8:3.2,{dir:-1});
+  if(monDieT>=0&&monFade<1){
+    // 塌陷收尾：贴地尘团扩散 + 淡出（替代被压扁的像素带）
+    const e=monDieT/700;
+    cvb.fillStyle='rgba(196,186,164,'+(0.26*(1-e)).toFixed(3)+')';
+    for(let i=0;i<7;i++){
+      const a=i*0.9+e*1.2, r=(18+e*46)*(0.55+((i*37)%40)/60);
+      cvb.beginPath();cvb.ellipse(858+Math.cos(a)*r*1.5,566+Math.sin(a)*r*0.28,r*0.62,r*0.26,0,0,7);cvb.fill();
+    }
+  }
   bFx=bFx.filter(f=>now-f.born<620);
   for(const f of bFx){
     const age=(now-f.born)/620;
@@ -337,7 +352,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.4';
+const BUILD_VER='v1.9.5';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -609,6 +624,7 @@ function fmt(n){return Number(n||0).toLocaleString('zh-CN');}
 let _lastLv=0;
 function syncHud(){
   if(!state||!state.core)return;
+  window.__st=state;   // 调试钩子：自动化测试读取金币/家园等级（不影响玩法）
   const c=state.core;
   if(_lastLv&&c.level>_lastLv&&window.SFX)SFX.level();
   _lastLv=c.level;
@@ -683,33 +699,56 @@ function renderHome(){
   const body=$('panelBody');
   if(homeSub==='warehouse') return renderWarehouse(true);
   if(homeSub==='idle') return renderIdle(true);
-  const used=(state?.warehouse?.length)||12;
+  const used=(state?.warehouse?.length)||0;
   const homeInfo=state?.home||{cart:0,bed:0};
+  const cartLv=homeInfo.cart|0, bedLv=homeInfo.bed|0;
+  const capBase=200, capAdd=10, idleBase=8, idleAdd=6;
+  const cartCost=800*(cartLv+1), bedCost=1000*(bedLv+1);
+  const gold=state?.core?.gold||0;
+  const deco=(id,ico,name,lv,effect,effNext,cost,cls)=>`
+      <button class="deco-item ${cls}" data-deco="${id}" title="升级消耗 ${fmt(cost)} 金币">
+        <span class="deco-ico">${ico(40)}</span>
+        <span class="deco-name">${name} <em>Lv.${lv}</em></span>
+        <span class="deco-eff">${effect}</span>
+        <span class="deco-up ${gold>=cost?'':'no'}">${ICON.gold(11,'#f0c040')}${fmt(cost)}<i>→${effNext}</i></span>
+      </button>`;
   body.innerHTML=`
-    <div class="home-scene" style="position:relative;height:150px;border-radius:14px;margin-bottom:14px;background-image:linear-gradient(180deg,rgba(8,13,22,.35),rgba(8,13,22,.88)),url(${RES}v3/backgrounds/bg_explore_grassland.png);background-size:cover;background-position:center;border:1px solid #2a3a52;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;gap:36px;padding-bottom:10px">
-      <div class="deco-item" data-deco="cart" style="text-align:center;cursor:pointer"><div>${ICON.cart(38)}</div><div style="font-size:11px;color:#c9a227">手推车 Lv.${homeInfo.cart||0}</div></div>
-      <div class="deco-item" data-deco="bed" style="text-align:center;cursor:pointer"><div>${ICON.bed(38)}</div><div style="font-size:11px;color:#8fd0ff">营地床 Lv.${homeInfo.bed||0}</div></div>
+    <div class="home-scene" style="background-image:linear-gradient(180deg,rgba(8,13,22,.30),rgba(8,13,22,.90)),url(${RES}v3/backgrounds/bg_explore_grassland.png)">
+      ${deco('cart',ICON.cart,'手推车',cartLv,`仓库容量 +${cartLv*capAdd} 格`,`+${capAdd} 格`,cartCost,'dc-cart')}
+      ${deco('bed', ICON.bed, '营地床',bedLv, `挂机时长 +${bedLv*idleAdd}%`,`+${idleAdd}%`,bedCost,'dc-bed')}
     </div>
     <div class="home-cards">
       <button class="home-card hc-warehouse" id="hcWarehouse">
         <span class="hc-ico">${ICON.bag(26)}</span><span class="hc-title">仓库</span>
-        <span class="hc-desc">物品存放与整理</span><span class="hc-enter">进入</span>
+        <span class="hc-desc">已用 ${used} / ${capBase+cartLv*capAdd} 格</span><span class="hc-enter">进入</span>
       </button>
       <button class="home-card hc-idle" id="hcIdle">
         <span class="hc-ico">${ICON.hourglass(26)}</span><span class="hc-title">挂机收益</span>
-        <span class="hc-desc">离线领取与结算</span><span class="hc-enter">进入</span>
+        <span class="hc-desc">离线上限 ${(idleBase*(1+bedLv*idleAdd/100)).toFixed(1)}h · 可领取</span><span class="hc-enter">进入</span>
       </button>
     </div>
-    <div class="home-note">点击卡片进入子页 · 点击场景装饰可升级</div>
-    <div class="home-status">仓库：容量 ${used}/200 格　｜　挂机：已结算 8h 上限</div>`;
+    <div class="home-stats">
+      <div class="hst"><em>仓库容量</em><b>${capBase+cartLv*capAdd}</b><i>格</i></div>
+      <div class="hst"><em>挂机上限</em><b>${(idleBase*(1+bedLv*idleAdd/100)).toFixed(1)}</b><i>小时</i></div>
+      <div class="hst"><em>装饰总等级</em><b>${cartLv+bedLv}</b><i>级</i></div>
+    </div>
+    <div class="home-note">升级可提升仓库容量与离线收益上限 · 每次升级费用递增，上限 Lv.20</div>`;
   $('hcWarehouse').onclick=()=>{homeSub='warehouse';renderHome();};
   $('hcIdle').onclick=()=>{homeSub='idle';renderHome();};
   body.querySelectorAll('.deco-item').forEach(el=>el.onclick=async()=>{
+    const id=el.dataset.deco, name=id==='cart'?'手推车':'营地床';
+    const lv=(id==='cart'?cartLv:bedLv)+1;
+    const cost=r=>r; // 服务端定价，前端只展示
     try{
-      const r=await api('/api/player/action',{userId:uid(),action:'home_decorate',itemId:el.dataset.deco});
+      const r=await api('/api/player/action',{userId:uid(),action:'home_decorate',itemId:id});
       if(r.state){state=r.state;syncHud();}
-      toastModal('装饰升级',el.dataset.deco+' 等级提升');renderHome();
-    }catch(e){toastModal('升级失败',e.message);}
+      if(typeof SFX!=='undefined')SFX.level();
+      toastModal('装饰升级',`${name} 提升至 Lv.${lv}（消耗 ${fmt(r.cost||0)} 金币）`);
+      renderHome();
+    }catch(e){
+      if(typeof SFX!=='undefined')SFX.fail();
+      toastModal('升级失败',e.message);
+    }
   });
 }
 
@@ -756,6 +795,10 @@ function renderDungeon(){
                        <div class="dgs"><em>已解锁</em><b>${open} / ${dungeons.length}</b></div>
                        <div class="dgs"><em>主要产出</em><b>材料 · 装备 · 强化石</b></div>`;})()}
       </div>
+      <div class="dg-reset">${ICON.hourglass(13,'#f0d590')}<span>距离每日次数重置 <b>${(()=>{
+        const now=new Date(); const t=new Date(now); t.setHours(24,0,0,0);
+        const m=Math.floor((t-now)/60000); return Math.floor(m/60)+' 小时 '+(m%60)+' 分';
+      })()}</b></span></div>
       <div class="home-note">每日 0 点重置次数 · 结算后返回列表 · 战败不扣次数</div>`;
     body.querySelectorAll('.di-enter').forEach(btn=>{
       if(btn.disabled)return;
@@ -1213,7 +1256,7 @@ function renderIdle(){
    弹窗（遇怪 / 结算 / 收益 / 提示）
    ============================================================ */
 function toastModal(title,sub){
-  showModal(`<h2>${title}</h2><div class="msub">${sub||''}</div><button class="big-btn" id="toastOk">确定</button>`);
+  showModal(`<h2>${title}</h2><div class="msub">${sub||''}</div><button class="big-btn goldbtn" id="toastOk">确定</button>`);
   $('toastOk').onclick=()=>{ hideModal(); if(view==='world'&&panel) renderPanel(); };
 }
 // 点击地图上的怪物 → 交战确认（单出口：交战进战斗 / 绕行回地图）
@@ -1221,10 +1264,24 @@ function askEncounter(mon){
   if(view!=='world'||panel||battlePlaying)return;
   currentMonster=mon;
   worldMap.active=false;
+  const lv=monsterLevel(mon), myLv=(state&&state.core&&state.core.level)||1;
+  const d=lv-myLv;
+  const risk=d>=5?['极度危险','r4','建议先练级或强化装备后再来']
+            :d>=3?['很强','r3','建议先去打普通怪提升等级']
+            :d>=1?['有挑战','r2','注意血量，战败不扣次数']
+            :d>=-1?['势均力敌','r1','可以一试']
+            :['轻松','r0','适合练级'];
+  const power=heroStats&&heroStats.power?heroStats.power:((state&&state.core&&state.core.battlePower)||0);
   showModal(`<h2>遭遇 ${mon.name}！</h2>
     <div class="msub">怪物进入警戒范围 · 是否交战？<br>战胜后有概率掉落宝箱</div>
+    <div class="enc-foe">
+      <div class="ef-row"><span>怪物等级</span><b>Lv.${lv}</b></div>
+      <div class="ef-row"><span>你的等级</span><b>Lv.${myLv}</b></div>
+      <div class="ef-row"><span>我方战力</span><b>${fmt(power)}</b></div>
+      <div class="ef-risk ${risk[1]}">${risk[0]}<i>${risk[2]}</i></div>
+    </div>
     <div class="divider"></div>
-    <div class="enc-btns"><button class="btn-red" id="encFight">交 战</button><button class="btn-gray" id="encFlee">绕 行</button></div>`);
+    <div class="enc-btns"><button class="${d>=3?'btn-orange':'btn-red'}" id="encFight">${d>=3?'强行挑战':'交 战'}</button><button class="btn-gray" id="encFlee">绕 行</button></div>`);
   $('encFight').onclick=()=>{ hideModal(); doFight(mon); };
   $('encFlee').onclick=()=>{ hideModal(); currentMonster=null; worldMap.active=true; };
 }
@@ -1266,8 +1323,19 @@ function showBattleResult(rep,mon){
       <div class="reward-row"><span class="rk">${ICON.gold(14,'#f0c040')}<em>金币</em></span><span class="rv">+${fmt(rep.gold)}</span></div>
       ${drops}
       <button class="big-btn goldbtn" id="resBtn">领取奖励 · 返回大世界</button>`:`
-      <div class="ghost-line">变强指引<br>① 强化装备　② 调整技能 BD　③ 转职</div>
-      <button class="big-btn" id="resBtn">返回大世界</button>`}`);
+      ${(()=>{
+        const last=(rep.rounds||[])[(rep.rounds||[]).length-1]||{};
+        const left=last.monHp!=null&&last.monHp>0?Math.round(last.monHp/(Math.max(1,...(rep.rounds||[]).map(r=>r.monHp)))*100):0;
+        const rl=monsterLevel(mon), myLv=(state&&state.core&&state.core.level)||1;
+        return `<div class="fail-hint">
+          <div class="fh-row"><span>怪物剩余</span><b>${left}%</b></div>
+          <div class="fh-row"><span>战斗回合</span><b>${(rep.rounds||[]).length}</b></div>
+          <div class="fh-row"><span>等级差</span><b>${rl-myLv>0?'-'+Math.abs(rl-myLv):'+'+Math.abs(rl-myLv)}</b></div>
+        </div>
+        <div class="ghost-line">差距主要来自 <em>等级</em> 与 <em>装备强化</em><br>建议：先击杀同区域普通怪练级，或强化武器后再战</div>`;
+      })()}
+      <button class="big-btn" id="resBtn">返回大世界</button>
+      <button class="ghost-btn" id="resEnhance">去强化装备 →</button>`}`);
   $('resBtn').onclick=()=>{
     // 胜利：怪物从世界点位消失（服务端权威冷却）+ 本地掉落宝箱动画
     if(win && currentMonster){
@@ -1278,6 +1346,12 @@ function showBattleResult(rep,mon){
     currentMonster=null;
     showView('world');
   };  // 结算唯一出口 → 大世界
+  const re=$('resEnhance');
+  if(re)re.onclick=()=>{
+    hideModal();currentMonster=null;showView('world');
+    roleTab='equip';openPanel('role');
+    setTimeout(()=>{const b=document.querySelector('[data-tab="equip"],.tab.on');if(b)b.scrollIntoView({block:'nearest'});},260);
+  };
 }
 function showIdleReward(res){
   showModal(`<h2>离线收益</h2>
@@ -1322,10 +1396,7 @@ async function playBattle(rep,mon,bd){
   $('battleLog').innerHTML='';
   $('monName').textContent=mon.name;
   const lvTag=$('monLvTag');
-  if(lvTag){
-    const wl=(CFG.worlds.worlds.find(w=>w.id===worldMap.worldId)||{}).level||1;
-    lvTag.textContent='Lv.'+Math.max(1,wl+(mon.elite?4:0)+(mon.type==='boss_beetle'?8:0));
-  }
+  if(lvTag)lvTag.textContent='Lv.'+monsterLevel(mon);
   const cdef=CFG.classes.classes.find(x=>x.id===(state&&state.core&&state.core.classId));
   if(cdef&&cdef.icon&&$('btHeroFace'))$('btHeroFace').src=RES+'characters/cards/'+cdef.icon;
   $('autoTag').classList.remove('paused');$('autoTag').textContent='自动战斗中';$('btPause').textContent='暂停';
@@ -1367,7 +1438,7 @@ async function playBattle(rep,mon,bd){
   battlePlaying=false;
   if(view!=='battle') return;  // 已退出登录
   const win=rep.result==='win';
-  if(win){setBAnim('mon','die',600);spawnFx('+经验',858,468,'#f0d590');spawnFx('+金币',858,506,'#ffd76b');}
+  if(win){setBAnim('mon','die',1600);spawnFx('+经验',858,468,'#f0d590');spawnFx('+金币',858,506,'#ffd76b');}
   else setBAnim('hero','die',600);
   const toast=document.createElement('div');
   toast.className='toast-win'+(win?'':' lose');toast.textContent=win?'战 斗 胜 利':'战 斗 失 败';
@@ -1412,13 +1483,19 @@ document.querySelectorAll('.nav-badge').forEach(b=>b.onclick=()=>openPanel(b.dat
 // 面板唯一出口
 $('panelBack').onclick=closePanel;
 $('panelShade').onclick=closePanel;
+/* 怪物等级：世界等级 + 档位加成。原实现精英 +4 / BOSS +8，导致 1 级世界里的精英
+   直接是 Lv.5 —— 玩家 85 血、怪 213 血，4 秒必败且事前毫无预警。改 +2 / +5。 */
+function monsterLevel(mon){
+  const wl=(CFG.worlds.worlds.find(w=>w.id===worldMap.worldId)||{}).level||1;
+  const add=mon.type==='boss_beetle'?5:(mon.elite?2:0);
+  return Math.max(1,Math.min(60,wl+add));
+}
 // 交战：服务端权威结算 → 战斗演出（由 askEncounter 的"交战"按钮触发）
 async function doFight(mon){
   if(view!=='world'||panel||battlePlaying)return;
   try{
     const bd=(state&&state.skills&&state.skills.slots)||['slash'];
-    const worldLv=(CFG.worlds.worlds.find(w=>w.id===worldMap.worldId)||{}).level||1;
-    const monLv=Math.max(1,Math.min(60,worldLv+(mon.elite?4:0)+(mon.type==='boss_beetle'?8:0)));
+    const monLv=monsterLevel(mon);
     const bundle=await api('/api/battle/fight',{userId:uid(),bd,monsterId:mon.monId||mon.type,monsterLv:monLv,elite:mon.elite?'elite':''});
     if(bundle.state){state=bundle.state;await refreshStats();syncHud();}
     currentReport=bundle.report;

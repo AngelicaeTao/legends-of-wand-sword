@@ -73,6 +73,42 @@ const P={
     '000000004400000000',
     '000000004400000000'
   ],
+  treeUmbrella:[
+    '000000000000000000',
+    '000003333333300000',
+    '000332222222233000',
+    '0032221111122222300',
+    '0322111111111122230',
+    '3221111111111111223',
+    '0322111111111122230',
+    '0032221111122222300',
+    '000332222222233000',
+    '000003333333300000',
+    '000000004400000000',
+    '000000044440000000',
+    '000000004400000000',
+    '000000004400000000',
+    '000000004400000000',
+    '000000044440000000'
+  ],
+  treeBare:[
+    '0000000000000000',
+    '0000044000000000',
+    '0000444400000000',
+    '0000444440000000',
+    '0000444440000000',
+    '0044444444000000',
+    '0044444444400000',
+    '0004444444440000',
+    '0000444444444000',
+    '0000044444444000',
+    '0000004444400000',
+    '0000000444000000',
+    '0000000444000000',
+    '0000000444000000',
+    '0000000444000000',
+    '0000000444000000'
+  ],
   rock:[
     '0000000000000000',
     '0000003333000000',
@@ -213,11 +249,12 @@ function stamp(g,rows,x,y,cell,colorOf){
 }
 /* 树：阴影 + 图案 + 树干，size=整体像素高 */
 function drawTree(g,P0,pal,x,y,size,kind,flip,dark,variant){
-  const pat=kind===2?P.pine:(kind===1?P.treeRound:P.tree);
+  const pat=kind===2?P.pine:(kind===1?P.treeRound:kind===3?P.treeUmbrella:kind===4?P.treeBare:P.tree);
   const ic=Math.max(1,Math.round(size/pat.length));
   // 落地阴影：树冠越大阴影越宽，压住林下地面，形成纵深
   g.fillStyle='rgba(10,24,12,'+(dark?0.42:0.34)+')';
-  g.beginPath();g.ellipse(x+ic*4,y+ic*1.5,ic*pat[0].length*0.42,ic*2.2,0,0,Math.PI*2);g.fill();
+  const shk=kind===4?0.42:1;   // 枯树枝干细，阴影不该有满冠那么宽
+  g.beginPath();g.ellipse(x+ic*4,y+ic*1.5,ic*pat[0].length*0.42*shk,ic*2.2*shk,0,0,Math.PI*2);g.fill();
   const w=pat[0].length;
   const x0=Math.round(x-ic*w/2);
   const y0=Math.round(y-size+ic*1.5);
@@ -265,6 +302,16 @@ function drawGrassTuft(g,rnd,pal,x,y){
   g.fillRect(Math.round(x-5),Math.round(y),10,2);
 }
 
+/* 树种配比（按世界主题）：0 阔叶 / 1 圆冠 / 2 松 / 3 伞形 / 4 枯树
+   放在模块级：原实现每棵树都重建一次对象数组，一个装饰块上百棵树白造上百个数组 */
+const TREE_MIX={
+  grassland:[[0,.44],[1,.22],[2,.12],[3,.22]],
+  forest:   [[0,.46],[1,.16],[2,.34],[3,.04]],
+  desert:   [[3,.44],[0,.28],[4,.22],[2,.06]],
+  snow:     [[2,.46],[1,.20],[4,.26],[0,.08]],
+  cave:     [[0,.40],[2,.30],[1,.18],[4,.12]],
+  arena:    [[0,.34],[1,.26],[4,.26],[2,.14]]
+};
 function DecoLayer(worldId,themeKey){
   this.worldId=worldId||'W1';
   this.themeKey=themeKey||'grassland';
@@ -309,7 +356,11 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
       const p=edge?0.92:near?0.55:0.3;
       if(rnd()>p)continue;
       const size=edge?(104+rnd()*56):near?(92+rnd()*46):(78+rnd()*36);
-      const kind=rnd()<0.62?0:(rnd()<0.55?1:2);
+      // 树种按世界主题分配（草原阔叶+伞形 / 森林阔叶+松 / 沙漠伞形+枯树 / 雪原松+枯树）
+      const mix=TREE_MIX[th]||TREE_MIX.grassland;
+      let kind=mix[0][0], acc=0;
+      const roll=rnd();
+      for(let mi=0;mi<mix.length;mi++){ if(roll<acc+mix[mi][1]){kind=mix[mi][0];break;} acc+=mix[mi][1]; }
       const flip=rnd()<0.5;
       const dark=dist>44;
       const variant=Math.floor(rnd()*4);
@@ -382,7 +433,7 @@ DecoLayer.prototype.bake=function(tx,ty,VW,VH,walk,isWater,isPaved){
     const fcol=[pal[5],'#e8a0b8','#e9c46a'][Math.floor(rnd()*3)];
     stamp(g,P.flower,Math.round(x),Math.round(y-14),3,ch=>ch==='5'?fcol:(pal[ch]||pal[3]));
   }
-  for(let i=0;i<6;i++){
+  for(let i=0;i<3;i++){
     const x=rnd()*VW, y=rnd()*VH;
     if(!walk(ox+x,oy+y))continue;
     if(isPv(ox+x,oy+y))continue;      // 石板上不放浅色碎石（会变成扎眼白点）

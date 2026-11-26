@@ -421,14 +421,36 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		p.GainExp(rw.Exp)
 		extra["reward"] = map[string]int{"gold": rw.Gold, "gem": rw.Gem, "exp": rw.Exp, "material": rw.Mat}
 	case "home_decorate":
-		// 家园装饰（占位升级：记录到 Home，服务端权威）
+		// 家园装饰升级（服务端权威：定价 + 扣费 + 等级上限，前端只报 itemId）
 		item := q.ItemID
+		var cost, lv int
 		switch item {
-		case "cart": p.Home.Cart++
-		case "bed": p.Home.Bed++
-		default: http.Error(w, "未知装饰", 400); return
+		case "cart":
+			lv = p.Home.Cart
+			cost = 800 * (lv + 1) // 800/1600/2400...
+		case "bed":
+			lv = p.Home.Bed
+			cost = 1000 * (lv + 1)
+		default:
+			http.Error(w, "未知装饰", 400)
+			return
 		}
-		p.Logs = append(p.Logs, store.LogEntry{Event: fmt.Sprintf("家园装饰升级：%s", item)})
+		if lv >= 20 {
+			http.Error(w, "已达最高等级", 409)
+			return
+		}
+		if p.Core.Gold < cost {
+			http.Error(w, fmt.Sprintf("金币不足（需 %d）", cost), 400)
+			return
+		}
+		p.Core.Gold -= cost
+		if item == "cart" {
+			p.Home.Cart++
+		} else {
+			p.Home.Bed++
+		}
+		extra["cost"] = cost
+		p.Logs = append(p.Logs, store.LogEntry{Event: fmt.Sprintf("家园装饰升级：%s Lv.%d（-%d 金币）", item, lv+1, cost)})
 	default:
 		http.Error(w, "未知操作："+q.Action, 400)
 		return

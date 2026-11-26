@@ -153,7 +153,7 @@ input{font-family:inherit}
 .panel-head .sub{font-size:12px;color:#5a3f0d}
 .panel-back{width:34px;height:34px;padding:0;border-radius:50%;background:rgba(43,29,5,.5);border:1px solid rgba(217,180,91,.5);color:#f0d590;font-size:22px;font-weight:700;line-height:32px;text-align:center}
 .panel-back:hover{background:rgba(43,29,5,.85);border-color:#f0d590}
-.panel-body{flex:1;overflow-y:scroll;overflow-x:hidden;padding:18px 20px;scrollbar-width:thin}
+.panel-body{flex:1;overflow-y:scroll;overflow-x:hidden;padding:18px 20px 26px;scrollbar-width:thin}
 .panel-body::-webkit-scrollbar{width:6px}
 .panel-body::-webkit-scrollbar-thumb{background:rgba(217,180,91,.4);border-radius:3px}
 /* 角色面板 tab */
@@ -417,15 +417,17 @@ input{font-family:inherit}
 .hero-portrait{width:76px;height:96px;border-radius:10px;overflow:hidden;flex:0 0 auto;
   background:radial-gradient(circle at 50% 30%,#2a3a56,#101828);border:1px solid rgba(217,180,91,.4);
   display:flex;align-items:center;justify-content:center}
-.hero-portrait img{width:100%;height:100%;object-fit:cover;image-rendering:pixelated;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6))}
+.hero-portrait img{width:100%;height:100%;object-fit:cover;object-position:50% 42%;
+  image-rendering:pixelated;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6));
+  transform:scale(1.95);transform-origin:50% 42%}   /* 只取卡面人物头肩，不再露出卡片边框与 MAGE 字样 */
 .hero-brief{flex:1;min-width:0}
 .hb-name{font-size:16px;font-weight:800;color:#f4ead0;letter-spacing:.5px;display:flex;align-items:baseline;gap:8px}
 .hb-name em{font-style:normal;font-size:11px;color:#8fa0b8;font-weight:600;letter-spacing:0}
 .hb-lv{font-size:13px;color:#f0d590;font-weight:800;margin:5px 0 7px;display:flex;align-items:center;gap:8px}
 .hb-lv span{font-size:10.5px;color:#8fa0b8;font-weight:600}
-.hb-exp{position:relative;height:12px;border-radius:7px;background:rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(255,255,255,.12)}
+.hb-exp{position:relative;height:15px;border-radius:8px;background:rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(255,255,255,.12)}
 .hb-exp i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#4fa3e3,#7fd0ff);transition:width .3s}
-.hb-exp span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;color:#fff;letter-spacing:.3px;
+.hb-exp span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;letter-spacing:.3px;
   text-shadow:0 1px 0 rgba(0,0,0,.9),0 0 5px rgba(0,0,0,.8)}
 .hero-power{flex:0 0 auto;text-align:center;padding:6px 10px;border-radius:10px;background:rgba(217,180,91,.12);border:1px solid rgba(217,180,91,.4)}
 .hero-power em{display:block;font-style:normal;font-size:9.5px;color:#c9a227;letter-spacing:2px}
@@ -447,7 +449,6 @@ input{font-family:inherit}
 .eq-btn.gold{color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);border-color:#f0d590;box-shadow:0 2px 0 #8a641f}
 
 /* ---------- v1.9 技能卡 / 动态列表 / 头像裁切 ---------- */
-.hero-portrait img{width:100%;height:100%;object-fit:cover;transform:scale(1.34);transform-origin:50% 48%}
 /* 装备概览 4 槽（角色信息页） */
 .qeq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
 .qeq{padding:10px 8px 9px;border-radius:11px;text-align:center;background:rgba(255,255,255,.04);
@@ -566,3 +567,71 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .dungeon-item .di-art{position:absolute;right:-14px;bottom:-26px;opacity:.12;transform:rotate(-8deg);pointer-events:none;
   color:var(--dc,#5b8f4a)}
 .dungeon-item .di-art svg{width:132px;height:132px;stroke:var(--dc,#5b8f4a)}
+/* ---------- v1.9.5 家园页：装饰升级卡 + 数据条（补底部留白） ---------- */
+.home-scene{position:relative;height:186px;border-radius:14px;margin-bottom:14px;background-size:cover;
+  background-position:center;border:1px solid #2a3a52;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;gap:26px}
+.home-scene::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 105%,rgba(217,180,91,.14),transparent 62%)}
+.deco-item{position:relative;z-index:2;width:190px;padding:12px 12px 11px;text-align:center;cursor:pointer;
+  border-radius:13px;background:linear-gradient(160deg,rgba(20,29,46,.9),rgba(9,14,24,.94));
+  border:1.5px solid rgba(217,180,91,.32);color:#fff;font:inherit;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:transform .14s,border-color .14s,box-shadow .14s}
+.deco-item:hover{transform:translateY(-3px);border-color:#f0d590;box-shadow:0 10px 24px rgba(0,0,0,.5)}
+.deco-item:active{transform:translateY(0)}
+.deco-ico{height:44px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))}
+.dc-cart .deco-ico{color:#e8c661}
+.dc-bed .deco-ico{color:#8fd0ff}
+.deco-name{font-size:12.5px;font-weight:800;color:#e8eef8;letter-spacing:.4px}
+.deco-name em{font-style:normal;color:#f0d590;font-size:11px;margin-left:2px}
+.deco-eff{font-size:10.5px;color:#9fb0c8}
+.deco-up{margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:8px;
+  font-size:11px;font-weight:800;color:#ffe6a3;background:rgba(217,180,91,.16);border:1px solid rgba(217,180,91,.36)}
+.deco-up i{font-style:normal;color:#7fe0a0;font-weight:700}
+.deco-up.no{color:#8b93a3;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12)}
+.deco-up.no i{color:#8b93a3}
+.home-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.hst{padding:11px 14px;border-radius:11px;background:rgba(255,255,255,.045);
+  border:1px solid rgba(217,180,91,.2);display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
+.hst em{font-style:normal;font-size:10.5px;color:#8fa0b8;letter-spacing:1px;width:100%;margin-bottom:2px}
+.hst b{font-size:19px;color:#f0d590;font-weight:900;letter-spacing:.5px}
+.hst i{font-style:normal;font-size:11px;color:#8fa0b8}
+/* ---------- v1.9.5 遭遇战危险度 / 战败诊断 ---------- */
+.enc-foe{margin:14px 0 4px;padding:12px 14px;border-radius:11px;background:rgba(255,255,255,.045);
+  border:1px solid rgba(217,180,91,.22);display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+.ef-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#9fb0c8}
+.ef-row b{color:#e8eef8;font-size:14px;font-weight:800}
+.ef-risk{grid-column:1/-1;margin-top:2px;padding:8px 12px;border-radius:9px;font-size:13px;font-weight:800;
+  display:flex;align-items:center;gap:10px;letter-spacing:.5px}
+.ef-risk i{font-style:normal;font-size:11.5px;font-weight:600;opacity:.85;letter-spacing:0}
+.ef-risk.r0{color:#7fe0a0;background:rgba(60,160,100,.16);border:1px solid rgba(127,224,160,.35)}
+.ef-risk.r1{color:#c8e08a;background:rgba(130,160,60,.16);border:1px solid rgba(200,224,138,.32)}
+.ef-risk.r2{color:#f0d590;background:rgba(217,180,91,.16);border:1px solid rgba(240,213,144,.34)}
+.ef-risk.r3{color:#ffb46b;background:rgba(220,130,50,.16);border:1px solid rgba(255,180,107,.36)}
+.ef-risk.r4{color:#ff6b6b;background:rgba(200,60,60,.18);border:1px solid rgba(255,107,107,.38)}
+.btn-orange{background:linear-gradient(180deg,#ffcf8a,#e08a3c)!important;color:#2a1408!important;
+  box-shadow:0 4px 0 #8a5218!important}
+.fail-hint{margin:14px 0 6px;padding:12px 14px;border-radius:11px;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,107,107,.24);display:flex;flex-direction:column;gap:7px}
+.fh-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#9fb0c8}
+.fh-row b{color:#ffb46b;font-size:14px;font-weight:800}
+.ghost-line em{font-style:normal;color:#f0d590;font-weight:800}
+.ghost-btn{margin-top:9px;width:100%;padding:11px;border-radius:11px;cursor:pointer;font:inherit;
+  font-size:13.5px;font-weight:700;color:#c9d6e8;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.16);transition:background .15s,border-color .15s}
+.ghost-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(217,180,91,.4);color:#f0d590}
+/* v1.9.5 副本页：重置倒计时（填补列表下方空白，同时是玩家真正关心的信息） */
+.dg-reset{margin-top:12px;padding:12px 16px;border-radius:11px;display:flex;align-items:center;gap:9px;
+  font-size:12.5px;color:#9fb0c8;background:linear-gradient(90deg,rgba(217,180,91,.10),rgba(217,180,91,.02));
+  border:1px solid rgba(217,180,91,.22)}
+.dg-reset b{color:#f0d590;font-size:13.5px;font-weight:800;letter-spacing:.5px}
+/* ---------- v1.9.5 公会页：商店改横排三列，把高度让给成员列表 ---------- */
+.guild-shop{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.gs-item{flex-direction:column;align-items:center;text-align:center;gap:6px;padding:11px 8px 10px}
+.gs-item .gs-main{width:100%;text-align:center}
+.gs-item .gs-name{font-size:12px;line-height:1.35}
+.gs-item .gs-price{justify-content:center;margin-top:3px}
+.gs-item .gs-buy{width:100%;margin-top:2px}
+.guild-members{max-height:none;display:flex;flex-direction:column;gap:5px}
+.guild-members .gm-row{padding:5px 10px}
