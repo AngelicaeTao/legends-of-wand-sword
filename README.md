@@ -2,7 +2,7 @@
 
 服务端权威的 Web 放置手游（Playable 原型）：Go 单二进制权威服务 + 原生 Canvas 部件动画前端，单端口同源部署，支持多端接入。
 
-当前最新归档版本：**v1.9.39**（历史归档分支保留，按需拉取）。
+当前最新归档版本：**v1.9.44**（历史归档分支保留，按需拉取）。
 
 ## 分支说明
 
@@ -10,20 +10,20 @@
 
 | 分支 | 内容 | 体积 |
 |---|---|---:|
-| `code/v1.9.39` | **最新代码**：Go 服务端、Web 前端（10 个 JS/CSS/HTML）、配置文件、脚本、客户端骨架、交付文档（含 v1.9.x 验证截图） | 约 13 MB |
-| `assets/v1.9.39` | **最新美术**：按用途分类（地图 / 精灵 / 背景 / 卡面 / 图标 / 特效 / 旧版素材），含 v1.9.37 新增三怪部件包 | 约 6 MB |
-| `code/v1.7.5`…`code/v1.9.6` | 历史代码归档 | — |
-| `assets/v1.7.5`…`assets/v1.9.5` | 历史美术归档 | — |
+| `code/v1.9.44` | **最新代码**：Go 服务端、Web 前端（10 个 JS/CSS/HTML）、配置文件、脚本、客户端骨架、交付文档（含 v1.9.x 验证截图） | 约 13 MB |
+| `assets/v1.9.44` | **最新美术**：按用途分类（地图 / 精灵 / 背景 / 卡面 / 图标 / 特效 / 旧版素材），含 v1.9.37 三怪部件包 + v1.9.42 钻石/水晶箱部件包 | 约 7.8 MB |
+| `code/v1.7.5`…`code/v1.9.44` | 历史代码归档（含 code/v1.9.40 ~ code/v1.9.44 增量版本） | — |
+| `assets/v1.7.5`…`assets/v1.9.39` | 历史美术归档 | — |
 | `main` | 仓库说明与分支导航（本页） | — |
 
 ### 拉取方式
 
 ```bash
 # 代码
-git clone -b code/v1.9.39 https://github.com/AngelicaeTao/legends-of-wand-sword.git
+git clone -b code/v1.9.44 https://github.com/AngelicaeTao/legends-of-wand-sword.git
 
 # 资源（放入同一工作目录，按 assets 分支 README 的回填映射还原）
-git clone -b assets/v1.9.39 https://github.com/AngelicaeTao/legends-of-wand-sword.git assets
+git clone -b assets/v1.9.44 https://github.com/AngelicaeTao/legends-of-wand-sword.git assets
 ```
 
 ## 快速开始
@@ -34,7 +34,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 # 打开 http://localhost:3000
 ```
 
-资源需从 `assets/v1.7.5` 回填到 `web/res/`，映射表见 assets 分支的 `README.md`。
+资源需从 `assets/v1.9.44` 回填到 `web/res/`，映射表见 assets 分支的 `README.md`。
 
 ## 技术概览
 
@@ -47,6 +47,11 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 | 版本 | 内容 |
 |---|---|
+| v1.9.44 | 装备升品质入口移入强化工坊（升品栏+品质进阶+消耗展示），仓库 ⬆ 角标移除 |
+| v1.9.43 | 高等级怪物削峰（成长公式指数改线性）、Boss 双重强化修复、Boss 掉落死循环护栏修复 |
+| v1.9.42 | 怪物参照角色基准再削 30%、装备爆率 0.45/0.85、钻石箱水晶箱、品质 8 档（彩虹/暗影/混沌）+ 升品、点玩家查档案 + 在线玩家列表 |
+| v1.9.41 | 满血检测修复、存档内存缓存 + 异步落盘提速、掉率与消耗调整、分解得材料 + 批量分解 |
+| v1.9.40 | 怪物强度下调、仓库装备分解、法师持续回血（HoT）、战士格挡持续减伤（DR） |
 | v1.9.39 | 公会界面大改（服务端权威分流：已加入直接进我的公会，未加入显示搜索页）、怪物贴图与名字一致修复、战斗日志竖排修复 |
 | v1.9.38 | 武器分系：战士/法师两套装备（跨系不可穿、掉落按职业、老档自动迁移） |
 | v1.9.37 | 怪物扩充（毒液史莱姆/骷髅弓手/血蝙蝠）、回血技能削弱、上下移动不转向、背包药水点击即喝 |
