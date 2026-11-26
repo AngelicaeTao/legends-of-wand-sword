@@ -1,0 +1,363 @@
+{
+  "bundle": "char_hero_mage",
+  "format": "parted_actions_v1",
+  "states": {
+    "idle": {
+      "fps": 6,
+      "loop": true,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 250,
+          "parts": {
+            "cape": {
+              "rot": -3
+            },
+            "head": {
+              "dy": 1
+            },
+            "hat": {
+              "dy": 1
+            }
+          }
+        },
+        {
+          "t": 500,
+          "parts": {}
+        },
+        {
+          "t": 750,
+          "parts": {
+            "cape": {
+              "rot": 3
+            },
+            "head": {
+              "dy": -1
+            },
+            "hat": {
+              "dy": -1
+            }
+          }
+        },
+        {
+          "t": 1000,
+          "parts": {}
+        }
+      ]
+    },
+    "walk": {
+      "fps": 12,
+      "loop": true,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {
+            "leg_l": {
+              "rot": 18
+            },
+            "leg_r": {
+              "rot": -18
+            },
+            "arm_l": {
+              "rot": -15
+            },
+            "arm_r": {
+              "rot": 15
+            },
+            "body": {
+              "dy": 1
+            }
+          }
+        },
+        {
+          "t": 83,
+          "parts": {
+            "leg_l": {
+              "rot": 9
+            },
+            "leg_r": {
+              "rot": -9
+            },
+            "arm_l": {
+              "rot": -7
+            },
+            "arm_r": {
+              "rot": 7
+            },
+            "body": {
+              "dy": 0
+            }
+          }
+        },
+        {
+          "t": 167,
+          "parts": {
+            "leg_l": {
+              "rot": 0
+            },
+            "leg_r": {
+              "rot": 0
+            },
+            "arm_l": {
+              "rot": 0
+            },
+            "arm_r": {
+              "rot": 0
+            },
+            "body": {
+              "dy": 1
+            }
+          }
+        },
+        {
+          "t": 250,
+          "parts": {
+            "leg_l": {
+              "rot": -18
+            },
+            "leg_r": {
+              "rot": 18
+            },
+            "arm_l": {
+              "rot": 15
+            },
+            "arm_r": {
+              "rot": -15
+            },
+            "body": {
+              "dy": 0
+            }
+          }
+        },
+        {
+          "t": 333,
+          "parts": {
+            "leg_l": {
+              "rot": -9
+            },
+            "leg_r": {
+              "rot": 9
+            },
+            "arm_l": {
+              "rot": 7
+            },
+            "arm_r": {
+              "rot": -7
+            },
+            "body": {
+              "dy": 1
+            }
+          }
+        },
+        {
+          "t": 417,
+          "parts": {}
+        },
+        {
+          "t": 500,
+          "parts": {
+            "leg_l": {
+              "rot": 18
+            },
+            "leg_r": {
+              "rot": -18
+            },
+            "arm_l": {
+              "rot": -15
+            },
+            "arm_r": {
+              "rot": 15
+            },
+            "body": {
+              "dy": 1
+            }
+          }
+        }
+      ]
+    },
+    "attack": {
+      "fps": 12,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 83,
+          "parts": {
+            "arm_r": {
+              "rot": -35
+            },
+            "staff": {
+              "rot": -30
+            },
+            "body": {
+              "rot": -4
+            }
+          }
+        },
+        {
+          "t": 167,
+          "parts": {
+            "arm_r": {
+              "rot": 25
+            },
+            "staff": {
+              "rot": 40
+            },
+            "body": {
+              "rot": 5
+            },
+            "hat": {
+              "rot": 3
+            }
+          }
+        },
+        {
+          "t": 250,
+          "parts": {
+            "arm_r": {
+              "rot": 10
+            },
+            "staff": {
+              "rot": 15
+            },
+            "body": {
+              "rot": 2
+            }
+          }
+        },
+        {
+          "t": 333,
+          "parts": {}
+        }
+      ]
+    },
+    "hit": {
+      "fps": 10,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 50,
+          "parts": {
+            "root": {
+              "dx": -3
+            },
+            "body": {
+              "rot": -6
+            },
+            "head": {
+              "rot": -8
+            },
+            "hat": {
+              "rot": -10
+            },
+            "_flash": 1
+          }
+        },
+        {
+          "t": 100,
+          "parts": {
+            "root": {
+              "dx": -1
+            },
+            "body": {
+              "rot": -2
+            },
+            "_flash": 0.4
+          }
+        },
+        {
+          "t": 150,
+          "parts": {}
+        }
+      ]
+    },
+    "die": {
+      "fps": 8,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 125,
+          "parts": {
+            "root": {
+              "rot": 20,
+              "dy": -2
+            },
+            "arm_l": {
+              "rot": -30
+            },
+            "arm_r": {
+              "rot": 30
+            },
+            "hat": {
+              "rot": -15
+            },
+            "staff": {
+              "rot": 20
+            }
+          }
+        },
+        {
+          "t": 250,
+          "parts": {
+            "root": {
+              "rot": 50,
+              "dy": -5
+            },
+            "arm_l": {
+              "rot": -50
+            },
+            "arm_r": {
+              "rot": 55
+            },
+            "hat": {
+              "rot": -30
+            }
+          }
+        },
+        {
+          "t": 375,
+          "parts": {
+            "root": {
+              "rot": 75,
+              "dy": -7
+            },
+            "_alpha": 0.7
+          }
+        },
+        {
+          "t": 500,
+          "parts": {
+            "root": {
+              "rot": 85,
+              "dy": -8
+            },
+            "_alpha": 0.4
+          }
+        }
+      ]
+    }
+  },
+  "transform_fields": {
+    "dx": "x offset logic px",
+    "dy": "y offset logic px (up+)",
+    "rot": "degrees, clockwise+",
+    "sx": "x scale",
+    "sy": "y scale",
+    "alpha": "0..1, default 1"
+  },
+  "interpolation": "between keyframes: linear unless ease specified"
+}
