@@ -1210,7 +1210,7 @@ function renderMap(){
     ${worlds.map(w=>{
       const isCur=w.id===cur, isUnlocked=unlocked.indexOf(w.id)>=0;
       const bg=bgOf[w.theme]||'bg_explore_grassland';
-      return `<div class="preview-box world-map-item ${isCur?'cur':''} ${isUnlocked?'':'locked'}" data-world="${w.id}" style="height:96px;background-image:linear-gradient(90deg,rgba(8,13,22,.92) 30%,rgba(8,13,22,.45)),url(${RES}v3/backgrounds/${bg}.png);background-size:cover;background-position:center;cursor:${isUnlocked&&!isCur?'pointer':'default'}">
+      return `<div class="preview-box world-map-item ${isCur?'cur':''} ${isUnlocked?'':'locked'}" data-world="${w.id}" style="height:72px;background-image:linear-gradient(90deg,rgba(8,13,22,.94) 34%,rgba(8,13,22,.66) 72%,rgba(8,13,22,.52)),url(${RES}v3/backgrounds/${bg}.png);background-size:cover;background-position:center;cursor:${isUnlocked&&!isCur?'pointer':'default'}">
         <div class="wm-no">${w.id}</div>
         <div class="wm-txt">
           <div class="pt">${w.name}${isCur?'<span class="wm-tag cur">当前</span>':isUnlocked?'<span class="wm-tag ok">已解锁</span>':'<span class="wm-tag">未解锁</span>'}</div>
