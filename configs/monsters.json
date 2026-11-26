@@ -1,5 +1,5 @@
 {
-  "_readme": "怪物配置。sprite 为像素资源包中的主体名（动画帧 = sprites_{idle,attack,hit,die}）。改这里即可调怪物强度/掉落。。v1.9.40 全员强度下调（hp 约-12%、atk 约-16%、def 下调）。。v1.9.42 参照玩家基准（Lv1 战士 120血/12.6攻/5.8防）再下调约 30%：tier1 怪单次攻击 ≤ 角色血量 8%，血蝙蝠攻 22→15。",
+  "_readme": "怪物配置。sprite 为像素资源包中的主体名（动画帧 = sprites_{idle,attack,hit,die}）。改这里即可调怪物强度/掉落。v1.9.40 全员强度下调（hp 约-12%、atk 约-16%、def 下调）。v1.9.42 参照玩家基准（Lv1 战士 120血/12.6攻/5.8防）再下调约 30%。v1.9.43 成长公式改为线性（每级 +（growth-1)×基准，替代指数 growth^(lv-1)）：玩家线性而怪物指数导致 Lv20+ 失控（旧 Boss Lv20 攻 604 vs 玩家血 552，一刀秒）。Boss growth 单独降至 1.10，高等级单次攻击约为玩家血量 12~14%。",
   "monsters": [
     {
       "id": "slime",
@@ -49,11 +49,11 @@
       "sprite": "boss_beetle",
       "isBoss": true,
       "base": {
-        "hp": 480,
-        "atk": 26,
-        "def": 9
+        "hp": 280,
+        "atk": 22,
+        "def": 6
       },
-      "growth": 1.18,
+      "growth": 1.08,
       "exp": 540,
       "gold": 660,
       "dropTier": 3

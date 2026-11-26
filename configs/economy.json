@@ -26,7 +26,7 @@
   "drop": {
     "equipChanceNormal": 0.45,
     "equipChanceElite": 0.85,
-    "equipChanceBoss": 1.0,
+    "equipChanceBoss": 0.9,
     "bossDiamondMin": 50,
     "bossDiamondMax": 100,
     "chest": {

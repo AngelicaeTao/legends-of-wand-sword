@@ -85,10 +85,15 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	for gi, gid := range group {
 		m, ok := c.MonsterByID(gid)
 		if !ok { m = c.Monsters.Monsters[0] }
-		lvFactor := math.Pow(m.Growth, float64(req.MonsterLv-1))
+		// v1.9.43 高等级削峰：成长由指数 growth^(lv-1) 改为线性 1+(growth-1)×(lv-1)。
+		// 玩家每级是线性成长（+18血/+3攻），指数在 Lv20+ 会失控（旧公式 Boss Lv20 攻 604，一刀秒人）。
+		lvFactor := 1 + (m.Growth-1)*float64(req.MonsterLv-1)
 		u := monUnit{def: m, hp: m.Base["hp"] * lvFactor, atk: m.Base["atk"] * lvFactor, mdef: m.Base["def"] * lvFactor, lvFactor: lvFactor}
-		// 精英/稀有精英倍率只作用于主怪（组合首位，与点位 elite 语义一致）
-		if gi == 0 {
+		// 精英/稀有精英倍率只作用于主怪（组合首位，与点位 elite 语义一致）。
+		// v1.9.43：Boss 自身已是首领强度，不再叠加精英倍率（原双重强化导致高级副本必败）。
+		isMain := gi == 0
+		noEliteStack := isMain && m.IsBoss
+		if isMain && !noEliteStack {
 			if v, ok := sr["eliteHpMult"].(float64); ok && req.Elite == "elite" { u.hp *= v }
 			if v, ok := sr["eliteAtkMult"].(float64); ok && req.Elite == "elite" { u.atk *= v }
 			if v, ok := sr["rareEliteHpMult"].(float64); ok && req.Elite == "rareElite" { u.hp *= v }
@@ -333,7 +338,8 @@ func rollDrops(req BattleRequest, mon MonsterDef, rng *rand.Rand) []EquipItem {
 		chance = num(c.Economy.Drop["equipChanceBoss"])
 	}
 	out := []EquipItem{}
-	for rng.Float64() < chance {
+	// v1.9.43 安全护栏：Boss 掉落循环加 10 件上限（equipChanceBoss 配 ≥1.0 会死循环）
+	for len(out) < 10 && rng.Float64() < chance {
 		slot := rollSlot(c, rng)
 		q := rollQuality(rng) // v1.9.42 品质权重 roll（高阶品质递减，可出彩虹/暗影/混沌）
 		base := c.Equipment.BaseStatsBySlot[slot]
