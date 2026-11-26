@@ -1,0 +1,138 @@
+{
+  "bundle": "mon_bat_crimson",
+  "format": "parted_sprite_v1",
+  "character_size": [
+    32,
+    28
+  ],
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "pivot": "rotation center relative to cropped PNG top-left (logic px)",
+  "anchor": "pivot position in character coord (y up+)",
+  "z": "draw order, larger=front",
+  "parts": {
+    "shadow": {
+      "file": "mon_bat_crimson_shadow.png",
+      "size": [
+        15,
+        3
+      ],
+      "pivot": [
+        7,
+        1
+      ],
+      "anchor": [
+        0,
+        1
+      ],
+      "z": 0
+    },
+    "body": {
+      "file": "mon_bat_crimson_body.png",
+      "size": [
+        9,
+        13
+      ],
+      "pivot": [
+        4,
+        12
+      ],
+      "anchor": [
+        0,
+        5
+      ],
+      "z": 2
+    },
+    "wing_l": {
+      "file": "mon_bat_crimson_wing_l.png",
+      "size": [
+        14,
+        13
+      ],
+      "pivot": [
+        13,
+        7
+      ],
+      "anchor": [
+        -2,
+        13
+      ],
+      "z": 1
+    },
+    "wing_r": {
+      "file": "mon_bat_crimson_wing_r.png",
+      "size": [
+        14,
+        13
+      ],
+      "pivot": [
+        0,
+        7
+      ],
+      "anchor": [
+        2,
+        13
+      ],
+      "z": 1
+    },
+    "head": {
+      "file": "mon_bat_crimson_head.png",
+      "size": [
+        11,
+        7
+      ],
+      "pivot": [
+        5,
+        6
+      ],
+      "anchor": [
+        0,
+        16
+      ],
+      "z": 3
+    },
+    "eye_l": {
+      "file": "mon_bat_crimson_eye_l.png",
+      "size": [
+        3,
+        3
+      ],
+      "pivot": [
+        1,
+        2
+      ],
+      "anchor": [
+        -2,
+        11
+      ],
+      "z": 4
+    },
+    "eye_r": {
+      "file": "mon_bat_crimson_eye_r.png",
+      "size": [
+        3,
+        3
+      ],
+      "pivot": [
+        1,
+        2
+      ],
+      "anchor": [
+        2,
+        11
+      ],
+      "z": 4
+    }
+  },
+  "palette": [
+    "#262234",
+    "#342e2c",
+    "#4e3c69",
+    "#786296",
+    "#9e8abc",
+    "#d23e3e",
+    "#d796a0",
+    "#fafafc"
+  ],
+  "color_count": 8,
+  "note": "蝙蝠：双翼独立扇动+头部+红眼，俯冲攻击"
+}

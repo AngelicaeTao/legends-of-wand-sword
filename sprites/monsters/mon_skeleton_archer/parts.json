@@ -1,0 +1,171 @@
+{
+  "bundle": "mon_skeleton_archer",
+  "format": "parted_sprite_v1",
+  "character_size": [
+    32,
+    40
+  ],
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "pivot": "rotation center relative to cropped PNG top-left (logic px)",
+  "anchor": "pivot position in character coord (y up+)",
+  "z": "draw order, larger=front",
+  "parts": {
+    "shadow": {
+      "file": "mon_skeleton_archer_shadow.png",
+      "size": [
+        19,
+        4
+      ],
+      "pivot": [
+        9,
+        1
+      ],
+      "anchor": [
+        0,
+        1
+      ],
+      "z": 0
+    },
+    "leg_l": {
+      "file": "mon_skeleton_archer_leg_l.png",
+      "size": [
+        4,
+        6
+      ],
+      "pivot": [
+        2,
+        0
+      ],
+      "anchor": [
+        -2,
+        3
+      ],
+      "z": 1
+    },
+    "leg_r": {
+      "file": "mon_skeleton_archer_leg_r.png",
+      "size": [
+        4,
+        6
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "anchor": [
+        2,
+        3
+      ],
+      "z": 1
+    },
+    "torso": {
+      "file": "mon_skeleton_archer_torso.png",
+      "size": [
+        13,
+        17
+      ],
+      "pivot": [
+        6,
+        0
+      ],
+      "anchor": [
+        0,
+        19
+      ],
+      "z": 2
+    },
+    "cape": {
+      "file": "mon_skeleton_archer_cape.png",
+      "size": [
+        13,
+        7
+      ],
+      "pivot": [
+        6,
+        0
+      ],
+      "anchor": [
+        0,
+        8
+      ],
+      "z": 3
+    },
+    "arm_l": {
+      "file": "mon_skeleton_archer_arm_l.png",
+      "size": [
+        8,
+        9
+      ],
+      "pivot": [
+        6,
+        1
+      ],
+      "anchor": [
+        -5,
+        17
+      ],
+      "z": 4
+    },
+    "arm_r": {
+      "file": "mon_skeleton_archer_arm_r.png",
+      "size": [
+        8,
+        8
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "anchor": [
+        5,
+        17
+      ],
+      "z": 5
+    },
+    "weapon": {
+      "file": "mon_skeleton_archer_weapon.png",
+      "size": [
+        7,
+        10
+      ],
+      "pivot": [
+        2,
+        4
+      ],
+      "anchor": [
+        11,
+        11
+      ],
+      "z": 6
+    },
+    "head": {
+      "file": "mon_skeleton_archer_head.png",
+      "size": [
+        15,
+        16
+      ],
+      "pivot": [
+        7,
+        13
+      ],
+      "anchor": [
+        0,
+        21
+      ],
+      "z": 7
+    }
+  },
+  "palette": [
+    "#262234",
+    "#342e2c",
+    "#962d30",
+    "#9e6a3a",
+    "#9ea8b9",
+    "#b4ac98",
+    "#d23e3e",
+    "#eee8d7",
+    "#fffcf0"
+  ],
+  "color_count": 9,
+  "note": "骷髅：头/躯干/双臂/双腿/武器/披风分离，可挥斧"
+}

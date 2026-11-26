@@ -1,8 +1,8 @@
-# 美术资源库 · 杖剑传说 v1.7.5
+# 美术资源库 · 杖剑传说 v1.9.39
 
-本分支只存放美术资源，**不含任何代码**。代码见 `code/v1.7.5` 分支。
+本分支只存放美术资源，**不含任何代码**。代码见 `code/v1.9.39` 分支。
 
-- 总计：**239 个文件 / 约 8.7 MB**
+- 总计：**270 个文件 / 约 6.0 MB**
 - 组织方式：按「用途」分类，每类一个顶层目录；部件化资源按资源包再分子目录。
 - 回填运行目录的对应关系见文末「回填映射」。
 
@@ -12,13 +12,13 @@
 |---|---:|---:|---|
 | `maps/` | 24 | 7.7 MB | 6 个世界的地形主图、通行掩码、拼接配置 |
 | `sprites/characters/` | 12 | 12 KB | 部件化角色包（主角法师） |
-| `sprites/monsters/` | 39 | 31 KB | 部件化怪物包（4 类） |
-| `sprites/items/` | 15 | 9.6 KB | 部件化宝箱包（3 档） |
+| `sprites/monsters/` | 65 | 54 KB | 部件化怪物包（7 类） |
+| `sprites/items/` | 15 | 10 KB | 部件化宝箱包（3 档） |
 | `backgrounds/` | 6 | 37 KB | 战斗/探索背景（6 张） |
 | `portraits/cards/` | 6 | 12 KB | 职业卡面（战士/骑士/法师/贤者/术士/斗士） |
-| `icons/` | 10 | 6.6 KB | UI 图标（背包/金币/公会/角色/地图等） |
-| `fx/` | 36 | 26 KB | 战斗特效帧（暴击/普攻/经验/金币，各 6 帧） |
-| `frames/legacy/` | 20 | 36 KB | 旧版逐帧角色（idle/walk/attack/hit/die ×4 帧） |
+| `icons/` | 20 | ~14 KB | UI 图标（旧版 10 + v3 版 10，v3 版为运行时实际引用） |
+| `fx/` | 36 | 26 KB | 战斗特效帧（暴击/普攻/经验/金币/治疗/闪避） |
+| `frames/legacy/` | 20 | 36 KB | 旧版逐帧角色（idle/walk/attack/hit/die） |
 | `legacy/monsters/` | 56 | 55 KB | 旧版逐帧怪物（4 类 × 各动作） |
 | `legacy/items/` | 15 | 11 KB | 旧版逐帧宝箱（3 档 × 开箱动画） |
 
@@ -39,6 +39,9 @@ sprites/
     mon_skeleton/            骷髅兵
     mon_bat/                 蝙蝠
     mon_boss_beetle/         甲虫将军（BOSS）
+    mon_slime_toxic/         毒液史莱姆（v1.9.37 新增，PIL 调色衍生）
+    mon_skeleton_archer/     骷髅弓手（v1.9.37 新增，PIL 调色衍生）
+    mon_bat_crimson/         血蝙蝠（v1.9.37 新增，PIL 调色衍生）
   items/
     item_chest_wood/         木箱
     item_chest_silver/       银箱
@@ -72,6 +75,7 @@ legacy/items/                旧版逐帧宝箱（兼容保留）
 | `backgrounds/` | `web/res/v3/backgrounds/` |
 | `portraits/cards/` | `web/res/characters/cards/` |
 | `icons/` | `web/res/icons/` |
+| `icons/v3/` | `web/res/v3/icons/` |
 | `fx/` | `web/res/fx/` |
 | `frames/legacy/` | `web/res/characters/` |
 | `legacy/monsters/` | `web/res/monsters/` |
