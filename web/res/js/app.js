@@ -2184,7 +2184,8 @@ async function onChestOpened(chest){
   }catch(e){ reward=null; chestErr=e.message||''; }
   if(reward&&window.Quest)Quest.progress('chest',1);
   if(window.SFX){ if(reward)SFX.chest(); else SFX.deny(); }
-  const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱',diamond:'钻石宝箱',crystal:'水晶宝箱'}[chest.tier]||'宝箱';
+  const realTier=(reward&&reward.tier)||chest.tier;   // v1.9.45 以服务端实发档位为准
+  const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱',diamond:'钻石宝箱',crystal:'水晶宝箱'}[realTier]||'宝箱';
   setTimeout(()=>{
     const rw=reward||{exp:0,gold:0,gem:0,items:[]};
     // v1.9.35 开箱结算重构：顶部经验/金币/钻石，下方可拖动格子区展示额外物品（材料/药水/装备）
@@ -2219,11 +2220,27 @@ async function onChestOpened(chest){
     $('chestOk').onclick=()=>{ hideModal(); worldMap.active=true; window.SFX&&SFX.coin(); if(panel)renderPanel(); };
   },520); // 等开箱动画播完
 }
+/* ---------- 怪物掉落宝箱（v1.9.47） ----------
+   档位由服务端 /api/chest/drop 权威掷出（economy.drop.monsterChest），
+   本函数只负责发起登记 + 通知表现层落箱；api/uid 在 IIFE 内，故只能在这里调。 */
+async function dropChestFor(mon){
+  if(!mon) return;
+  const boss = mon.type==='boss_beetle';
+  const nodeId = 'drop_'+Date.now()+'_'+Math.floor(Math.random()*10000);
+  try{
+    const r = await api('/api/chest/drop',{userId:uid(),worldId:worldMap.worldId,nodeId,boss});
+    if(r&&r.tier) worldMap.spawnChestDrop(mon, r.tier, r.nodeId||nodeId);
+  }catch(e){
+    console.warn('[chest] 掉落登记失败，本次不掉箱：',(e&&e.message)||e);
+  }
+}
+window.__dropChest=dropChestFor;   // 调试钩子：自动化测试可直接触发掉落（不影响玩法）
+
 function showBattleResult(rep,mon){
   const win=rep.result==='win';
   if(win&&window.Quest)Quest.progress('kill',1);
   const slotCN={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
-  const drops=(rep.drops||[]).map(d=>`<div class="reward-row"><span class="rk">${ICON.bag(14,'#c9a4e8')}<em>装备掉落</em></span><span class="rv g">${slotCN[d.slot]||d.slot}${d.quality!=null?' · '+['普通','精良','稀有','史诗','传说'][Math.min(4,d.quality)]:''}</span></div>`).join('');
+  const drops=(rep.drops||[]).map(d=>`<div class="reward-row"><span class="rk">${ICON.bag(14,'#c9a4e8')}<em>装备掉落</em></span><span class="rv g">${slotCN[d.slot]||d.slot}${d.quality!=null?' · '+['普通','精良','稀有','史诗','传说','彩虹','暗影','混沌'][Math.min(7,d.quality)]:''}</span></div>`).join('');
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'（不自动回满 · 用回血药水/采草药恢复）</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
@@ -2249,9 +2266,11 @@ function showBattleResult(rep,mon){
       <button class="big-btn" id="resBtn">${(state&&state.world&&state.world.worldId==='HOME')?'回家园休整':'返回大世界'}</button>
       <button class="ghost-btn" id="resEnhance">去强化装备 →</button>`}`);
   $('resBtn').onclick=async()=>{
-    // 胜利：怪物从世界点位消失（服务端权威冷却）+ 本地掉落宝箱动画
+    // 胜利：怪物立即消失（含死亡动画）+ 向服务端登记掉箱，按返回档位落箱
     if(win && currentMonster){
-      worldMap.dropChestFrom(currentMonster);
+      if(currentMonster.actor)currentMonster.actor.playOnce('die');
+      currentMonster.state='dead';
+      dropChestFor(currentMonster);
       try{api('/api/monster/kill',{worldId:worldMap.worldId,nodeId:currentMonster.nodeId});}catch(e){}
     }
     hideModal();
