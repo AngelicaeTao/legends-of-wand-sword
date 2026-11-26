@@ -2,7 +2,7 @@
 
 服务端权威的 Web 放置手游（Playable 原型）：Go 单二进制权威服务 + 原生 Canvas 部件动画前端，单端口同源部署，支持多端接入。
 
-当前最新归档版本：**v1.9.44**（历史归档分支保留，按需拉取）。
+当前最新代码归档版本：**v1.9.45**（美术最新为 assets/v1.9.44；历史归档分支保留，按需拉取）。
 
 ## 分支说明
 
@@ -10,9 +10,9 @@
 
 | 分支 | 内容 | 体积 |
 |---|---|---:|
-| `code/v1.9.44` | **最新代码**：Go 服务端、Web 前端（10 个 JS/CSS/HTML）、配置文件、脚本、客户端骨架、交付文档（含 v1.9.x 验证截图） | 约 13 MB |
+| `code/v1.9.45` | **最新代码**：Go 服务端、Web 前端（10 个 JS/CSS/HTML）、配置文件、脚本、客户端骨架、交付文档（含 v1.9.x 验证截图） | 约 13 MB |
 | `assets/v1.9.44` | **最新美术**：按用途分类（地图 / 精灵 / 背景 / 卡面 / 图标 / 特效 / 旧版素材），含 v1.9.37 三怪部件包 + v1.9.42 钻石/水晶箱部件包 | 约 7.8 MB |
-| `code/v1.7.5`…`code/v1.9.44` | 历史代码归档（含 code/v1.9.40 ~ code/v1.9.44 增量版本） | — |
+| `code/v1.7.5`…`code/v1.9.44` | 历史代码归档（含 code/v1.9.40 ~ code/v1.9.44 增量版本；最新为 code/v1.9.45） | — |
 | `assets/v1.7.5`…`assets/v1.9.39` | 历史美术归档 | — |
 | `main` | 仓库说明与分支导航（本页） | — |
 
@@ -20,7 +20,7 @@
 
 ```bash
 # 代码
-git clone -b code/v1.9.44 https://github.com/AngelicaeTao/legends-of-wand-sword.git
+git clone -b code/v1.9.45 https://github.com/AngelicaeTao/legends-of-wand-sword.git
 
 # 资源（放入同一工作目录，按 assets 分支 README 的回填映射还原）
 git clone -b assets/v1.9.44 https://github.com/AngelicaeTao/legends-of-wand-sword.git assets
@@ -47,6 +47,8 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 | 版本 | 内容 |
 |---|---|
+| v1.9.45 | 怪物掉落箱改服务端权威掷档（新增 POST /api/chest/drop 登记）：普通/精英怪钻石+水晶掉率 8%→15%，掉落箱一次性、防伪造刷箱 |
+| v1.9.45 | 怪物掉落箱服务端权威掷档：普通/精英钻+水 8%→15%，掉落箱一次性 + 防刷箱上限 |
 | v1.9.44 | 装备升品质入口移入强化工坊（升品栏+品质进阶+消耗展示），仓库 ⬆ 角标移除 |
 | v1.9.43 | 高等级怪物削峰（成长公式指数改线性）、Boss 双重强化修复、Boss 掉落死循环护栏修复 |
 | v1.9.42 | 怪物参照角色基准再削 30%、装备爆率 0.45/0.85、钻石箱水晶箱、品质 8 档（彩虹/暗影/混沌）+ 升品、点玩家查档案 + 在线玩家列表 |
@@ -502,6 +504,15 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 **宝箱档位权威（`spawn.go rollContent`，v1.9.42 版）**：`r = rand.Float64()`，连续 8 次未出稀有则强制 tier=3（保底 pity=8，与怪物共用）。CHEST 按阈值：水晶 `r<0.015`（1.5%）/ 钻石 `r<0.04`（2.5%）/ 金 `r<0.16`（12%）/ 银 `r<0.44`（28%）/ **其余木箱（56%）**。怪物仍 稀有 `r<0.05`（5%）/ 精英 `r<0.30`（25%）/ 普通（70%）。`tierName` 映射 1=wood/2=silver/3=gold/4=diamond/5=crystal。
 > **代码注释 bug（如实记录）**：源码注释写「木52/银28/金12/钻2.5/水晶1.5」，但阈值 `r<0.44` 之后的剩余区间是 **56%**（100−44），不是 52%。之前 README 沿用的「60/30/10」是需求文档早期稿，v1.9.42 后已被服务端代码取代。`chestOpen` 忽略请求 tier、改用服务端 SpotState 权威档位；实测 400 样本 63.5/26.8/9.8% 为加钻石箱前的历史记录。
 
+**怪物掉落箱（v1.9.45 起服务端权威掷档，`spawn.go RegisterDropChest`）**：胜利后前端调 `POST /api/chest/drop {userId, worldId, nodeId, boss}`，服务端按 `drop.monsterChest` 权重掷档并登记实例，返回 tier，前端按返回档渲染贴图、开箱必然兑现同一档位（改前前端 Math.random 掷档与开箱重掷两套概率不一致，且 `drop_` 前缀无校验可伪造刷箱）。权重：
+
+| 场景 | 木 | 银 | 金 | 钻石 | 水晶 |
+|---|--:|--:|--:|--:|--:|
+| 普通/精英怪 normal | 47% | 30% | 8% | 12% | 3% |
+| BOSS boss | 0 | 0 | 50% | 30% | 20% |
+
+防刷约束：同一 nodeId 只登记一次（重复返回 409）；同玩家未开启掉落箱上限 **12** 个；未登记的 `drop_` ID 开箱一律拒绝；掉落箱开箱即销毁（一次性），登记存内存、服务端重启后未开箱失效。实测：普通怪 2000 次采样 木47.4/银30.6/金7.3/钻12.1/水晶2.6；BOSS 1000 次 金50.5/钻28.3/水晶21.2；档位与实发不一致 0 次。
+
 ### A9. 通信协议与存档分表
 
 **协议信封（设计契约，protocol.md）**：`{ "type": "...", "seq": 7, "v": 1, "data": {...} }`；错误带 `code` + `msg`；协议版本 `v=1` 向前兼容。
@@ -536,6 +547,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | POST | /api/auth/register | 账密注册 |
 | POST | /api/auth/login | 账密登录 |
 | POST | /api/auth/bind-device | 绑定设备 |
+| POST | /api/chest/drop | 怪物掉落箱登记（服务端掷档，v1.9.45） |
 | POST | /api/chest/open | 开箱结算 |
 | POST | /api/potion/pick | 采集药水点 |
 | POST | /api/monster/kill | 怪物击杀结算 |
@@ -567,7 +579,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 **多人 Match（Nakama opCode，match.go 实测）**：1=`move` {x,y,ts,action} C→S；2=`snapshot` {players[],tick} S→C（10Hz）；3=`join` S→C；4=`leave` S→C。RPC `join_world`{worldId}→{matchId,worldId}。防作弊：位移 >600 单位/秒丢弃，单线上限 40。
 
-### A10. 版本演进（v1.6 → v1.9.44）
+### A10. 版本演进（v1.6 → v1.9.45）
 
 | 版本 | 关键内容 |
 |---|---|
