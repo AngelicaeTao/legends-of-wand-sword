@@ -1381,7 +1381,7 @@ function renderRole(){
       </div>`;
     }).join('');
     html+=`
-      <div class="sec-sub">穿戴/卸下在此操作；<b>强化已移至 家园 › 仓库 › 强化工坊</b>（显示当前/强化后数值与消耗）</div>
+      <div class="sec-sub">穿戴/卸下在此操作；<b>强化与升品已移至 家园 › 仓库 › 强化工坊</b>（显示当前/强化后数值、品质进阶与消耗）</div>
       <div class="equip-grid">${cells}</div>
       <div class="sec-title">装备列表</div>${rows||'<div class="sec-sub">暂无装备</div>'}
       <div class="sec-title">当前属性</div>${attrRows()}`;
@@ -1607,21 +1607,61 @@ function renderWarehouse(){
           <div class="strength-note">强化必成功 · 服务端权威结算，战力即时更新</div>
         </div>`;
     }
+    // v1.9.44 升品栏：装备升品质入口自仓库移入工坊（品质+1 最高混沌，属性按品质乘数重算）
+    let forgeQuBar='';
+    if(!sel){
+      forgeQuBar=`<div class="forge-empty">先在左侧选择装备，再进行升品</div>`;
+    }else{
+      const dec=(CFG&&CFG.economy&&CFG.economy.drop&&CFG.economy.drop.decompose)||{};
+      const GB=dec.goldBase||[40,120,300,800,2000,4200,8000,15000];
+      const MB=dec.matBase||[10,30,80,200,500,1200,2600,6000];
+      const qu=(CFG&&CFG.economy&&CFG.economy.drop&&CFG.economy.drop.qualityUp)||{};
+      const gM=qu.goldMult!=null?qu.goldMult:1.2, mM=qu.matMult!=null?qu.matMult:0.6;
+      const qArr=(CFG&&CFG.equipment&&CFG.equipment.quality)||[];
+      const sqi=Math.max(0,Math.min(7,sel.quality||0));
+      if(sqi>=7){
+        forgeQuBar=`
+          <div class="sec-title">升品栏（品质+1 · 属性按品质乘数重算）</div>
+          <div class="forge-slot"><div class="fs-head"><b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b>
+            <em class="fc-badge">已达最高品质（混沌），无法继续升品</em></div></div>`;
+      }else{
+        const nq=sqi+1;
+        const qGold=Math.round((GB[Math.min(nq,7)]||40)*gM), qMat=Math.round((MB[Math.min(nq,7)]||10)*mM);
+        const qCan=c.gold>=qGold&&(c.material||0)>=qMat;
+        const mOld=(qArr[sqi]&&qArr[sqi].mult)||1, mNew=(qArr[nq]&&qArr[nq].mult)||1;
+        const ratio=mOld>0?mNew/mOld:1.25;
+        forgeQuBar=`
+          <div class="sec-title">升品栏（品质+1 · 属性按品质乘数重算）</div>
+          <div class="forge-slot">
+            <div class="fs-head">${slotIcoF[sel.slot]||ICON.crystal(26,'#f0d590')}
+              <b>${eqCN(sel)}</b><em class="fc-badge">${sel.equipped?'穿戴中':'背包'}</em>
+              <span class="fs-lv"><b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b> → <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b></span></div>
+            <div class="sec-sub">全部属性 × ${ratio.toFixed(2)}（品质乘数 ${mOld} → ${mNew}）· 强化等级保持不变</div>
+            <div class="forge-cost">
+              <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(qGold)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} ${qMat} 材料</b></div>
+              <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 材料</b></div>
+            </div>
+            <button class="big-btn goldbtn" id="doQuBtn" ${qCan?'':'disabled style="opacity:.45;cursor:not-allowed"'}>${qCan?'升 品':'资源不足'}</button>
+            <div class="strength-note">升品不可逆 · 服务端权威结算 · 战力即时更新</div>
+          </div>`;
+      }
+    }
     body.innerHTML=`
       ${backHome}
       <button class="sub-back" id="forgeBack">‹ 返回仓库</button>
       <div class="sec-title">⚒ 强化工坊</div>
-      <div class="sec-sub">选择装备放入强化栏 · 强化消耗随等级递增（${enhCfg.costBase||1200} × ${(enhCfg.costGrowth||1.35)}^等级 金币 + 2 材料）</div>
+      <div class="sec-sub">选择装备放入强化栏 · 强化消耗随等级递增（${enhCfg.costBase||1200} × ${(enhCfg.costGrowth||1.35)}^等级 金币 + 2 材料）· 升品消耗按目标品质档计算</div>
       <div class="forge-grid">${listHtml}</div>
       <div class="sec-title">强化栏</div>
-      ${forgeBar}`;
+      ${forgeBar}
+      ${forgeQuBar}`;
     $('forgeBack').onclick=()=>{forgeSub=false;forgeSel=null;renderWarehouse();};
     if(inHome)$('backToHome').onclick=()=>{forgeSub=false;forgeSel=null;homeSub=null;renderHome();};
     body.querySelectorAll('.forge-cell[data-fid]').forEach(el=>el.onclick=()=>{
       forgeSel=el.dataset.fid;window.SFX&&SFX.tab();renderWarehouse();
     });
     body.querySelectorAll('.forge-cell[data-wh]').forEach(el=>el.onclick=()=>{
-      toastModal('仓库中的装备无法直接强化','请先在仓库取出到背包后再强化');
+      toastModal('仓库中的装备无法直接强化/升品','请先在仓库取出到背包后再强化/升品');
     });
     const doBtn=$('doForge');
     if(doBtn)doBtn.onclick=async()=>{
@@ -1635,6 +1675,32 @@ function renderWarehouse(){
         if(window.Quest)Quest.progress('enhance',1);
         renderWarehouse();
       }catch(e){window.SFX&&SFX.fail();toastModal('强化失败',e.message);}
+    };
+    // v1.9.44 升品按钮：确认弹窗 → quality_up（服务端权威）
+    const quBtn=$('doQuBtn');
+    if(quBtn)quBtn.onclick=()=>{
+      const dec=(CFG&&CFG.economy&&CFG.economy.drop&&CFG.economy.drop.decompose)||{};
+      const GB=dec.goldBase||[40,120,300,800,2000,4200,8000,15000];
+      const MB=dec.matBase||[10,30,80,200,500,1200,2600,6000];
+      const qu=(CFG&&CFG.economy&&CFG.economy.drop&&CFG.economy.drop.qualityUp)||{};
+      const gM=qu.goldMult!=null?qu.goldMult:1.2, mM=qu.matMult!=null?qu.matMult:0.6;
+      const sqi=Math.max(0,Math.min(7,sel.quality||0)), nq=sqi+1;
+      const qGold=Math.round((GB[Math.min(nq,7)]||40)*gM), qMat=Math.round((MB[Math.min(nq,7)]||10)*mM);
+      showModal(`<h2>装备升品</h2><div class="msub">将 <b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b>「${eqCN(sel)}${sel.enhance?(' +'+sel.enhance):''}」提升为 <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b>？<br>属性按品质乘数重算提升 · 消耗 <b style="color:#ffd76b">${fmt(qGold)} 金币</b> + <b style="color:#9ad6ff">${qMat} 材料</b><br><span style="color:#e07b7b">升品不可逆，无法找回原品质</span></div>
+        <div class="divider"></div>
+        <div class="enc-btns"><button class="big-btn goldbtn" id="quConfirm">确认升品</button><button class="btn-gray" id="quCancel">再想想</button></div>`);
+      $('quCancel').onclick=hideModal;
+      $('quConfirm').onclick=async()=>{
+        try{
+          const r=await api('/api/player/action',{userId:uid(),action:'quality_up',itemId:sel.id});
+          hideModal();
+          if(r.state){state=r.state;syncHud();await refreshStats();}
+          window.SFX&&SFX.buy&&SFX.buy();
+          toastModal('升品成功',eqCN(sel)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||qGold)+' 金币 / '+(r.cost&&r.cost.material||qMat)+' 材料）');
+          forgeSel=null;
+          renderWarehouse();
+        }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('升品失败',err.message); }
+      };
     };
     return;
   }
@@ -1658,7 +1724,7 @@ function renderWarehouse(){
           ${attrRows()}
           <div class="enhance-bar">
             <button class="big-btn" id="edToggle">${isEquipped?'卸下装备':'穿戴装备'}</button>
-            <button class="big-btn goldbtn" id="edToForge" style="margin-left:8px">去强化工坊 ›</button>
+            <button class="big-btn goldbtn" id="edToForge" style="margin-left:8px">去强化工坊（强化/升品） ›</button>
           </div>
         </div>`;
       $('edBack').onclick=()=>{equipDetailSlot=null;renderWarehouse();};
@@ -1686,7 +1752,7 @@ function renderWarehouse(){
   const slotIco={weapon:ICON.sword(24,'#2a1c08'),helmet:ICON.helmet(24,'#2a1c08'),armor:ICON.armor(24,'#2a1c08'),trinket:ICON.ring(24,'#2a1c08')};
   body.innerHTML=`
     ${backHome}
-    <button class="big-btn goldbtn" id="openForge" style="width:100%">⚒ 强化工坊 · 强化装备（查看当前/强化后数值与消耗）</button>
+    <button class="big-btn goldbtn" id="openForge" style="width:100%">⚒ 强化工坊 · 强化 / 升品装备（数值对比 · 品质进阶 · 消耗）</button>
     <div class="wh-confirm hidden" id="whConfirm">
       <span class="wh-c-name" id="whCName"></span>
       <input id="whQtyInput" type="number" min="1" value="1">
@@ -1713,7 +1779,6 @@ function renderWarehouse(){
         <div class="wgi" style="background:#b8862f">${slotIco[e.slot]||ICON.sword(24,'#2a1c08')}</div>${eqCN(e)}${e.enhance?(' +'+e.enhance):''}<div class="wq">x1</div>
         ${pwBadge(it.equip)||''}
         <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金+${MAT[qi]||10}材</span>
-        ${qi<7?`<span class="wg-detail qup" data-qup="${it.id}" title="升品（品质+1）">⬆ ${QUALITY[qi]}→${QUALITY[qi+1]||'MAX'}</span>`:''}
       </div>`;}).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
     <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · 点击选择数量取出）</span></div>
     <div class="wg-grid">${whGoods.map(it=>`
@@ -1732,33 +1797,7 @@ function renderWarehouse(){
       flash((action==='deposit'||action==='wh_equip_in'?'已存入 ':'已取出 ')+(name||itemCN(itemId))+(qty>1?' ×'+qty:''));
     }catch(e){window.SFX&&SFX.fail();flash('操作失败：'+e.message);}
   };
-  // v1.9.42 装备升品：品质+1（最高混沌），属性按品质乘数比例重算
-  body.querySelectorAll('.wg-detail.qup').forEach(el=>{
-    el.onclick=(ev)=>{
-      ev.stopPropagation();
-      const id=el.dataset.qup;
-      const it=(state.warehouse||[]).find(x=>x.id===id&&x.kind==='equip');
-      const e=it&&it.equip||{};
-      const qi=Math.max(0,Math.min(7,e.quality||0));
-      const DEC=[40,120,300,800,2000,4200,8000,15000], MAT=[10,30,80,200,500,1200,2600,6000];
-      const nq=qi+1;
-      const goldC=Math.round((DEC[Math.min(nq,7)]||40)*1.2), matC=Math.round((MAT[Math.min(nq,7)]||10)*0.6);
-      showModal(`<h2>装备升品</h2><div class="msub">将 <b style="color:${QCOLOR[qi]}">${QUALITY[qi]}</b>「${eqCN(e)}${e.enhance?(' +'+e.enhance):''}」提升为 <b style="color:${QCOLOR[Math.min(nq,7)]}">${QUALITY[Math.min(nq,7)]}</b>？<br>属性按品质乘数重算提升 · 消耗 <b style="color:#ffd76b">${fmt(goldC)} 金币</b> + <b style="color:#9ad6ff">${matC} 材料</b></div>
-        <div class="divider"></div>
-        <div class="enc-btns"><button class="big-btn goldbtn" id="doQup">确认升品</button><button class="btn-gray" id="cancelQup">再想想</button></div>`);
-      $('cancelQup').onclick=hideModal;
-      $('doQup').onclick=async()=>{
-        try{
-          const r=await api('/api/player/action',{userId:uid(),action:'quality_up',itemId:id});
-          hideModal();
-          if(r.state){state=r.state;syncHud();await refreshStats();}
-          window.SFX&&SFX.buy&&SFX.buy();
-          toastModal('升品成功',eqCN(e)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||goldC)+' 金币 / '+(r.cost&&r.cost.material||matC)+' 材料）');
-          renderPanel();
-        }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('升品失败',err.message); }
-      };
-    };
-  });
+  // v1.9.44 装备升品入口已移至 家园›仓库›强化工坊（升品栏），仓库内不再提供 ⬆ 角标
   // 可堆叠物品数量确认条：显示物品名/最大量，输入或点「全部」，确定才真正存取
   let confirmOp=null; // {id, max, action, name}
   const openConfirm=(id,max,action,name)=>{
