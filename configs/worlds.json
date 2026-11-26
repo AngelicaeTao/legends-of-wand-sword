@@ -136,6 +136,30 @@
           "requireLevel": 10,
           "x": 7664,
           "y": 2160
+        },
+        {
+          "id": "W1_H01",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2112,
+          "y": 864,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W1_H02",
+          "type": "POTION",
+          "tier": 1,
+          "x": 1536,
+          "y": 2112,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W1_H03",
+          "type": "POTION",
+          "tier": 1,
+          "x": 1056,
+          "y": 1152,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
       ]
     },
@@ -152,7 +176,6 @@
           "x": 4192,
           "y": 2160
         },
-
         {
           "id": "W2_G_W1",
           "type": "GATE",
@@ -290,6 +313,30 @@
           "x": 3840,
           "y": 0,
           "_note": "捷径"
+        },
+        {
+          "id": "W2_H01",
+          "type": "POTION",
+          "tier": 1,
+          "x": 5664,
+          "y": 3552,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W2_H02",
+          "type": "POTION",
+          "tier": 1,
+          "x": 1536,
+          "y": 2208,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W2_H03",
+          "type": "POTION",
+          "tier": 1,
+          "x": 960,
+          "y": 1152,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
       ]
     },
@@ -306,7 +353,6 @@
           "x": 4192,
           "y": 2160
         },
-
         {
           "id": "W3_G_W2",
           "type": "GATE",
@@ -435,6 +481,30 @@
           "requireLevel": 30,
           "x": 7664,
           "y": 2160
+        },
+        {
+          "id": "W3_H01",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2112,
+          "y": 576,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W3_H02",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2016,
+          "y": 3744,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W3_H03",
+          "type": "POTION",
+          "tier": 1,
+          "x": 6528,
+          "y": 1344,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
       ]
     },
@@ -451,7 +521,6 @@
           "x": 3450,
           "y": 707
         },
-
         {
           "id": "W4_G_W3",
           "type": "GATE",
@@ -580,6 +649,30 @@
           "requireLevel": 40,
           "x": 7664,
           "y": 2160
+        },
+        {
+          "id": "W4_H01",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2208,
+          "y": 3648,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W4_H02",
+          "type": "POTION",
+          "tier": 1,
+          "x": 5472,
+          "y": 3648,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W4_H03",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2112,
+          "y": 1056,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
       ]
     },
@@ -596,7 +689,6 @@
           "x": 4192,
           "y": 2160
         },
-
         {
           "id": "W5_G_W4",
           "type": "GATE",
@@ -725,6 +817,30 @@
           "requireLevel": 50,
           "x": 7664,
           "y": 2160
+        },
+        {
+          "id": "W5_H01",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2208,
+          "y": 3744,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W5_H02",
+          "type": "POTION",
+          "tier": 1,
+          "x": 5472,
+          "y": 3744,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W5_H03",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2112,
+          "y": 768,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
       ]
     },
@@ -741,7 +857,6 @@
           "x": 2896,
           "y": 2400
         },
-
         {
           "id": "W6_G_W5",
           "type": "GATE",
@@ -862,16 +977,85 @@
           "tier": 5,
           "x": 2976,
           "y": 2880
+        },
+        {
+          "id": "W6_H01",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2208,
+          "y": 4032,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W6_H02",
+          "type": "POTION",
+          "tier": 1,
+          "x": 5472,
+          "y": 4032,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        },
+        {
+          "id": "W6_H03",
+          "type": "POTION",
+          "tier": 1,
+          "x": 2112,
+          "y": 672,
+          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+        }
+      ]
+    },
+    {
+      "id": "HOME",
+      "name": "我的家园",
+      "level": 1,
+      "theme": "grassland",
+      "bg": "",
+      "_readme": "v1.9.31 家园地图:较小(2560×1440,前端程序化绘制);功能点位 FUNC content=warehouse/idle/dress;GATE_OUT=出门返回上一个大世界;玩家战败后服务端强制送回此地",
+      "spawns": [
+        {
+          "id": "HOME_SAFE",
+          "type": "ANCHOR",
+          "x": 1280,
+          "y": 780
+        },
+        {
+          "id": "HOME_WAREHOUSE",
+          "type": "FUNC",
+          "content": "warehouse",
+          "x": 560,
+          "y": 560
+        },
+        {
+          "id": "HOME_IDLE",
+          "type": "FUNC",
+          "content": "idle",
+          "x": 2000,
+          "y": 560
+        },
+        {
+          "id": "HOME_DRESS",
+          "type": "FUNC",
+          "content": "dress",
+          "x": 560,
+          "y": 1180
+        },
+        {
+          "id": "HOME_GATE",
+          "type": "FUNC",
+          "content": "gate",
+          "x": 2000,
+          "y": 1180
         }
       ]
     }
   ],
   "respawn": {
-    "_note": "每点位独立冷却 base×(1±jitter)；宝箱玩家实例(userId+nodeId)，怪世界共享；活跃密度上限8。",
+    "_note": "每点位独立冷却 base×(1±jitter)；宝箱玩家实例(userId+nodeId)，怪世界共享；活跃密度上限8。v1.9.17：chestBaseSec=0 表示宝箱开箱后无冷却，下次查询立即刷新。",
     "mobBaseSec": 60,
     "eliteBaseSec": 180,
-    "chestBaseSec": 300,
+    "chestBaseSec": 0,
     "jitter": 0.2,
-    "activeDensityCap": 8
+    "activeDensityCap": 8,
+    "potionBaseSec": 120
   }
 }

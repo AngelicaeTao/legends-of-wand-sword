@@ -78,6 +78,14 @@ async function claim(qid){
     hooks.toast&&hooks.toast('任务完成 · '+q.name,'奖励已入账：'+q.reward);
     render();
   }catch(e){
+    // v1.9.19 自愈：服务端已领取但本地未同步（换设备/清缓存）→ 自动校准，不再报错
+    if(e.message&&e.message.indexOf('已领取')>=0){
+      st.claimed[qid]=true;
+      if((st.progress[q.kind]||0)<q.goal) st.progress[q.kind]=q.goal;
+      save(); render();
+      hooks.toast&&hooks.toast('任务已同步','「'+q.name+'」奖励此前已领取，进度已自动校准');
+      return;
+    }
     hooks.toast&&hooks.toast('领取失败',e.message);
   }
 }
@@ -89,6 +97,19 @@ window.Quest={
     if(hooks.getState){
       const s=hooks.getState();
       if(s&&s.equip) st.progress.equip=s.equip.filter(e=>e.equipped).length;
+      // v1.9.19 服务端权威同步：合并服务端已领取状态，自动检测并校正任务进度
+      // 解决：换浏览器/清 localStorage 后本地领取记录丢失，面板误显示「领取」
+      const sq=(s&&s.ext&&s.ext.quests)||null;
+      if(sq){
+        let fixed=0;
+        QDEFS.forEach(q=>{
+          if(sq[q.id]===true){
+            if(!st.claimed[q.id]){ st.claimed[q.id]=true; fixed++; }
+            if((st.progress[q.kind]||0)<q.goal) st.progress[q.kind]=q.goal;
+          }
+        });
+        if(fixed>0) save();
+      }
     }
     save(); render();
   },

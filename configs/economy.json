@@ -6,7 +6,8 @@
     "expPerMinute": 6,
     "goldPerMinute": 4,
     "materialPerMinute": 0.5,
-    "_note": "离线收益 = 时长 * 速率 * 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。"
+    "_note": "离线收益 = 时长 * 速率 * 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。；v1.9.27 每30分钟额外产出1瓶回血药水",
+    "potionPerHalfHour": 1
   },
   "stamina": {
     "max": 120,
@@ -59,7 +60,22 @@
           50
         ]
       }
-    }
+    },
+    "potion": {
+      "potion_s": {
+        "healPct": 0.35
+      },
+      "potion_l": {
+        "healPct": 0.7
+      }
+    },
+    "slotWeights": {
+      "weapon": 0.4,
+      "helmet": 0.2,
+      "armor": 0.2,
+      "trinket": 0.2
+    },
+    "_note": "v1.9.30 slotWeights 武器加权：武器占掉落 40%（原四槽均等 25%）"
   },
   "worldMap": {
     "worldSize": {

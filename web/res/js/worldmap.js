@@ -31,7 +31,8 @@ const THEMES={
   cave:     {name:'流沙遗迹',ground:['#8a7a63','#94836b','#7f705a','#9b8b72'],road:'#b3a181',wall:'dune',pond:'#6b5d49',deco:'ruin'},
   arena:    {name:'星陨之巅',ground:['#4a4560','#514b68','#423d58','#564f6e'],road:'#8a86a3',wall:'meteor',pond:'#3a3550',deco:'star'}
 };
-const MON_NAMES={slime:'史莱姆',skeleton:'骷髅兵',bat:'蝙蝠',boss_beetle:'甲虫将军'};
+const MON_NAMES={slime:'史莱姆',skeleton:'骷髅兵',bat:'蝙蝠',boss_beetle:'甲虫将军',
+  slime_toxic:'毒液史莱姆',skeleton_archer:'骷髅弓手',bat_crimson:'血蝙蝠'};
 
 function WMap(canvas, opts){
   this.cv=canvas;
@@ -43,12 +44,15 @@ function WMap(canvas, opts){
   this.onGate=this.opts.onGate||function(){};
   this.onTile=this.opts.onTile||function(){};
 
-  this.hero={x:SPAWN_X,y:SPAWN_Y,dir:'down',moving:false};
+  this.hero={x:SPAWN_X,y:SPAWN_Y,dir:'right',moving:false};
   this.keys={};
   this.cam={x:0,y:0};
   this.worldId='W1';
   this.theme=THEMES.grassland;
   this.themeKey='grassland';
+  // v1.9.31 家园：世界尺寸改为实例属性（HOME=2560×1440 小地图，其余世界=MW/MH）
+  this.WM=MW; this.HM=MH;
+  this.homeItems=[];  // 家园功能点 {x,y,nodeId,kind,label}（仓库/挂机/换装镜）
 
   this.obstacles=[];  // 保留字段兼容，地形升级后不再用精灵墙，墙由掩码判定
   this.monsters=[];   // {x,y,nodeId,type,name,state:'idle'|'dead',r,alert,actor,phase}
@@ -76,6 +80,8 @@ function WMap(canvas, opts){
 
   this.time=0; this.lastTs=0; this.ready=false; this.active=false;
   this.PartActor=window.PartActor;
+  this.StandeeActor=window.StandeeActor; // 主角/职业装走整体立绘（交付包 §0.2）
+  this.heroBundle='char_warrior';        // 由 classId 决定（char_warrior/char_mage/…）
   this.actorCache={}; // bundle -> PartActor 实例（怪物/宝箱每类一个）
 }
 
@@ -127,6 +133,8 @@ WMap.prototype.loadTerrain=async function(worldId){
     const src=this.groundBmp||this.ground;
     this.thumb=await createImageBitmap(src,{resizeWidth:THUMB_W,resizeHeight:THUMB_H,resizeQuality:'low'});
   }catch(e){ this.thumb=null; }
+  // v1.9.31 动态缩略尺度（app.js 小地图 / M 弹窗按此换算；常规世界=THUMB_*）
+  this.thumbW=THUMB_W; this.thumbH=THUMB_H; this.thumbScale=THUMB_SCALE;
   // 水域修正：地形图里的蓝色水面在掩码中被误标为可走 → 按颜色改为不可走，
   // 让"湖"在视觉与碰撞上一致（角色被挡在岸边，不会站到水面上）
   this.waterFlag=null;
@@ -457,7 +465,7 @@ WMap.prototype.requestTile=function(tx,ty){ // 请求异步建块（去重），
       g.drawImage(this.ground,tx*VW,ty*VH,VW,VH,0,0,VW,VH);
       done(c);
     });
-  } else { this._pending.delete(key); }
+  } else { if(this._pending)this._pending.delete(key); }
 };
 WMap.prototype.ensureTile=function(tx,ty){ // 渲染取块：命中返回纹理，未命中触发异步建块
   if(!this.tiles)return null;
@@ -482,7 +490,7 @@ WMap.prototype.ensureDeco=function(tx,ty){
   this._decoPending.add(key);
   const token=this._pwToken, self=this;
   const job=()=>{
-    self._decoPending.delete(key);
+    if(self._decoPending)self._decoPending.delete(key); // v1.9.23 守卫：切世界瞬间 _decoPending 被置空，旧回调不再炸 null
     if(token!==self._pwToken||!self.deco)return;
     const walk=(x,y)=>self.isWalkable(x,y);
     const isW=(x,y)=>self.isWaterAt(x,y);
@@ -497,9 +505,9 @@ WMap.prototype.ensureDeco=function(tx,ty){
 /* ---------- 初始化（只建一次角色 actor） ---------- */
 WMap.prototype.load=async function(){
   const self=this;
-  // 预载角色部件 actor
+  // 预载角色立绘 actor（整体立绘 + root 变换；换职业时由 setHeroBundle 重建）
   if(!this.heroActor){
-    this.heroActor=new this.PartActor('char_hero_mage');
+    this.heroActor=new this.StandeeActor(this.heroBundle);
     await this.heroActor.init();
     this.heroActor.play('idle');
   }
@@ -509,6 +517,19 @@ WMap.prototype.load=async function(){
   if(!this._inputBound){this.bindInput();this._inputBound=true;}
 };
 
+/* 换职业：重建主角立绘（探索/战斗同一套职业装备装，交付包 §4.2） */
+WMap.prototype.setHeroBundle=function(bundle){
+  if(!bundle||bundle===this.heroBundle)return;
+  this.heroBundle=bundle;
+  const a=new this.StandeeActor(bundle);
+  a.init().then(()=>a.play('idle'));
+  this.heroActor=a;
+};
+/* v1.9.27 设置美术默认朝向：法师/骑士/祭祀立绘面向左，行走方向要反相翻转 */
+WMap.prototype.setHeroFacing=function(facesRight){
+  this.heroFacesRight=facesRight!==false;
+};
+
 /* ---------- 切换世界 + 接入服务端点位 ---------- */
 WMap.prototype.switchWorld=async function(worldId, spots, heroX, heroY){
   this.worldId=worldId;
@@ -516,9 +537,16 @@ WMap.prototype.switchWorld=async function(worldId, spots, heroX, heroY){
   const themeKey=wdef?wdef.theme:'grassland';
   this.themeKey=themeKey;
   this.theme=THEMES[themeKey]||THEMES.grassland;
-  await this.loadTerrain(worldId);
+  // v1.9.31 家园：小地图 + 程序化场景（无地形资源，全图可走）
+  if(worldId==='HOME'){
+    this.WM=2560; this.HM=1440;
+    await this.loadHomeTerrain();
+  } else {
+    this.WM=MW; this.HM=MH;
+    await this.loadTerrain(worldId);
+  }
   // 重置实体
-  this.monsters=[];this.chests=[];this.gates=[];this.anchors=[];this.drops=[];
+  this.monsters=[];this.chests=[];this.potions=[];this.gates=[];this.anchors=[];this.drops=[];this.homeItems=[];
   if(heroX!=null&&heroY!=null){this.hero.x=heroX;this.hero.y=heroY;}
   else {this.hero.x=SPAWN_X;this.hero.y=SPAWN_Y;} // 默认落安全区
   // 若存档坐标落在墙里（旧存档 / 锚点压在掩码边界上），就近找一块可站立的地面，
@@ -532,11 +560,81 @@ WMap.prototype.switchWorld=async function(worldId, spots, heroX, heroY){
   this.prewarmTiles(); // 后台预热分块，避免移动跨块时同步建块掉帧
 };
 
+/* v1.9.31 家园场景：程序化绘制 2560×1440 小地图（草地/木屋/栅栏/花坛/小路），
+   无地形资源、无通行掩码（maskData=null → 全图可走，边界由 update 钳制）。
+   缩略图与常规世界同规格 960×540，供小地图与 M 大地图弹窗复用。 */
+WMap.prototype.loadHomeTerrain=async function(){
+  // 清理常规世界资源
+  this._pwToken++;
+  if(this.thumb&&this.thumb.close){try{this.thumb.close();}catch(e){}}
+  this.maskCv=null; this.paintCv=null; this.waterCv=null;
+  if(this.deco)this.deco.clear();
+  this.deco=null; this._decoPending=null; this.pal=null;
+  this.tiles=null;this._pending=null;
+  if(this.groundBmp&&this.groundBmp.close){try{this.groundBmp.close();}catch(e){}}
+  this.groundBmp=null;this.ground=null;
+  this.mapCache['HOME']=null;
+
+  const HW=this.WM, HH=this.HM;
+  const off=document.createElement('canvas');
+  off.width=HW; off.height=HH;
+  const g=off.getContext('2d');
+  let seed=20261126;
+  const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+  // 草地底色（与 grassland 主题同色系，颗粒噪点）
+  g.fillStyle='#79ad4a';g.fillRect(0,0,HW,HH);
+  for(let y=0;y<HH;y+=64)for(let x=0;x<HW;x+=64){
+    g.fillStyle=['#7fb350','#74a746','#85b755','#79ad4a'][Math.floor(rnd()*4)];
+    g.fillRect(x,y,64,64);
+  }
+  // 十字小路（浅石板色）
+  g.strokeStyle='#c9bb96';g.lineWidth=110;g.lineCap='round';
+  g.beginPath();g.moveTo(0,780);g.lineTo(HW,780);g.stroke();
+  g.beginPath();g.moveTo(1280,0);g.lineTo(1280,HH);g.stroke();
+  g.fillStyle='rgba(60,50,30,.15)';
+  for(let i=0;i<160;i++){const x=rnd()*HW,y=780+(rnd()-0.5)*90;g.fillRect(x,y,10,4);}
+  // 花丛点缀
+  const fc=['#f5f0d8','#f0d590','#e8a0b8'];
+  for(let i=0;i<220;i++){
+    const x=rnd()*HW,y=rnd()*HH;
+    if(Math.abs(y-780)<80)continue;
+    g.fillStyle=fc[Math.floor(rnd()*fc.length)];
+    g.fillRect(x,y,4,4);g.fillRect(x-2,y+3,2,2);g.fillRect(x+4,y+3,2,2);
+  }
+  // 房屋（左上角：木屋 + 门 + 窗）
+  const hx=300,hy=180;
+  g.fillStyle='rgba(0,0,0,.18)';g.beginPath();g.ellipse(hx+90,hy+240,130,30,0,0,Math.PI*2);g.fill();
+  g.fillStyle='#8a5a34';g.fillRect(hx,hy+120,180,120);          // 墙
+  g.fillStyle='#6d4426';
+  g.beginPath();g.moveTo(hx-24,hy+120);g.lineTo(hx+90,hy+20);g.lineTo(hx+204,hy+120);g.closePath();g.fill(); // 屋顶
+  g.fillStyle='#5a3a12';g.fillRect(hx+70,hy+170,44,70);          // 门
+  g.fillStyle='#f0d590';g.fillRect(hx+130,hy+150,30,26);         // 窗
+  // 栅栏（围出院子轮廓）
+  g.fillStyle='#a07948';
+  const fence=(x0,y0,x1,y1)=>{const n=Math.floor(Math.hypot(x1-x0,y1-y0)/44);for(let i=0;i<=n;i++){const x=x0+(x1-x0)*i/n,y=y0+(y1-y0)*i/n;g.fillRect(x-4,y-26,8,30);g.fillRect(x-4,y-20,8,26);}};
+  fence(80,320,80,1380);fence(80,320,460,320);fence(2480,320,2480,1380);fence(2100,320,2480,320);
+  fence(80,1420,2480,1420);fence(80,1420,120,1440);fence(2440,1420,2480,1440);
+  // 小池塘（右下）
+  g.fillStyle='#3f7fa8';g.beginPath();g.ellipse(1650,1180,120,80,0,0,Math.PI*2);g.fill();
+  g.fillStyle='rgba(255,255,255,.18)';g.beginPath();g.ellipse(1630,1165,84,52,0,0,Math.PI*2);g.fill();
+  this.groundHome=off;
+  // 通行掩码清空 → 全图可走（blocked 对 null 掩码恒 false）
+  this.maskData=null;
+  this.waterFlag=null;
+  // 缩略图（960×540，与常规世界同规格：M 大地图弹窗/小地图共用）
+  this.thumbW=THUMB_W; this.thumbH=THUMB_H; this.thumbScale=HW/THUMB_W;
+  this._mapThumbFallback=null;
+  try{
+    this.thumb=await createImageBitmap(off,{resizeWidth:THUMB_W,resizeHeight:THUMB_H,resizeQuality:'low'});
+  }catch(e){ this.thumb=null; this._mapThumbFallback=off; }
+  this.centerCam();
+};
+
 /* 分块预热：从角色所在块螺旋向外全部异步请求（createImageBitmap 走解码线程，
    主线程零开销，不再与渲染争抢）；未预热完的帧由主题底色兜底 */
 WMap.prototype.prewarmTiles=function(){
   if(!this.tiles)return;
-  const cols=MW/VW, rows=MH/VH;
+  const cols=this.WM/VW, rows=this.HM/VH;
   const hc=Math.floor(this.hero.x/VW), hr=Math.floor(this.hero.y/VH);
   const order=[];
   for(let r=0;r<Math.max(cols,rows);r++)
@@ -548,7 +646,16 @@ WMap.prototype.prewarmTiles=function(){
 /* 用服务端点位生成实体（固定坐标 + 随机内容） */
 WMap.prototype.applySpots=function(spots){
   const self=this;
-  for(const s of spots){
+  // v1.9.23 点位落点自检：配置坐标可能压在地图边缘（碰撞体采样越界=墙，如 x=7664 距右边缘仅
+  // 16px、W2→W4 通道 y=0 压顶边）或落在水域/墙体里（掩码水域在运行时被就地掩黑为不可走），
+  // 导致 GATE 看不见或走不进去。就近螺旋找一块碰撞可站立的落点自动修正（含避水）。
+  const fixPos=(raw)=>{
+    if(!this.maskData||!this.blocked(raw.x,raw.y,24))return raw;
+    const f=this.findWalkableNear(raw.x,raw.y,960);
+    return f?Object.assign({},raw,{x:f.x,y:f.y}):raw;
+  };
+  for(const raw of spots){
+    const s=raw.type==='ANCHOR'?raw:fixPos(raw);
     if(s.type==='ANCHOR'){this.anchors.push(s);continue;}
     if(s.type==='GATE'){
       const wdefs=(this.opts&&this.opts.worldDefs)||[];
@@ -559,17 +666,41 @@ WMap.prototype.applySpots=function(spots){
     }
     if(s.type==='MOB'||s.type==='ELITE'||s.type==='BOSS'){
       const monId=s.contentId||s.bossMonster||'slime';
-      const sprite=MON_NAMES[monId]?monId:'slime';
+      // v1.9.36 群怪模版：点位组合随服务端下发（group），遭遇贴图与战斗结算同源
+      const group=(s.group&&s.group.length)?s.group:[monId];
+      // v1.9.39 修复：贴图取组合内第一只怪（与实际战斗一致），不再用点位原类型。
+      // 此前用 monId 选贴图、group 算名字 → 出现"名字骷髅兵、贴图史莱姆"的错位。
+      const firstMon=group[0]||monId;
+      const sprite=MON_NAMES[firstMon]?firstMon:(MON_NAMES[monId]?monId:'slime');
       const actor=this.makeFreshActor('mon_'+sprite,'idle');
-      this.monsters.push({x:s.x,y:s.y,nodeId:s.nodeId,type:sprite,name:(s.type==='ELITE'?'精英 ':s.type==='BOSS'?'首领 ':'')+(MON_NAMES[sprite]||monId),
-        state:'idle',r:30,alert:s.type==='ELITE'?360:300,actor,phase:Math.random()*6,
-        monId, elite:s.type!=='MOB'});
+      // 组合名：按怪物 id 计数（如"史莱姆×2 · 骷髅×1"）
+      const cnt={};group.forEach(g=>{cnt[g]=(cnt[g]||0)+1;});
+      const gangName=Object.keys(cnt).map(k=>(MON_NAMES[k]||k)+'×'+cnt[k]).join(' · ');
+      const pre=s.type==='ELITE'?'精英 ':(s.type==='BOSS'?'首领 ':'');
+      this.monsters.push({x:s.x,y:s.y,nodeId:s.nodeId,type:sprite,name:pre+gangName,
+        group,gangName,monId,elite:s.type!=='MOB',
+        state:'idle',r:30,alert:s.type==='ELITE'?360:300,actor,phase:Math.random()*6});
       continue;
     }
     if(s.type==='CHEST'){
       const tier=['wood','silver','gold'][Math.max(0,Math.min(2,(s.tier||1)-1))]||'wood';
       const actor=this.makeFreshActor('item_chest_'+tier,'closed');
       this.chests.push({x:s.x,y:s.y,nodeId:s.nodeId,tier,state:'closed',actor,phase:Math.random()*6});
+    }
+    // v1.9.27 草药点位：采集得回血药水，服务端 2 分钟 respawn
+    if(s.type==='POTION'){
+      this.potions.push({x:s.x,y:s.y,nodeId:s.nodeId,state:'ready',phase:Math.random()*6});
+    }
+    // v1.9.31 家园功能点：content=warehouse/idle/dress → homeItems；gate → 复用传送门（出门）
+    if(s.type==='FUNC'){
+      const kind=s.contentId||'warehouse';
+      if(kind==='gate'){
+        this.gates.push({x:s.x,y:s.y,nodeId:s.nodeId,to:'BACK',requireLevel:0,
+          label:'出门 · 返回大世界',worldName:'大世界'});
+      } else {
+        const labels={warehouse:'仓库',idle:'挂机修炼',dress:'换装镜'};
+        this.homeItems.push({x:s.x,y:s.y,nodeId:s.nodeId,kind,label:labels[kind]||kind,phase:Math.random()*6});
+      }
     }
   }
 };
@@ -710,8 +841,8 @@ WMap.prototype.blocked=function(x,y,r){
   return false;
 };
 WMap.prototype.centerCam=function(){
-  this.cam.x=Math.max(0,Math.min(MW-VW,this.hero.x-VW/2));
-  this.cam.y=Math.max(0,Math.min(MH-VH,this.hero.y-VH/2));
+  this.cam.x=Math.max(0,Math.min(this.WM-VW,this.hero.x-VW/2));
+  this.cam.y=Math.max(0,Math.min(this.HM-VH,this.hero.y-VH/2));
 };
 /* 就近可站立点：以 (x,y) 为心螺旋外扩，返回第一个碰撞半径 24 全通的位置 */
 WMap.prototype.findWalkableNear=function(x,y,maxR){
@@ -720,11 +851,11 @@ WMap.prototype.findWalkableNear=function(x,y,maxR){
     for(let a=0;a<360;a+=18){
       const rad=a*Math.PI/180;
       const nx=x+Math.cos(rad)*r, ny=y+Math.sin(rad)*r;
-      if(nx<40||ny<40||nx>MW-40||ny>MH-40)continue;
+      if(nx<40||ny<40||nx>this.WM-40||ny>this.HM-40)continue;
       if(!this.blocked(nx,ny,24))return {x:nx,y:ny};
     }
   }
-  return {x:Math.max(40,Math.min(MW-40,x)),y:Math.max(40,Math.min(MH-40,y))};
+  return {x:Math.max(40,Math.min(this.WM-40,x)),y:Math.max(40,Math.min(this.HM-40,y))};
 };
 
 /* ---------- 输入 ---------- */
@@ -732,6 +863,7 @@ WMap.prototype.bindInput=function(){
   const self=this;
   addEventListener('keydown',e=>{
     if(!self.active)return;
+    if(self.mapModalOpen)return; // v1.9.29 大地图弹窗打开时锁定移动
     const k=e.key.toLowerCase();
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){self.keys[k]=true;e.preventDefault();}
   });
@@ -741,18 +873,37 @@ WMap.prototype.bindInput=function(){
     const rect=this.cv.getBoundingClientRect();
     const sx=(e.clientX-rect.left)/rect.width*VW, sy=(e.clientY-rect.top)/rect.height*VH;
     const wx=sx+self.cam.x, wy=sy+self.cam.y;
+    // v1.9.27 点击分发改为"取最近的可交互物"：草药与宝箱/怪点位可能相邻，
+    // 旧的固定顺序（门→怪→箱→草药）会让近处草药被远处宝箱"抢走"点击。
+    const cands=[];
     const gate=self.nearestGate(wx,wy,200);
-    if(gate){self.opts.onGate&&self.opts.onGate(gate);return;}
+    if(gate)cands.push({d:Math.hypot(gate.x-wx,gate.y-wy),fn:()=>self.opts.onGate&&self.opts.onGate(gate)});
     const mon=self.nearestMonster(wx,wy,190);
-    if(mon){self.opts.onEncounter&&self.opts.onEncounter(mon);return;}
+    if(mon)cands.push({d:Math.hypot(mon.x-wx,mon.y-wy),fn:()=>self.opts.onEncounter&&self.opts.onEncounter(mon)});
     const ch=self.nearestChest(wx,wy,190);
-    if(ch){self.tryOpenChest(ch);return;}
+    if(ch)cands.push({d:Math.hypot(ch.x-wx,ch.y-wy),fn:()=>self.tryOpenChest(ch)});
+    const pt=self.nearestPotion(wx,wy,190);
+    if(pt)cands.push({d:Math.hypot(pt.x-wx,pt.y-wy),fn:()=>self.tryPickPotion(pt)});
+    // v1.9.31 家园功能点（仓库/挂机/换装镜）
+    const hi=self.nearestHomeItem(wx,wy,200);
+    if(hi)cands.push({d:Math.hypot(hi.x-wx,hi.y-wy),fn:()=>self.tryUseHomeItem(hi)});
+    if(cands.length){cands.sort((a,b)=>a.d-b.d);cands[0].fn();return;}
     // 已移除点击地面移动：仅保留 WASD/方向键移动，点击只用于交互（怪/箱/传送门）
   });
 };
 WMap.prototype.nearestGate=function(x,y,maxd){let b=null,d0=maxd;for(const g of this.gates){const d=Math.hypot(g.x-x,g.y-y);if(d<d0){d0=d;b=g;}}return b;};
 WMap.prototype.nearestMonster=function(x,y,maxd){let b=null,d0=maxd||110;for(const m of this.monsters){if(m.state!=='idle')continue;const d=Math.hypot(m.x-x,m.y-y);if(d<d0){d0=d;b=m;}}return b;};
 WMap.prototype.nearestChest=function(x,y,maxd){let b=null,d0=maxd||80;for(const c of this.chests){if(c.state!=='closed')continue;const d=Math.hypot(c.x-x,c.y-y);if(d<d0){d0=d;b=c;}}return b;};
+WMap.prototype.nearestPotion=function(x,y,maxd){let b=null,d0=maxd||80;for(const p of this.potions){if(p.state!=='ready')continue;const d=Math.hypot(p.x-x,p.y-y);if(d<d0){d0=d;b=p;}}return b;};
+WMap.prototype.nearestHomeItem=function(x,y,maxd){let b=null,d0=maxd||200;for(const h of this.homeItems){const d=Math.hypot(h.x-x,h.y-y);if(d<d0){d0=d;b=h;}}return b;};
+/* v1.9.31 家园功能点交互：需走到附近（与宝箱/草药同规则） */
+WMap.prototype.tryUseHomeItem=function(h){
+  if(Math.hypot(h.x-this.hero.x,h.y-this.hero.y)>300){
+    if(this.opts.onHint)this.opts.onHint('请用 WASD / 方向键走到'+(h.label||'设施')+'附近再使用');
+    return;
+  }
+  this.opts.onHomeItem&&this.opts.onHomeItem(h);
+};
 
 /* ---------- 移动更新 ---------- */
 WMap.prototype.update=function(dt){
@@ -769,12 +920,13 @@ WMap.prototype.update=function(dt){
     if(h.moving&&this.heroActor&&this.heroActor.state!=='walk')this.heroActor.play('walk');
     // 朝向：连续角度（小地图指针按此旋转，8 方向都不会被压成 4 档）
     if(dx||dy)h.ang=Math.atan2(dy,dx);
-    if(Math.abs(dx)>Math.abs(dy))h.dir=dx>0?'right':'left';else h.dir=dy>0?'down':'up';
+    // v1.9.37：只有左右移动才改变角色朝向，上下移动保持原朝向（修复倒着走）
+    if(Math.abs(dx)>Math.abs(dy))h.dir=dx>0?'right':'left';
     const nx=h.x+dx*spd,ny=h.y+dy*spd;
     // 掩码精度8px，角色碰撞半径取24（≈显示半宽，保证不穿墙）
     if(!this.blocked(nx,h.y,24))h.x=nx;
     if(!this.blocked(h.x,ny,24))h.y=ny;
-    h.x=Math.max(30,Math.min(MW-30,h.x));h.y=Math.max(30,Math.min(MH-30,h.y));
+    h.x=Math.max(30,Math.min(this.WM-30,h.x));h.y=Math.max(30,Math.min(this.HM-30,h.y));
     const tx=Math.floor(h.x/640),ty=Math.floor(h.y/640);
     this.onTile&&this.onTile(tx+','+ty);this.visited.add(tx+','+ty);
   } else if(this.heroActor&&this.heroActor.state==='walk'){this.heroActor.play('idle');}
@@ -819,6 +971,17 @@ WMap.prototype.tryOpenChest=function(c){
   }
   this.openChest(c);
 };
+
+/* v1.9.27 采集草药：走到附近点击 → 服务端权威入仓（回血药水） */
+WMap.prototype.tryPickPotion=function(p){
+  if(p.state!=='ready')return;
+  if(Math.hypot(p.x-this.hero.x,p.y-this.hero.y)>260){
+    if(this.opts.onHint)this.opts.onHint('请用 WASD / 方向键走到草药附近再采集');
+    return;
+  }
+  p.state='picked';
+  this.opts.onPotion&&this.opts.onPotion(p);
+};
 WMap.prototype.openChest=function(c){
   if(c.state!=='closed')return;
   c.state='opening';
@@ -840,9 +1003,14 @@ WMap.prototype.render=function(now){
   const dt=Math.min(0.05,(now-this.lastTs)/1000||0);this.lastTs=now;this.time+=dt;
   this.update(dt);
   const g=this.ctx,cx=this.cam.x,cy=this.cam.y,t=this.time;
+  // v1.9.31 家园：程序化整图直绘（无分块/掩码/装饰层）
+  if(this.worldId==='HOME'&&this.groundHome){
+    g.fillStyle='#3a5a2a';g.fillRect(0,0,VW,VH);
+    g.drawImage(this.groundHome,cx,cy,VW,VH,0,0,VW,VH);
+  }
   // 真实地形：分块纹理绘制（每帧仅 2×2 块视口大小的小纹理）。
   // 块未就绪时先铺主题底色（异步建块毫秒级返回，肉眼几乎不可见）
-  if(this.tiles){
+  else if(this.tiles){
     g.fillStyle=this.theme.ground[0];
     g.fillRect(0,0,VW,VH);
     const tx0=Math.floor(cx/VW),ty0=Math.floor(cy/VH);
@@ -896,7 +1064,9 @@ WMap.prototype.render=function(now){
   // 墙已含在地形图中，不再渲染障碍物精灵
   for(const m of this.monsters)if(m.state==='idle')items.push({y:m.y,k:'m',o:m});
   for(const c of this.chests)items.push({y:c.y,k:'c',o:c});
+  for(const p of this.potions)if(p.state==='ready')items.push({y:p.y,k:'p',o:p});
   for(const gte of this.gates)items.push({y:gte.y,k:'g',o:gte});
+  for(const h of this.homeItems)items.push({y:h.y,k:'f',o:h}); // v1.9.31 家园功能点
   for(const d of this.drops)items.push({y:d.y,k:'d',o:d});
   for(const id in this.remote){const r=this.remote[id];items.push({y:r.y,k:'r',o:r});}
   items.push({y:this.hero.y,k:'h',o:this.hero});
@@ -915,7 +1085,9 @@ WMap.prototype.render=function(now){
       case 'o':this.drawWall(g,it.o,sx,sy);break;
       case 'm':this.drawMonster(g,it.o,sx,sy,t);break;
       case 'c':this.drawChest(g,it.o,sx,sy,t);break;
+      case 'p':this.drawPotion(g,it.o,sx,sy,t);break;
       case 'g':this.drawGate(g,it.o,sx,sy,t);break;
+      case 'f':this.drawHomeItem(g,it.o,sx,sy,t);break;
       case 'd':this.drawChest(g,{x:it.o.x,y:it.o.y,tier:it.o.tier,state:'closed',phase:0,actor:it.o.actor},sx,sy,t,true);break;
       case 'r':this.drawRemote(g,it.o,sx,sy,t);break;
       case 'h':this.drawHero(g,sx,sy,t);break;
@@ -964,7 +1136,13 @@ WMap.prototype.drawHero=function(g,sx,sy,t){
   sh.addColorStop(1,'rgba(30,38,28,0)');
   g.save();g.translate(sx,sy+10);g.scale(1,0.42);g.translate(-sx,-(sy+10));
   g.fillStyle=sh;g.beginPath();g.arc(sx,sy+10,15,0,Math.PI*2);g.fill();g.restore();
-  if(this.heroActor)this.heroActor.render(g,sx,sy,2,{dir:this.hero.dir==='left'?-1:1});
+  // 立绘逻辑画布 64×96：scale=1 即屏幕 64×96，与原主角显示尺寸/比例锚点一致
+  // v1.9.27：行走方向按美术默认朝向修正——美术朝右者向左翻转，美术朝左者向右翻转
+  if(this.heroActor){
+    const f=this.heroFacesRight!==false;
+    const flip=this.hero.dir==='left'?(f?-1:1):(f?1:-1);
+    this.heroActor.render(g,sx,sy,1,{dir:flip});
+  }
 };
 WMap.prototype.drawMonster=function(g,m,sx,sy,t){
   const bob=Math.sin(t*3+m.phase)*3;
@@ -1013,8 +1191,64 @@ WMap.prototype.drawChest=function(g,c,sx,sy,t,isDrop){
     for(let i=0;i<6;i++){const a=t*3+i*1.05,rr=28+i*4;g.fillStyle=i%2?'#f0d590':'#7fe0a0';g.fillRect(sx+Math.cos(a)*rr-3,sy-28-Math.sin(a)*rr*0.5-3,6,6);}
   }
 };
-WMap.prototype.drawGate=function(g,gt,sx,sy,t){
-  const glow=0.5+0.5*Math.sin(t*2.2);
+/* v1.9.27 草药（回血药水原料）：闪光瓶子，采集后消失（服务端 2 分钟 respawn） */
+WMap.prototype.drawPotion=function(g,p,sx,sy,t){
+  const bob=Math.sin(t*2.4+p.phase)*3;
+  const glow=0.5+0.5*Math.sin(t*3.5+p.phase);
+  g.fillStyle='rgba(0,0,0,.26)';g.beginPath();g.ellipse(sx,sy+8,16,6,0,0,Math.PI*2);g.fill();
+  // 光晕
+  g.strokeStyle=`rgba(127,224,160,${0.25+glow*0.4})`;g.lineWidth=2;
+  g.beginPath();g.arc(sx,sy-12+bob,30,0,Math.PI*2);g.stroke();
+  // 瓶身（圆瓶 + 软木塞 + 药液）
+  g.fillStyle='#c9b28a';g.fillRect(sx-5,sy-34+bob,10,7);                    // 木塞
+  g.fillStyle='#bfe9d2';g.beginPath();g.arc(sx,sy-10+bob,14,0,Math.PI*2);g.fill(); // 瓶身
+  g.fillStyle='#e5564b';g.beginPath();g.arc(sx,sy-8+bob,10,0,Math.PI*2);g.fill();  // 红药液
+  g.fillStyle='rgba(255,255,255,.75)';g.beginPath();g.arc(sx-5,sy-15+bob,3,0,Math.PI*2);g.fill(); // 高光
+};
+/* v1.9.31 家园功能点：仓库木箱 / 挂机篝火 / 换装立镜（程序化绘制 + 悬浮名牌） */
+WMap.prototype.drawHomeItem=function(g,h,sx,sy,t){
+  const bob=Math.sin(t*2+h.phase)*2;
+  const glow=0.5+0.5*Math.sin(t*3+h.phase);
+  g.fillStyle='rgba(0,0,0,.24)';g.beginPath();g.ellipse(sx,sy+10,34,12,0,0,Math.PI*2);g.fill();
+  if(h.kind==='warehouse'){
+    // 木箱堆（大箱+小箱）
+    g.fillStyle='#a8794a';g.fillRect(sx-34,sy-44+bob,68,52);
+    g.strokeStyle='#6d4a24';g.lineWidth=3;g.strokeRect(sx-34,sy-44+bob,68,52);
+    g.beginPath();g.moveTo(sx-34,sy-44+bob);g.lineTo(sx+34,sy+8+bob);g.moveTo(sx+34,sy-44+bob);g.lineTo(sx-34,sy+8+bob);g.stroke();
+    g.fillStyle='#8a5f34';g.fillRect(sx+22,sy-16+bob,34,24);
+    g.strokeStyle='#5a3a12';g.strokeRect(sx+22,sy-16+bob,34,24);
+  } else if(h.kind==='idle'){
+    // 篝火（柴堆 + 跳动火焰）
+    g.strokeStyle='#7a5630';g.lineWidth=7;g.lineCap='round';
+    g.beginPath();g.moveTo(sx-24,sy);g.lineTo(sx+20,sy-12);g.moveTo(sx+24,sy);g.lineTo(sx-20,sy-12);g.stroke();
+    const fs=1+0.18*Math.sin(t*7+h.phase);
+    g.fillStyle=`rgba(240,140,60,${0.75+glow*0.25})`;
+    g.beginPath();g.moveTo(sx,sy-58*fs+bob);g.quadraticCurveTo(sx+16,sy-26+bob,sx,sy-4+bob);g.quadraticCurveTo(sx-16,sy-26+bob,sx,sy-58*fs+bob);g.fill();
+    g.fillStyle=`rgba(255,214,90,${0.8+glow*0.2})`;
+    g.beginPath();g.moveTo(sx,sy-36*fs+bob);g.quadraticCurveTo(sx+9,sy-18+bob,sx,sy-4+bob);g.quadraticCurveTo(sx-9,sy-18+bob,sx,sy-36*fs+bob);g.fill();
+    g.strokeStyle=`rgba(255,180,90,${0.25+glow*0.4})`;g.lineWidth=2;
+    g.beginPath();g.arc(sx,sy-20,42,0,Math.PI*2);g.stroke();
+  } else if(h.kind==='dress'){
+    // 换装立镜（木框 + 镜面 + 高光）
+    g.fillStyle='#8a5f34';
+    g.beginPath();g.roundRect?g.roundRect(sx-26,sy-92+bob,52,100,12):g.rect(sx-26,sy-92+bob,52,100);g.fill();
+    g.fillStyle='#bcd8e8';g.fillRect(sx-18,sy-84+bob,36,84);
+    g.fillStyle='rgba(255,255,255,.55)';
+    g.beginPath();g.moveTo(sx-14,sy-80+bob);g.lineTo(sx-2,sy-80+bob);g.lineTo(sx-14,sy-40+bob);g.closePath();g.fill();
+    g.strokeStyle=`rgba(160,220,255,${0.2+glow*0.4})`;g.lineWidth=2;
+    g.beginPath();g.arc(sx,sy-44+bob,46,0,Math.PI*2);g.stroke();
+  }
+  // 悬浮名牌
+  g.font='bold 13px "Microsoft YaHei","PingFang SC",sans-serif';g.textAlign='center';
+  const label=(h.label||'');
+  const w=g.measureText(label).width+16;
+  const ny=sy-116+bob;
+  g.fillStyle='rgba(8,12,20,.78)';
+  g.fillRect(sx-w/2,ny-14,w,22);
+  g.strokeStyle=`rgba(240,213,144,${0.4+glow*0.4})`;g.lineWidth=1;g.strokeRect(sx-w/2,ny-14,w,22);
+  g.fillStyle='#f0d590';g.fillText(label,sx,ny+2);
+};
+WMap.prototype.drawGate=function(g,gt,sx,sy,t){  const glow=0.5+0.5*Math.sin(t*2.2);
   // 光柱
   const beam=g.createLinearGradient(0,sy-140,0,sy+10);
   beam.addColorStop(0,'rgba(140,200,255,0)');
@@ -1064,7 +1298,7 @@ WMap.prototype.drawGate=function(g,gt,sx,sy,t){
 };
 WMap.prototype.drawRemote=function(g,r,sx,sy,t){
   g.fillStyle='rgba(0,0,0,.25)';g.beginPath();g.ellipse(sx,sy+10,18,7,0,0,Math.PI*2);g.fill();
-  if(r.actor)r.actor.render(g,sx,sy,2,{});
+  if(r.actor)r.actor.render(g,sx,sy,1,{});
   g.font='bold 12px sans-serif';g.textAlign='center';g.strokeStyle='#000';g.lineWidth=3;
   g.strokeText(r.name||'玩家',sx,sy-120);g.fillStyle='#8fd0ff';g.fillText(r.name||'玩家',sx,sy-120);
 };
@@ -1084,7 +1318,8 @@ WMap.prototype.applySnapshot=function(players,selfId){
     if(Math.abs(p.x-hx)>rx||Math.abs(p.y-hy)>ry)continue; // 视野外不渲染
     seen[p.id]=true;
     if(!this.remote[p.id]){
-      const actor=new this.PartActor('char_hero_mage');
+      const rb='char_'+((p.classId&&['warrior','mage','knight','fighter','sage','warlock'].indexOf(p.classId)>=0)?p.classId:'warrior');
+      const actor=new this.StandeeActor(rb);
       actor.init().then(()=>actor.play('idle'));
       this.remote[p.id]={x:p.x,y:p.y,name:p.name,actor};
     } else {
@@ -1095,6 +1330,105 @@ WMap.prototype.applySnapshot=function(players,selfId){
     }
   }
   for(const id in this.remote)if(!seen[id])delete this.remote[id];
+};
+
+/* ---------- v1.9.29 大地图弹窗（M 键开关 / Esc / ✕ / 遮罩点击关闭） ---------- */
+WMap.prototype.toggleMapModal=function(){ if(this.mapModalOpen)this.closeMapModal(); else this.openMapModal(); };
+
+WMap.prototype.openMapModal=function(){
+  if(this.mapModalOpen)return;
+  this.mapModalOpen=true;
+  this.keys={}; this.hero.moving=false; // 打开瞬间停走
+  const titleEl=document.getElementById('worldTitle');
+  const title=(titleEl&&titleEl.textContent)||this.worldId+' · 大世界';
+  const layer=document.createElement('div');
+  layer.id='wmapLayer';
+  layer.innerHTML=`<div class="wmap-box">
+    <div class="wmap-head"><b>${title}</b><span class="wmap-tip">M / Esc 关闭 · 点✕退出</span>
+      <button id="wmapClose" title="关闭 (Esc / M)">✕</button></div>
+    <canvas id="wmapCv" width="960" height="540"></canvas>
+    <div class="wmap-legend">
+      <span><i class="lgdot lgdot-hero"></i>你</span>
+      <span><i class="lgdot lgdot-gate"></i>传送门</span>
+      <span><i class="lgdot lgdot-anchor"></i>锚点</span>
+      <span><i class="lgdot lgdot-mob"></i>怪物</span>
+      <span><i class="lgdot lgdot-elite"></i>精英/首领</span>
+      <span><i class="lgdot lgdot-chest"></i>宝箱</span>
+      <span><i class="lgdot lgdot-potion"></i>草药</span>
+    </div>
+  </div>`;
+  document.body.appendChild(layer);
+  const self=this;
+  layer.querySelector('#wmapClose').onclick=()=>self.closeMapModal();
+  layer.addEventListener('mousedown',e=>{ if(e.target===layer)self.closeMapModal(); });
+  // 底图兜底：当前世界缩略位图未就绪时再拉一张（家园用程序化整图兜底）
+  if(!this.thumb){
+    if(this.worldId==='HOME'&&this.groundHome){ this._mapThumbFallback=this.groundHome; }
+    else{
+      const img=new Image();
+      img.src=RES+'maps/'+this.worldId+'_thumb.webp';
+      this._mapThumbFallback=img;
+    }
+  }
+  const isHome=this.worldId==='HOME';
+  const legend=isHome
+    ?`<span><i class="lgdot lgdot-hero"></i>你</span>
+      <span><i class="lgdot lgdot-chest"></i>功能设施</span>
+      <span><i class="lgdot lgdot-gate"></i>出门</span>`
+    :`<span><i class="lgdot lgdot-hero"></i>你</span>
+      <span><i class="lgdot lgdot-gate"></i>传送门</span>
+      <span><i class="lgdot lgdot-anchor"></i>锚点</span>
+      <span><i class="lgdot lgdot-mob"></i>怪物</span>
+      <span><i class="lgdot lgdot-elite"></i>精英/首领</span>
+      <span><i class="lgdot lgdot-chest"></i>宝箱</span>
+      <span><i class="lgdot lgdot-potion"></i>草药</span>`;
+  const cv=layer.querySelector('#wmapCv'), g=cv.getContext('2d');
+  layer.querySelector('.wmap-legend').innerHTML=legend;
+  const loop=()=>{
+    if(!this.mapModalOpen)return;
+    this.drawMapModal(cv,g);
+    this._mapRaf=requestAnimationFrame(loop);
+  };
+  loop();
+};
+
+WMap.prototype.drawMapModal=function(cv,g){
+  const t=performance.now()/1000;
+  g.clearRect(0,0,cv.width,cv.height);
+  const img=this.thumb||this._mapThumbFallback;
+  if(img&&(img.complete===undefined||img.complete))g.drawImage(img,0,0,cv.width,cv.height);
+  else{ g.fillStyle='#101826'; g.fillRect(0,0,cv.width,cv.height); }
+  const S=cv.width/this.WM; // v1.9.31 动态：常规世界 960/7680=1/8；家园 960/2560
+  const P=(x,y)=>({x:x*S,y:y*S});
+  const dot=(x,y,r,fill,stroke)=>{ g.beginPath(); g.arc(x,y,r,0,6.2832); g.fillStyle=fill; g.fill(); if(stroke){g.lineWidth=1.5;g.strokeStyle=stroke;g.stroke();} };
+  // 怪物（精英/首领更大更醒目）
+  for(const m of this.monsters){ const p=P(m.x,m.y); dot(p.x,p.y,m.elite?6:4,m.elite?'#e05a4a':'#c9756a','rgba(0,0,0,.5)'); }
+  // 宝箱 / 草药（只画当前可交互的）
+  for(const c of this.chests){ if(c.state!=='closed')continue; const p=P(c.x,c.y); dot(p.x,p.y,5,'#e0b455','#5a3c10'); }
+  for(const pt of this.potions){ if(pt.state!=='ready')continue; const p=P(pt.x,pt.y); dot(p.x,pt.y,4,'#5fd38a','#1d5a34'); }
+  // 锚点 / 传送门
+  for(const a of this.anchors){ const p=P(a.x,a.y); dot(p.x,p.y,5,'#6fa8dc','#20415e'); }
+  for(const gt of this.gates){ const p=P(gt.x,gt.y);
+    const pulse=3+Math.sin(t*3)*1.2;
+    dot(p.x,p.y,6+pulse,'rgba(150,110,220,.28)');
+    dot(p.x,p.y,6,'#a97fe8','#3d2470');
+  }
+  // v1.9.31 家园功能点（金色方点）
+  for(const h of this.homeItems){ const p=P(h.x,h.y);
+    g.fillStyle='#e0b455';g.fillRect(p.x-4,p.y-4,8,8);
+    g.strokeStyle='#5a3c10';g.lineWidth=1.5;g.strokeRect(p.x-4,p.y-4,8,8);
+  }
+  // 主角：金色脉冲
+  const hp=P(this.hero.x,this.hero.y);
+  dot(hp.x,hp.y,9+Math.sin(t*2.5)*2.5,'rgba(255,214,90,.25)');
+  dot(hp.x,hp.y,6,'#ffd65a','#6b4c00');
+};
+
+WMap.prototype.closeMapModal=function(){
+  if(!this.mapModalOpen)return;
+  this.mapModalOpen=false;
+  if(this._mapRaf)cancelAnimationFrame(this._mapRaf);
+  const l=document.getElementById('wmapLayer'); if(l)l.remove();
 };
 
 window.WorldMap=WMap;

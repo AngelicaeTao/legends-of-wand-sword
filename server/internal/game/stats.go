@@ -13,12 +13,47 @@ type Stats struct {
 }
 
 // EquipItem 是一件装备的存档表示（对应 equipment 表一行）。
+// v1.9.38：武器分系——ClassID 仅武器使用（"warrior"/"mage" 系），空=通用（防具/饰品/老档）。
 type EquipItem struct {
 	ID      string             `json:"id"`
 	Slot    string             `json:"slot"`
 	Quality int                `json:"quality"`
 	Enhance int                `json:"enhance"`
 	Stats   map[string]float64 `json:"stats"`
+	ClassID string             `json:"classId,omitempty"` // 武器系标记（战士系/法师系）
+}
+
+// WeaponClassFor 职业 → 所属武器系（v1.9.38）。未配置/未知职业归战士系。
+func WeaponClassFor(classID string) string {
+	for wc, ids := range C().Equipment.WeaponClasses {
+		if wc == "_note" { continue }
+		for _, id := range ids {
+			if id == classID { return wc }
+		}
+	}
+	return "warrior"
+}
+
+// WeaponName 武器按系+品质取名（v1.9.38）；非武器或未配置回退品质+槽位名。
+func WeaponName(classID string, quality int, slot string) string {
+	if slot != "weapon" || classID == "" { return "" }
+	names, ok := C().Equipment.WeaponNames[classID]
+	if !ok || len(names) == 0 { return "" }
+	if quality < 0 { quality = 0 }
+	if quality >= len(names) { quality = len(names) - 1 }
+	return names[quality]
+}
+
+// WeaponClassCN 武器系中文名。
+func WeaponClassCN(wc string) string {
+	if wc == "mage" { return "法师" }
+	return "战士"
+}
+
+// EquipPower 单件装备的战力贡献（v1.9.28，随 /api/stats/calc 返回）。
+type EquipPower struct {
+	ID    string  `json:"id"`
+	Power float64 `json:"power"`
 }
 
 // Avatar 是参与属性计算的角色最小输入。
@@ -57,52 +92,88 @@ func CalcStats(a Avatar) Stats {
 	gainPerLv := num(enh["statGainPerLevel"])
 	qualities := c.Equipment.Quality
 	for _, it := range a.Equip {
-		qmult := 1.0
-		for _, q := range qualities {
-			if q.ID == it.Quality {
-				qmult = q.Mult
-				break
-			}
-		}
-		boost := 1 + gainPerLv*float64(it.Enhance)
-		for k, v := range it.Stats {
-			cf := 1.0
-			if _, exists := coef[k]; exists {
-				cf = num(coef[k])
-			}
-			switch k {
-			case "hp":
-				st.HP += v * qmult * boost * cf
-			case "atk":
-				st.ATK += v * qmult * boost * cf
-			case "def":
-				st.DEF += v * qmult * boost * cf
-			case "crit":
-				st.Crit += v * qmult * boost
-			case "speed":
-				st.Spd += v * qmult * boost
-			}
-		}
+		applyEquip(&st, c, classID2EquipParams{coef: coef, gainPerLv: gainPerLv, qualities: qualities}, it)
 	}
-	st.Power = math.Round(st.ATK*3 + st.DEF*2 + st.HP*0.4 + st.Crit*800)
+	st.Power = PowerOf(st)
 	return st
 }
 
-// TransferEquip 转职装备自动换算：返回按新职业系数折算后的属性。
-// 这是纯函数，转职时统一走这里，避免规则散落各处导致不一致（交互矩阵 bug 项）。
-func TransferEquip(items []EquipItem, newClassID string) []EquipItem {
+// equipParams 抽出装备折算所需的配置快照，供 CalcStats 与 EquipContribution 共用。
+type classID2EquipParams struct {
+	coef       map[string]any
+	gainPerLv  float64
+	qualities  []QualityDef
+}
+
+// applyEquip 把一件装备的属性贡献累加到 st 上（品质/强化/职业系数全套规则）。
+func applyEquip(st *Stats, c *Config, p classID2EquipParams, it EquipItem) {
+	qmult := 1.0
+	for _, q := range p.qualities {
+		if q.ID == it.Quality {
+			qmult = q.Mult
+			break
+		}
+	}
+	boost := 1 + p.gainPerLv*float64(it.Enhance)
+	for k, v := range it.Stats {
+		cf := 1.0
+		if _, exists := p.coef[k]; exists {
+			cf = num(p.coef[k])
+		}
+		switch k {
+		case "hp":
+			st.HP += v * qmult * boost * cf
+		case "atk":
+			st.ATK += v * qmult * boost * cf
+		case "def":
+			st.DEF += v * qmult * boost * cf
+		case "crit":
+			st.Crit += v * qmult * boost
+		case "speed":
+			st.Spd += v * qmult * boost
+		}
+	}
+}
+
+// PowerOf 全局战力公式（与 CalcStats 保持同一口径）。
+func PowerOf(st Stats) float64 {
+	return math.Round(st.ATK*3 + st.DEF*2 + st.HP*0.4 + st.Crit*800)
+}
+
+// EquipContribution v1.9.28：单件装备对指定职业的战力贡献（含品质/强化/职业换算系数）。
+// 供装备列表、强化工坊、仓库显示"战力 +N"。
+func EquipContribution(classID string, it EquipItem) float64 {
 	c := C()
-	coef := coefOf(c, newClassID)
+	st := Stats{}
+	applyEquip(&st, c, classID2EquipParams{
+		coef:      coefOf(c, classID),
+		gainPerLv: num(c.Equipment.Enhance["statGainPerLevel"]),
+		qualities: c.Equipment.Quality,
+	}, it)
+	return PowerOf(st)
+}
+
+// TransferEquip 转职装备自动换算（v1.9.30 双向修正）：属性按 新职业系数/旧职业系数 的比值折算。
+// 旧实现只乘新职业系数，战士→法师→战士来回互转会让武器属性持续膨胀（20→23→26…），
+// 修复后互转数值精确还原，武器真正跨职业互通。
+func TransferEquip(items []EquipItem, fromClassID, toClassID string) []EquipItem {
+	c := C()
+	coefFrom := coefOf(c, fromClassID)
+	coefTo := coefOf(c, toClassID)
 	out := make([]EquipItem, len(items))
 	copy(out, items)
 	for i := range out {
 		out[i].Stats = map[string]float64{}
 		for k, v := range items[i].Stats {
-			cf := 1.0
-			if _, exists := coef[k]; exists {
-				cf = num(coef[k])
+			ratio := 1.0
+			if fv, ok := coefFrom[k]; ok {
+				if tv, ok2 := coefTo[k]; ok2 && num(fv) != 0 {
+					ratio = num(tv) / num(fv)
+				}
+			} else if tv, ok2 := coefTo[k]; ok2 {
+				ratio = num(tv)
 			}
-			out[i].Stats[k] = round2(v * cf)
+			out[i].Stats[k] = round2(v * ratio)
 		}
 	}
 	return out

@@ -18,6 +18,7 @@ type IdleResult struct {
 	Exp      int     `json:"exp"`
 	Gold     int     `json:"gold"`
 	Material int     `json:"material"`
+	Potions  int     `json:"potions"` // v1.9.27 离线挂机产出的回血药水数量
 	Log      string  `json:"log"`
 }
 
@@ -42,6 +43,12 @@ func SettleIdle(in IdleInput) IdleResult {
 		capped = true
 	}
 	lvMult := 1 + float64(in.Level-1)*0.05
+	// v1.9.27 离线挂机额外产出回血药水（每 30 分钟 1 瓶，向上取整；8h 封顶即最多 16 瓶）
+	potionRate := num(cfg["potionPerHalfHour"])
+	if potionRate <= 0 {
+		potionRate = 1
+	}
+	potions := int(math.Ceil(minutes / 30 * potionRate))
 	r := IdleResult{
 		Minutes:  math.Round(minutes),
 		Hours:    math.Round(minutes/60*100) / 100,
@@ -49,6 +56,7 @@ func SettleIdle(in IdleInput) IdleResult {
 		Exp:      int(math.Round(minutes * expRate * eff * lvMult)),
 		Gold:     int(math.Round(minutes * goldRate * eff * lvMult)),
 		Material: int(math.Round(minutes * matRate * eff)),
+		Potions:  potions,
 	}
 	r.Log = "服务端按 lastSeen 时间差结算；客户端改系统时间无效"
 	if capped {

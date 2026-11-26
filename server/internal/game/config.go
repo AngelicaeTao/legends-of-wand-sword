@@ -18,6 +18,7 @@ type Config struct {
 	Monsters  MonstersConfig  `json:"-"`
 	Economy   EconomyConfig   `json:"-"`
 	Worlds    WorldsConfig    `json:"-"`
+	Creator   CreatorConfig   `json:"-"` // 创建/换装部件清单（creator_manifest v2）
 
 	dir string
 }
@@ -45,9 +46,10 @@ type TransferDef struct {
 }
 
 type SkillsConfig struct {
-	Slots       int        `json:"slots"`
-	BasicAttack SkillDef   `json:"basicAttack"`
-	Skills      []SkillDef `json:"skills"`
+	Slots       int                  `json:"slots"`
+	BasicAttack SkillDef             `json:"basicAttack"`
+	Skills      []SkillDef           `json:"skills"`
+	Classes     map[string]SkillPool `json:"classes"` // 职业技能池（交付包 skills.json §4.3）
 }
 type SkillDef struct {
 	ID      string  `json:"id"`
@@ -57,14 +59,51 @@ type SkillDef struct {
 	CD      float64 `json:"cd"`
 	Element string  `json:"element"`
 	FX      string  `json:"fx"`
+	ClassID string  `json:"classId"` // 归属职业（all=通用）
+	Tier    string  `json:"tier"`    // basic/initial/advanced
+	Desc    string  `json:"desc"`
+}
+
+// SkillPool 是一个职业的 BD 可选池：初始技能 + 进阶技能。
+type SkillPool struct {
+	Name      string   `json:"name"`
+	Tier      int      `json:"tier"`
+	From      string   `json:"from"`
+	NeedLevel int      `json:"needLevel"`
+	NeedStage int      `json:"needStage"`
+	Initial   []string `json:"initial"`
+	Advanced  []string `json:"advanced"`
+}
+
+// CreatorConfig 对应交付包 creator_manifest.json（format=creator_parts_v2）。
+type CreatorConfig struct {
+	Format       string                 `json:"format"`
+	CharacterSize []int                 `json:"character_size"`
+	ScaleRoot    int                    `json:"scaleRoot"`
+	OverlayOrder []string               `json:"overlay_order"`
+	Slots        map[string]CreatorSlot `json:"slots"`
+}
+type CreatorSlot struct {
+	Label   string          `json:"label"`
+	Mode    string          `json:"mode"`
+	Options []CreatorOption `json:"options"`
+}
+type CreatorOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	File string `json:"file"`
+	Size []int  `json:"size"`
 }
 
 type EquipmentConfig struct {
 	Slots            []string                      `json:"slots"`
+	SlotNames        map[string]string             `json:"slotNames"`
 	Quality          []QualityDef                  `json:"quality"`
 	BaseStatsBySlot  map[string]map[string]float64 `json:"baseStatsBySlot"`
 	Enhance          map[string]any                `json:"enhance"`
 	ClassCoefficient map[string]any                `json:"classCoefficient"`
+	WeaponClasses    map[string][]string           `json:"weaponClasses"` // v1.9.38 武器分系：warrior/mage 系各自覆盖的职业
+	WeaponNames      map[string][]string           `json:"weaponNames"`   // v1.9.38 两套武器命名（按品质 0-4 取名）
 }
 type QualityDef struct {
 	ID    int     `json:"id"`
@@ -130,6 +169,7 @@ type SpawnDef struct {
 	To           string `json:"to"`
 	RequireLevel int    `json:"requireLevel"`
 	BossMonster  string `json:"bossMonster"`
+	Content      string `json:"content"` // FUNC 点位的功能标识（v1.9.31 家园：warehouse/idle/dress/gate）
 }
 
 var (
@@ -173,6 +213,10 @@ func Init(dir string) error {
 			return
 		}
 		if e := load("worlds.json", &c.Worlds); e != nil {
+			err = e
+			return
+		}
+		if e := load("creator.json", &c.Creator); e != nil {
 			err = e
 			return
 		}
@@ -227,4 +271,62 @@ func (c *Config) WorldByID(id string) (WorldDef, bool) {
 		}
 	}
 	return WorldDef{}, false
+}
+
+// SkillPoolOf 返回职业的 BD 可选池（initial ∪ advanced）。未知职业返回空池。
+func (c *Config) SkillPoolOf(classID string) SkillPool {
+	if c.Skills.Classes == nil {
+		return SkillPool{}
+	}
+	return c.Skills.Classes[classID]
+}
+
+// BDPoolOf 返回职业全部可用技能 id（初始 + 进阶，保持声明顺序）。
+func (c *Config) BDPoolOf(classID string) []string {
+	p := c.SkillPoolOf(classID)
+	out := make([]string, 0, len(p.Initial)+len(p.Advanced))
+	out = append(out, p.Initial...)
+	out = append(out, p.Advanced...)
+	return out
+}
+
+// InBDPool 判断技能是否属于该职业的技能池（交付包规则：不显示/不允许跨职业技能）。
+func (c *Config) InBDPool(classID, skillID string) bool {
+	if skillID == "" || skillID == "basic" {
+		return true
+	}
+	for _, id := range c.BDPoolOf(classID) {
+		if id == skillID {
+			return true
+		}
+	}
+	return false
+}
+
+// LookSlotValid 校验 homeLook 的一个槽位取值是否合法（帽子允许 "none"=不戴帽）。
+func (c *Config) LookSlotValid(slot, id string) bool {
+	if slot == "hat" && id == "none" {
+		return true
+	}
+	sl, ok := c.Creator.Slots[slot]
+	if !ok {
+		return false
+	}
+	for _, o := range sl.Options {
+		if o.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultLook 返回一套合法默认家园外观（角色创建异常兜底 / 老存档迁移用）。
+func (c *Config) DefaultLook() map[string]string {
+	out := map[string]string{}
+	for slot, sl := range c.Creator.Slots {
+		if len(sl.Options) > 0 {
+			out[slot] = sl.Options[0].ID
+		}
+	}
+	return out
 }

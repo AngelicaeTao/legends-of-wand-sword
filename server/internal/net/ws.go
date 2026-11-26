@@ -27,6 +27,7 @@ type WsClient struct {
 	channel  int    // 分线号：同 world 同 channel 的玩家互相可见，满载自动开新线
 	userID   string
 	name     string
+	classID  string
 	x, y     int
 	seq      int64
 	conn     net.Conn
@@ -77,7 +78,7 @@ func (h *Hub) loop() {
 		for c := range h.clients {
 			k := groupKey{c.worldID, c.channel}
 			groups[k] = append(groups[k], map[string]any{
-				"id": c.id, "userId": c.userID, "name": c.name,
+				"id": c.id, "userId": c.userID, "name": c.name, "classId": c.classID,
 				"x": c.x, "y": c.y, "seq": c.seq,
 			})
 		}
@@ -126,6 +127,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			WorldID string `json:"worldId"`
 			Channel int    `json:"channel"` // 重连时可带旧线号，未满则复用
 			Name    string `json:"name"`
+			ClassID string `json:"classId"`
 			X       int    `json:"x"`
 			Y       int    `json:"y"`
 			Seq     int64  `json:"seq"`
@@ -138,6 +140,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			hub.mu.Lock()
 			c.worldID = env.WorldID
 			if env.Name != "" { c.name = env.Name }
+			if env.ClassID != "" { c.classID = env.ClassID }
 			// 分线分配：找该世界未满的线（重连优先复用旧线），否则开新线
 			capN := channelCapacity()
 			counts := map[int]int{}

@@ -193,7 +193,7 @@ func rpcIdleSettle(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 	}
 	now := game.ServerNow() // 唯一可信时间源，忽略客户端时间戳
 	r := game.SettleIdle(game.IdleInput{Now: now, LastSeen: p.World.LastSeen, Level: p.Core.Level})
-	store.ApplyIdleResult(p, r, now)
+	store.ApplyIdleResult(p, r, now, 0)
 	if err := saveState(ctx, nk, logger, uid, p); err != nil {
 		return "", err
 	}

@@ -9,22 +9,23 @@ import (
 	"zjcs/server/internal/game"
 )
 
-// SubmitBD 提交战前技能配置（4槽）。仅允许已解锁技能，最多 4 个，派生互斥：
-// 同一流派核心技不重复堆叠（此处以 element 去重，保守策略），服务端权威写入。
+// SubmitBD 提交战前技能配置（默认 4 槽）。服务端权威校验：
+//  1. 技能必须已解锁；
+//  2. 技能必须属于当前职业的 BD 池（initial ∪ advanced）——交付包 §4.3「不显示/不允许跨职业技能」；
+//  3. 不超过槽位上限，且不重复装配。
 func (p *PlayerState) SubmitBD(slots []string) ([]string, error) {
-	maxSlots := game.C().Skills.Slots
+	c := game.C()
+	maxSlots := c.Skills.Slots
 	if maxSlots <= 0 {
 		maxSlots = 4
 	}
 	if len(slots) > maxSlots {
 		return nil, fmt.Errorf("技能槽最多 %d 个", maxSlots)
 	}
-	// 校验每个技能已解锁 + element 互斥
 	unlocked := map[string]bool{}
 	for _, id := range p.Skills.Unlocked {
 		unlocked[id] = true
 	}
-	seenElem := map[string]bool{}
 	out := []string{}
 	for _, id := range slots {
 		if id == "basic" {
@@ -33,19 +34,16 @@ func (p *PlayerState) SubmitBD(slots []string) ([]string, error) {
 		if !unlocked[id] {
 			return nil, fmt.Errorf("技能未解锁：%s", id)
 		}
-		sk, ok := game.C().SkillByID(id)
+		sk, ok := c.SkillByID(id)
 		if !ok {
 			return nil, fmt.Errorf("技能不存在：%s", id)
 		}
-		elem := sk.Element
-		if elem == "" {
-			elem = "none"
+		if !c.InBDPool(p.Core.ClassID, id) {
+			return nil, fmt.Errorf("跨职业技能不可装配：%s（当前职业技能池外）", sk.Name)
 		}
-		// 互斥：非 none 的同元素技能不可同时装备（流派互斥的保守实现）
-		if elem != "none" && seenElem[elem] {
-			return nil, fmt.Errorf("同流派技能互斥：%s", sk.Name)
+		if containsStr(out, id) {
+			continue
 		}
-		seenElem[elem] = true
 		out = append(out, id)
 	}
 	p.Skills.Slots = out
@@ -53,10 +51,23 @@ func (p *PlayerState) SubmitBD(slots []string) ([]string, error) {
 	return out, nil
 }
 
+func containsStr(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 // UnlockSkill 解锁技能（供成长/转职解锁，演示用：花钻石），服务端权威扣费。
 func (p *PlayerState) UnlockSkill(id string, gemCost int) (bool, error) {
-	if _, ok := game.C().SkillByID(id); !ok {
+	c := game.C()
+	if _, ok := c.SkillByID(id); !ok {
 		return false, fmt.Errorf("技能不存在：%s", id)
+	}
+	if !c.InBDPool(p.Core.ClassID, id) {
+		return false, fmt.Errorf("该技能不属于当前职业，无法解锁")
 	}
 	for _, u := range p.Skills.Unlocked {
 		if u == id {
@@ -84,6 +95,10 @@ func (p *PlayerState) EquipItem(itemID string) ([]string, error) {
 	}
 	if target < 0 {
 		return nil, fmt.Errorf("仓库中无此装备：%s", itemID)
+	}
+	// v1.9.38 武器分系：战士系/法师系武器互不通用（服务端权威校验）
+	if it := p.Equip[target]; it.Slot == "weapon" && it.ClassID != "" && it.ClassID != game.WeaponClassFor(p.Core.ClassID) {
+		return nil, fmt.Errorf("该武器为%s系专属，当前职业无法装备（打怪/开箱可获得本职业武器）", game.WeaponClassCN(it.ClassID))
 	}
 	slot := p.Equip[target].Slot
 	logs := []string{}
@@ -118,9 +133,12 @@ func (p *PlayerState) UnequipItem(itemID string) ([]string, error) {
 }
 
 // EnhanceEquip 强化装备（必成功，消耗金币+材料），战力即时更新。
-func (p *PlayerState) EnhanceEquip(slot string, goldCost, matCost int) (int, error) {
+// v1.9.21 支持按装备实例 ID 精确定位（同一槽位可能有多件装备，按槽位强化会打错对象）；
+// itemID 为空时按槽位回退（兼容旧链路）。
+func (p *PlayerState) EnhanceEquip(itemID, slot string, goldCost, matCost int) (int, error) {
 	for i := range p.Equip {
-		if p.Equip[i].Slot == slot {
+		hit := (itemID != "" && p.Equip[i].ID == itemID) || (itemID == "" && p.Equip[i].Slot == slot)
+		if hit {
 			if p.Core.Gold < goldCost || p.Core.Material < matCost {
 				return 0, fmt.Errorf("资源不足（需 %d 金币 / %d 材料）", goldCost, matCost)
 			}
@@ -128,10 +146,11 @@ func (p *PlayerState) EnhanceEquip(slot string, goldCost, matCost int) (int, err
 			p.Core.Material -= matCost
 			p.Equip[i].Enhance++
 			p.refreshPower()
-			p.appendLogs([]string{fmt.Sprintf("强化 %s 至 +%d", slot, p.Equip[i].Enhance)})
+			p.appendLogs([]string{fmt.Sprintf("强化 %s 至 +%d", p.Equip[i].ID, p.Equip[i].Enhance)})
 			return p.Equip[i].Enhance, nil
 		}
 	}
+	if itemID != "" { return 0, fmt.Errorf("未找到装备：%s", itemID) }
 	return 0, fmt.Errorf("该槽位无装备：%s", slot)
 }
 
@@ -185,6 +204,44 @@ func (p *PlayerState) WarehouseWithdraw(itemID string, qty int) error {
 		}
 	}
 	return fmt.Errorf("仓库中无此物品：%s", itemID)
+}
+
+// WarehouseEquipIn 背包装备 → 仓库（存一件）。itemId 匹配第一件未穿戴的同名装备，
+// 整件搬运（品质/强化等级/属性随行），服务端权威。
+func (p *PlayerState) WarehouseEquipIn(itemID string) error {
+	for i := range p.Equip {
+		if p.Equip[i].ID == itemID && !p.Equip[i].Equipped {
+			p.Warehouse = append(p.Warehouse, Item{
+				ID: itemID, Qty: 1, Kind: "equip",
+				Equip: &Equip{
+					ID: p.Equip[i].ID, Slot: p.Equip[i].Slot, Quality: p.Equip[i].Quality,
+					Enhance: p.Equip[i].Enhance, Stats: p.Equip[i].Stats,
+				},
+			})
+			p.Equip = append(p.Equip[:i], p.Equip[i+1:]...)
+			p.appendLogs([]string{fmt.Sprintf("存入仓库装备：%s", itemID)})
+			return nil
+		}
+	}
+	return fmt.Errorf("背包中没有该装备：%s", itemID)
+}
+
+// WarehouseEquipOut 仓库装备 → 背包（取出一件，未穿戴状态）。
+func (p *PlayerState) WarehouseEquipOut(itemID string) error {
+	for i := range p.Warehouse {
+		if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == itemID {
+			e := p.Warehouse[i].Equip
+			if e == nil {
+				return fmt.Errorf("仓库装备数据异常：%s", itemID)
+			}
+			e.Equipped = false
+			p.Equip = append(p.Equip, *e)
+			p.Warehouse = append(p.Warehouse[:i], p.Warehouse[i+1:]...)
+			p.appendLogs([]string{fmt.Sprintf("取出装备：%s", itemID)})
+			return nil
+		}
+	}
+	return fmt.Errorf("仓库中没有该装备：%s", itemID)
 }
 
 // DungeonEnter 副本进入：服务端权威每日次数校验与扣减。

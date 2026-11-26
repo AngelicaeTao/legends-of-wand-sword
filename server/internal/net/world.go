@@ -75,10 +75,56 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 	// 经验/材料按 gold 派生（语义档位，外置比例，可改 economy 配置）
 	exp := int(float64(gold) * numAny(game.C().Economy.Drop, "chestExpRatio", 1.5))
 	mat := int(float64(gold) * numAny(game.C().Economy.Drop, "chestMatRatio", 0.1))
-	logs := store.ApplyChestReward(p, exp, gold, gem, mat)
+	// v1.9.35 详细掉落：药水按档位概率/数量 roll，装备按档位概率 roll 一件
+	potions := 0
+	switch q.Tier {
+	case "gold":
+		if rand.Intn(100) < 80 { potions = 2 + rand.Intn(2) }
+	case "silver":
+		if rand.Intn(100) < 60 { potions = 1 + rand.Intn(2) }
+	default:
+		if rand.Intn(100) < 40 { potions = 1 }
+	}
+	var equips []game.EquipItem
+	if e, ok := game.RollChestEquip(p.Core.ClassID, q.Tier, rand.New(rand.NewSource(time.Now().UnixNano()))); ok {
+		equips = []game.EquipItem{e}
+	}
+	logs, items := store.ApplyChestReward(p, exp, gold, gem, mat, potions, equips)
 	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
 	jsonOut(w, map[string]any{
-		"reward": map[string]any{"exp": exp, "gold": gold, "gem": gem, "material": mat, "tier": q.Tier},
+		"reward": map[string]any{"exp": exp, "gold": gold, "gem": gem, "tier": q.Tier, "items": items},
+		"logs": logs, "state": p,
+	})
+}
+
+// potionPick：v1.9.27 采集地图草药 → 服务端权威 roll 回血药水/金币入仓。
+// 点位为玩家实例，采集后进入 potionBaseSec 冷却自动复活。
+func potionPick(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		UserID  string `json:"userId"`
+		WorldID string `json:"worldId"`
+		NodeID  string `json:"nodeId"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	uid, ok := authUserID(r)
+	if !ok && q.UserID != "" { uid = q.UserID }
+	if uid == "" { http.Error(w, "未授权", 401); return }
+	if q.WorldID == "" { q.WorldID = "W1" }
+	if q.NodeID == "" { http.Error(w, "nodeId 不能为空", 400); return }
+
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if _, ok := game.SM().PickPotion(uid, q.WorldID, q.NodeID); !ok {
+		http.Error(w, "草药尚未长成（冷却中或不存在）", 409); return
+	}
+	// 服务端权威 roll：1 瓶保底，30% 概率 +1；顺带少量金币
+	potions := 1
+	if rand.Intn(100) < 30 { potions = 2 }
+	gold := 10 + rand.Intn(30)
+	logs := store.ApplyPotionPick(p, potions, gold)
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{
+		"reward": map[string]any{"potions": potions, "gold": gold},
 		"logs": logs, "state": p,
 	})
 }
@@ -151,6 +197,18 @@ func worldTravel(w http.ResponseWriter, r *http.Request) {
 		if game.C().Worlds.Worlds[i].ID == q.To { target = &game.C().Worlds.Worlds[i] }
 	}
 	if target == nil { http.Error(w, "目标世界不存在", 400); return }
+	// v1.9.34：HOME 幂等——战败/API 已把存档切到 HOME 但前端地图未同步时，
+	// 再点家园按钮不应报"已在当前世界"卡死，直接返回成功让前端对齐。
+	if q.To == "HOME" {
+		if p.World.WorldID != "HOME" {
+			p.World.LastWorldID = p.World.WorldID
+		}
+		p.World.WorldID = "HOME"
+		p.World.X, p.World.Y = 1280, 780 // 家园锚点
+		if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+		jsonOut(w, map[string]any{"worldId": "HOME", "state": p})
+		return
+	}
 	if q.To == p.World.WorldID { http.Error(w, "已在当前世界", 400); return }
 	// 找当前世界通往目标的 GATE：有通道 → 校验等级门槛；
 	// 没有通道但目标已解锁（回访已探索世界）→ 允许直接传送。
@@ -174,11 +232,7 @@ func worldTravel(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": fmt.Sprintf("等级不足：当前 Lv.%d，前往 %s 需 Lv.%d，请先打怪或挂机升级", p.Core.Level, target.Name, gate.RequireLevel)})
 		return
 	}
-	// 传送 CD：服务端记录上次传送时间（放 Ext）
-	last, _ := p.Ext["lastTravel"].(float64)
-	now := float64(time.Now().Unix())
-	if now-last < 5 { http.Error(w, "传送冷却中（5s）", 429); return }
-	p.Ext["lastTravel"] = now
+	// v1.9.24：传送 CD 已取消（与宝箱冷却同期需求）
 	p.World.WorldID = q.To
 	if !containsStr(p.World.Unlocked, q.To) { p.World.Unlocked = append(p.World.Unlocked, q.To) }
 	// 落到新世界锚点
@@ -194,3 +248,104 @@ func worldTravel(w http.ResponseWriter, r *http.Request) {
 }
 
 func containsStr(ss []string, s string) bool { for _, x := range ss { if x == s { return true } }; return false }
+
+// ---- 公会（v1.9.18）：服务端权威的创建 / 加入 / 退出 / 列表 ----
+
+// guildView 公会对客户端的展示结构（等级实时按进度折算）。
+func guildView(g *store.Guild) map[string]any {
+	ms := make([]map[string]any, 0, len(g.Members))
+	for _, m := range g.Members {
+		ms = append(ms, map[string]any{
+			"userId": m.UserID, "name": m.Name, "level": m.Level,
+			"power": m.Power, "role": m.Role, "donate": m.Donate, "joinedAt": m.JoinedAt,
+		})
+	}
+	return map[string]any{
+		"id": g.ID, "name": g.Name, "level": g.Level(), "progress": g.Progress,
+		"members": ms, "size": len(g.Members), "createdAt": g.CreatedAt,
+	}
+}
+
+// guildList（v1.9.39 公会界面大改）：返回公会列表 + 当前玩家的所在公会 my（服务端权威）。
+// 前端按 my 分流：有 my → 我的公会主界面；无 my → 搜索/加入界面。
+func guildList(w http.ResponseWriter, r *http.Request) {
+	var q struct{ UserID string }
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	uid := q.UserID
+	if uid == "" {
+		uid, _ = authUserID(r)
+	}
+	out := []map[string]any{}
+	for _, g := range store.Guilds().GuildList() {
+		out = append(out, guildView(g))
+	}
+	resp := map[string]any{"guilds": out}
+	if uid != "" {
+		if g, role := store.Guilds().GuildByUser(uid); g != nil {
+			resp["my"] = guildView(g)
+			resp["myRole"] = role
+		}
+	}
+	jsonOut(w, resp)
+}
+
+func guildActionBody(r *http.Request) (string, string, string, error) {
+	var q struct{ UserID, Name, GuildID string }
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	uid := q.UserID
+	if uid == "" { uid, _ = authUserID(r) }
+	if uid == "" { return "", "", "", fmt.Errorf("未授权") }
+	return uid, q.Name, q.GuildID, nil
+}
+
+func guildCreate(w http.ResponseWriter, r *http.Request) {
+	uid, name, _, err := guildActionBody(r)
+	if err != nil { http.Error(w, err.Error(), 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if p.Guild != nil { http.Error(w, "你已加入公会，请先退出再创建", 409); return }
+	if p.Core.Gold < store.GuildCreateCost {
+		http.Error(w, fmt.Sprintf("金币不足：创建公会需 %d（当前 %d）", store.GuildCreateCost, p.Core.Gold), 400); return
+	}
+	gid := fmt.Sprintf("g_%s_%d", uid[:8], time.Now().Unix()%100000)
+	g, err := store.Guilds().GuildCreate(gid, name, p.UserID, p.Core.Name, p.Core.Level, p.Core.BattlePower)
+	if err != nil { http.Error(w, err.Error(), 409); return }
+	p.Core.Gold -= store.GuildCreateCost
+	p.Guild = &store.GuildRef{ID: g.ID, Name: g.Name, Role: "president"}
+	p.AppendLogs([]string{fmt.Sprintf("创建公会：%s（消耗 %d 金币）", g.Name, store.GuildCreateCost)})
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{"state": p, "guild": guildView(g), "message": "公会创建成功"})
+}
+
+func guildJoin(w http.ResponseWriter, r *http.Request) {
+	uid, _, gid, err := guildActionBody(r)
+	if err != nil { http.Error(w, err.Error(), 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if p.Guild != nil { http.Error(w, "你已加入公会，请先退出再加入其他公会", 409); return }
+	g, err := store.Guilds().GuildJoin(gid, p.UserID, p.Core.Name, p.Core.Level, p.Core.BattlePower)
+	if err != nil { http.Error(w, err.Error(), 409); return }
+	p.Guild = &store.GuildRef{ID: g.ID, Name: g.Name, Role: "member"}
+	p.AppendLogs([]string{fmt.Sprintf("加入公会：%s", g.Name)})
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{"state": p, "guild": guildView(g), "message": "加入公会成功"})
+}
+
+func guildLeave(w http.ResponseWriter, r *http.Request) {
+	uid, _, _, err := guildActionBody(r)
+	if err != nil { http.Error(w, err.Error(), 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if p.Guild == nil { http.Error(w, "你尚未加入公会", 409); return }
+	gname := p.Guild.Name
+	rest, err := store.Guilds().GuildLeave(p.Guild.ID, p.UserID)
+	if err != nil { http.Error(w, err.Error(), 409); return }
+	p.Guild = nil
+	if rest == nil {
+		p.AppendLogs([]string{fmt.Sprintf("公会 %s 已解散（最后一名成员退出）", gname)})
+	} else {
+		p.AppendLogs([]string{fmt.Sprintf("退出公会：%s", gname)})
+	}
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{"state": p, "message": "已退出公会"})
+}

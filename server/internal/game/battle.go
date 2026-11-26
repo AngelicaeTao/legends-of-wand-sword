@@ -15,6 +15,8 @@ type BattleRequest struct {
 	MonsterLv int      `json:"monsterLv"`
 	Elite     string   `json:"elite"` // ""/elite/rareElite
 	Seed      int64    `json:"seed"`  // >0 时用于复现（playtest 回放）；=0 由服务端随机生成
+	StartHP   float64  `json:"startHp"` // v1.9.27 全局血量：战斗以该血量开局（>0 且 < 最大血量时生效）
+	Group     []string `json:"group,omitempty"` // v1.9.36 群怪模版：怪物组合（服务端权威点位下发，可混编）；空=单怪
 }
 
 // BattleRound 是战报中的一回合（表现用最小单元）。
@@ -28,18 +30,32 @@ type BattleRound struct {
 	Heal      float64 `json:"heal"`
 	HeroHP    float64 `json:"heroHp"`
 	MonHP     float64 `json:"monHp"`
+	MonIdx    int     `json:"monIdx,omitempty"` // v1.9.36 群怪：本回合怪物出手者/英雄攻击目标的组合索引
+}
+
+// MonInfo 战报下发的怪物方成员（v1.9.36 群怪贴图/名牌以此渲染，与结算一致）。
+type MonInfo struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Sprite string `json:"sprite"`
+	Lv     int    `json:"lv"`
+	Elite  bool   `json:"elite"`
+	IsBoss bool   `json:"isBoss"`
 }
 
 // BattleReport 服务端下发的权威战报。客户端只做表现，不参与结算。
 type BattleReport struct {
-	Seed    int64         `json:"seed"`
-	Result  string        `json:"result"` // win/lose
-	Rounds  []BattleRound `json:"rounds"`
-	Exp     int           `json:"exp"`
-	Gold    int           `json:"gold"`
-	Drops   []EquipItem   `json:"drops"`
-	Seconds float64       `json:"seconds"`
-	Log     string        `json:"log"`
+	Seed       int64         `json:"seed"`
+	Result     string        `json:"result"` // win/lose
+	Rounds     []BattleRound `json:"rounds"`
+	Exp        int           `json:"exp"`
+	Gold       int           `json:"gold"`
+	Drops      []EquipItem   `json:"drops"`
+	Seconds    float64       `json:"seconds"`
+	Log        string        `json:"log"`
+	HeroHPStart float64      `json:"heroHpStart"` // v1.9.27 战斗开局血量（全局血量不回满）
+	HeroHPEnd   float64      `json:"heroHpEnd"`   // 战斗结束血量（战败保底 1，防软锁）
+	Monsters   []MonInfo     `json:"monsters"`    // v1.9.36 群怪：敌方阵容（单怪时长度 1，贴图与结算一致）
 }
 
 // ResolveBattle 服务端权威结算。给定相同 seed + 输入必得相同战报（可复现 bug / playtest 回放）。
@@ -52,27 +68,38 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	rng := rand.New(rand.NewSource(seed))
 	hero := CalcStats(req.Avatar)
 
-	mon, ok := c.MonsterByID(req.MonsterID)
-	if !ok {
-		mon = c.Monsters.Monsters[0]
+	// v1.9.36 群怪模版：组合非空按组合展开成员（服务端权威点位下发，可混编不同怪），否则单怪。
+	group := req.Group
+	if len(group) == 0 { group = []string{req.MonsterID} }
+	if len(group) > 3 { group = group[:3] } // 上限 3 只，防异常请求
+	type monUnit struct {
+		def      MonsterDef
+		hp, atk  float64
+		mdef     float64
+		lvFactor float64
 	}
-	lvFactor := math.Pow(mon.Growth, float64(req.MonsterLv-1))
-	mhp := mon.Base["hp"] * lvFactor
-	matk := mon.Base["atk"] * lvFactor
-	mdef := mon.Base["def"] * lvFactor
+	mems := make([]monUnit, 0, len(group))
+	monInfos := []MonInfo{}
 	sr := c.Monsters.SpawnRule
-	if v, ok := sr["eliteHpMult"].(float64); ok && req.Elite == "elite" {
-		mhp *= v
+	for gi, gid := range group {
+		m, ok := c.MonsterByID(gid)
+		if !ok { m = c.Monsters.Monsters[0] }
+		lvFactor := math.Pow(m.Growth, float64(req.MonsterLv-1))
+		u := monUnit{def: m, hp: m.Base["hp"] * lvFactor, atk: m.Base["atk"] * lvFactor, mdef: m.Base["def"] * lvFactor, lvFactor: lvFactor}
+		// 精英/稀有精英倍率只作用于主怪（组合首位，与点位 elite 语义一致）
+		if gi == 0 {
+			if v, ok := sr["eliteHpMult"].(float64); ok && req.Elite == "elite" { u.hp *= v }
+			if v, ok := sr["eliteAtkMult"].(float64); ok && req.Elite == "elite" { u.atk *= v }
+			if v, ok := sr["rareEliteHpMult"].(float64); ok && req.Elite == "rareElite" { u.hp *= v }
+			if v, ok := sr["rareEliteAtkMult"].(float64); ok && req.Elite == "rareElite" { u.atk *= v }
+		}
+		mems = append(mems, u)
+		monInfos = append(monInfos, MonInfo{
+			ID: m.ID, Name: m.Name, Sprite: m.Sprite, Lv: req.MonsterLv,
+			Elite: gi == 0 && req.Elite != "", IsBoss: m.IsBoss,
+		})
 	}
-	if v, ok := sr["eliteAtkMult"].(float64); ok && req.Elite == "elite" {
-		matk *= v
-	}
-	if v, ok := sr["rareEliteHpMult"].(float64); ok && req.Elite == "rareElite" {
-		mhp *= v
-	}
-	if v, ok := sr["rareEliteAtkMult"].(float64); ok && req.Elite == "rareElite" {
-		matk *= v
-	}
+	mon := mems[0].def // 主怪（兼容奖励/掉落逻辑）
 
 	// 技能队列：按 cd 轮转，全冷却时普攻兜底
 	type slotCD struct {
@@ -96,16 +123,34 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		maxTicks = 30
 	}
 
+	// v1.9.27 全局血量：以存档当前血量开局（不每次回满）；异常值兜底满血
 	heroHP := hero.HP
-	rep := BattleReport{Seed: seed, Rounds: []BattleRound{}}
+	if req.StartHP > 0 && req.StartHP < hero.HP {
+		heroHP = req.StartHP
+	}
+	rep := BattleReport{Seed: seed, Rounds: []BattleRound{}, HeroHPStart: round2(heroHP), Monsters: monInfos}
 	heroAtkBuff := 0.0
 	monAtkDebuff := 0.0
 	shield := 0.0
 
 	// 按速度决定先后手（服务端确定性）
 	heroFirst := hero.Spd >= 10
+	totalMonHP := func() float64 {
+		s := 0.0
+		for i := range mems { s += mems[i].hp }
+		return s
+	}
+	// v1.9.36 群怪：怪物轮转出手（死亡的自动跳过），英雄攻击第一个存活目标
+	turnIdx := 0
+	nextAlive := func(from int) int {
+		for k := 0; k < len(mems); k++ {
+			i := (from + k) % len(mems)
+			if mems[i].hp > 0 { return i }
+		}
+		return -1
+	}
 	n := 0
-	for t := 0; t < maxTicks && heroHP > 0 && mhp > 0; t++ {
+	for t := 0; t < maxTicks && heroHP > 0 && totalMonHP() > 0; t++ {
 		for _, first := range []bool{heroFirst, !heroFirst} {
 			if first {
 				// 选一个可用技能（优先级：伤害 > 治疗/护盾，cd 就绪）
@@ -128,6 +173,10 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				n++
 				r := BattleRound{N: n, Actor: "hero", Action: act.ID, SkillName: act.Name, FX: act.FX}
 				power := act.Power
+				ti := nextAlive(turnIdx) // 英雄攻击目标：第一个存活怪
+				if ti < 0 { ti = 0 }
+				tgt := &mems[ti]
+				r.MonIdx = ti
 				switch act.Kind {
 				case "heal":
 					heal := hero.HP * power
@@ -140,8 +189,8 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				case "debuff":
 					monAtkDebuff = power
 				default: // physical / magic
-					dmg := hero.ATK * (1 + heroAtkBuff) * power * (1 - mdef/(mdef+100))
-					if act.ID == "execute" && mhp < mon.Base["hp"]*lvFactor*0.3 {
+					dmg := hero.ATK * (1 + heroAtkBuff) * power * (1 - tgt.mdef/(tgt.mdef+100))
+					if act.ID == "execute" && tgt.hp < tgt.def.Base["hp"]*tgt.lvFactor*0.3 {
 						dmg *= 2
 					}
 					dmg *= 0.9 + rng.Float64()*0.2 // ±10% 浮动
@@ -151,14 +200,18 @@ func ResolveBattle(req BattleRequest) BattleReport {
 						shield -= absorbed
 						actual = dmg - absorbed
 					}
-					mhp -= actual
+					tgt.hp -= actual
 					r.Damage = round2(actual)
 				}
 				r.HeroHP = round2(heroHP)
-				r.MonHP = round2(math.Max(0, mhp))
+				r.MonHP = round2(math.Max(0, totalMonHP()))
 				rep.Rounds = append(rep.Rounds, r)
 			} else {
-				dmg := matk * (1 - monAtkDebuff) * (1 - hero.DEF/(hero.DEF+100))
+				mi := nextAlive(turnIdx)
+				if mi < 0 { break }
+				atkUnit := &mems[mi]
+				turnIdx = (mi + 1) % len(mems) // 下回合轮到下一只
+				dmg := atkUnit.atk * (1 - monAtkDebuff) * (1 - hero.DEF/(hero.DEF+100))
 				dmg *= 0.9 + rng.Float64()*0.2
 				actual := dmg
 				if shield > 0 {
@@ -169,21 +222,23 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				heroHP -= actual
 				n++
 				rep.Rounds = append(rep.Rounds, BattleRound{
-					N: n, Actor: "monster", Action: "attack", SkillName: mon.Name,
-					FX: "fx_dmg_normal", Damage: round2(actual),
-					HeroHP: round2(math.Max(0, heroHP)), MonHP: round2(math.Max(0, mhp)),
+					N: n, Actor: "monster", Action: "attack", SkillName: atkUnit.def.Name,
+					FX: "fx_dmg_normal", Damage: round2(actual), MonIdx: mi,
+					HeroHP: round2(math.Max(0, heroHP)), MonHP: round2(math.Max(0, totalMonHP())),
 				})
 			}
-			if heroHP <= 0 || mhp <= 0 {
+			if heroHP <= 0 || totalMonHP() <= 0 {
 				break
 			}
 		}
 	}
-	if mhp <= 0 {
+	if totalMonHP() <= 0 {
 		rep.Result = "win"
 	} else {
 		rep.Result = "lose"
 	}
+	// v1.9.27 战斗结束血量：保留余量（战败保底 1 点，防 0 血软锁；用回血道具恢复）
+	rep.HeroHPEnd = round2(math.Max(1, heroHP))
 	rep.Seconds = round2(float64(len(rep.Rounds)) / 2.0 * tick)
 
 	if rep.Result == "win" {
@@ -199,9 +254,25 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		}
 		// 等级系数：Lv1 = 1.0 倍，之后每级 +20%（原公式 Lv1 只有 0.1 倍，前期收益几乎为零）
 		lvMult := 1 + 0.2*float64(req.MonsterLv-1)
-		rep.Exp = int(mon.Exp * lvMult * mult)
-		rep.Gold = int(mon.Gold * lvMult * mult)
+		// v1.9.36 群怪：奖励按成员累加，2 只以上再 ×1.15 群战加成（单怪数值不变）
+		expSum, goldSum := 0.0, 0.0
+		for i := range mems {
+			expSum += mems[i].def.Exp
+			goldSum += mems[i].def.Gold
+		}
+		if len(mems) > 1 {
+			expSum *= 1.15
+			goldSum *= 1.15
+		}
+		rep.Exp = int(expSum * lvMult * mult)
+		rep.Gold = int(goldSum * lvMult * mult)
 		rep.Drops = rollDrops(req, mon, rng)
+		// 群怪掉落：每多一只怪 30% 概率额外 roll 一件（用该成员的掉落定义）
+		for extra := 1; extra < len(mems); extra++ {
+			if rng.Float64() < 0.3 {
+				rep.Drops = append(rep.Drops, rollDrops(req, mems[extra].def, rng)...)
+			}
+		}
 		rep.Log = "服务端权威结算：胜利，经验/金币/掉落已入账"
 	} else {
 		rep.Log = "服务端权威结算：战败，无奖励，体力照常消耗，返回大世界原坐标"
@@ -220,8 +291,7 @@ func rollDrops(req BattleRequest, mon MonsterDef, rng *rand.Rand) []EquipItem {
 	}
 	out := []EquipItem{}
 	for rng.Float64() < chance {
-		slots := c.Equipment.Slots
-		slot := slots[rng.Intn(len(slots))]
+		slot := rollSlot(c, rng)
 		q := rng.Intn(len(c.Equipment.Quality))
 		base := c.Equipment.BaseStatsBySlot[slot]
 		stats := map[string]float64{}
@@ -230,12 +300,72 @@ func rollDrops(req BattleRequest, mon MonsterDef, rng *rand.Rand) []EquipItem {
 		}
 		out = append(out, EquipItem{
 			ID: mon.ID + "_" + slot + "_" + fmtID(rng.Int63()), Slot: slot, Quality: q, Enhance: 0, Stats: stats,
+			// v1.9.38 武器分系：武器按玩家职业所属系生成（战士系/法师系互不通用）
+			ClassID: weaponClassIf(slot, req.Avatar.ClassID),
 		})
 		if !mon.IsBoss {
 			break
 		}
 	}
 	return out
+}
+
+// RollChestEquip 宝箱按 tier roll 一件装备（v1.9.35 开箱详细掉落）。
+// 概率与品质上限内置于表：wood 12%/精良，silver 25%/稀有，gold 45%/史诗。
+// 返回 (装备, 是否命中)。复用战斗掉落同款属性生成（基值 ×0.0~1.3 随机浮动）。
+// v1.9.38：classID 用于武器分系——开出的武器按开箱玩家职业所属系生成。
+func RollChestEquip(classID, tier string, rng *rand.Rand) (EquipItem, bool) {
+	c := C()
+	chance := map[string]float64{"wood": 0.12, "silver": 0.25, "gold": 0.45}[tier]
+	if chance == 0 { chance = 0.12 }
+	if rng.Float64() >= chance { return EquipItem{}, false }
+	qCap := map[string]int{"wood": 1, "silver": 2, "gold": 3}[tier]
+	if qCap >= len(c.Equipment.Quality) { qCap = len(c.Equipment.Quality) - 1 }
+	slot := rollSlot(c, rng)
+	q := rng.Intn(qCap + 1)
+	base := c.Equipment.BaseStatsBySlot[slot]
+	stats := map[string]float64{}
+	for k, v := range base {
+		stats[k] = round2(v * (1 + rng.Float64()*0.3))
+	}
+	return EquipItem{
+		ID: "chest_" + slot + "_" + fmtID(rng.Int63()), Slot: slot, Quality: q, Enhance: 0, Stats: stats,
+		ClassID: weaponClassIf(slot, classID),
+	}, true
+}
+
+// weaponClassIf 仅武器槽返回职业所属武器系，其余槽位返回空（通用）。
+func weaponClassIf(slot, classID string) string {
+	if slot == "weapon" { return WeaponClassFor(classID) }
+	return ""
+}
+
+// rollSlot 按配置加权抽取掉落槽位（v1.9.30）：economy.drop.slotWeights 未配置时四槽均等。
+// 默认配置 weapon=0.4（其余三槽均分余量）——武器是战斗核心产出，大幅提高武器占比。
+func rollSlot(c *Config, rng *rand.Rand) string {
+	w, ok := c.Economy.Drop["slotWeights"].(map[string]any)
+	if !ok || len(w) == 0 {
+		slots := c.Equipment.Slots
+		return slots[rng.Intn(len(slots))]
+	}
+	weights := make([]float64, len(c.Equipment.Slots))
+	total := 0.0
+	for i, sl := range c.Equipment.Slots {
+		weights[i] = num(w[sl])
+		total += weights[i]
+	}
+	if total <= 0 {
+		slots := c.Equipment.Slots
+		return slots[rng.Intn(len(slots))]
+	}
+	r := rng.Float64() * total
+	for i, sl := range c.Equipment.Slots {
+		r -= weights[i]
+		if r <= 0 {
+			return sl
+		}
+	}
+	return c.Equipment.Slots[len(c.Equipment.Slots)-1]
 }
 
 func fmtID(n int64) string {

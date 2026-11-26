@@ -5,6 +5,8 @@ package net
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
 	"time"
 	"os"
@@ -40,6 +42,9 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 		panic("账号库初始化失败: " + err.Error())
 	}
 	initTokenSecret(dataDir)
+	if err := store.InitGuilds(dataDir); err != nil {
+		panic("公会数据初始化失败: " + err.Error())
+	}
 	game.InitSpawns()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", health)
@@ -48,6 +53,7 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 
 	mux.HandleFunc("/api/character/new", characterNew)
 	mux.HandleFunc("/api/state/load", stateLoad)
+	mux.HandleFunc("/api/player/create_character", createCharacter) // 角色创建（服务端权威）
 
 	// 账号体系（Nakama 语义同构）
 	mux.HandleFunc("/api/auth/device", deviceLogin)
@@ -57,7 +63,12 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 
 	// 世界/点位/宝箱权威接口
 	mux.HandleFunc("/api/chest/open", chestOpen)
+	mux.HandleFunc("/api/potion/pick", potionPick) // v1.9.27 采集地图草药（回血药水）
 	mux.HandleFunc("/api/monster/kill", monsterKill)
+	mux.HandleFunc("/api/guild/list", guildList)
+	mux.HandleFunc("/api/guild/create", guildCreate)
+	mux.HandleFunc("/api/guild/join", guildJoin)
+	mux.HandleFunc("/api/guild/leave", guildLeave)
 	mux.HandleFunc("/api/spawn", spawnQuery)
 	mux.HandleFunc("/api/world/unlocks", worldUnlocks)
 	mux.HandleFunc("/api/world/travel", worldTravel)
@@ -113,6 +124,7 @@ func getConfig(w http.ResponseWriter, r *http.Request) {
 	jsonOut(w, map[string]any{
 		"classes": c.Classes, "skills": c.Skills, "equipment": c.Equipment,
 		"monsters": c.Monsters, "economy": c.Economy, "worlds": c.Worlds,
+		"creator": c.Creator,
 	})
 }
 
@@ -129,6 +141,7 @@ func characterNew(w http.ResponseWriter, r *http.Request) {
 		q.UserID = "anonymous"
 	}
 	p := store.NewPlayer(q.UserID, q.Name, q.ClassID)
+	p.Core.HP = maxHpOf(p) // v1.9.27 满血开局
 	if err := disk.Save(q.UserID, p); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -167,21 +180,130 @@ func stateLoad(w http.ResponseWriter, r *http.Request) {
 		p.World.X, p.World.Y = 2560, 2176
 		migrated = true
 	}
+	// v1.9.7：技能表按交付包重写 + appearance 补齐（老玩家不会被迫重新创建角色）
+	if p.Migrate() {
+		migrated = true
+	}
+	// v1.9.38 武器系归一：老档武器按当前职业归入对应系（登录读档即平滑生效）
+	if p.MigrateWeaponClass() {
+		migrated = true
+	}
 	if migrated {
 		_ = disk.Save(q.UserID, p)
 	}
 	jsonOut(w, map[string]any{"exists": true, "state": p})
 }
 
-// ---------- 纯结算（不落库，回放/验证用）----------
-
-func calcStats(w http.ResponseWriter, r *http.Request) {
-	var a game.Avatar
-	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+// createCharacter 角色创建（交付包 C→S create_character）：服务端权威校验后
+// 写 appearance + classId + 初始技能，并置 created=true。
+func createCharacter(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		UserID   string            `json:"userId"`
+		Name     string            `json:"name"`
+		ClassID  string            `json:"classId"`
+		HomeLook map[string]string `json:"homeLook"`
+		Skills   []string          `json:"skills"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	jsonOut(w, game.CalcStats(a))
+	uid, ok := authUserID(r)
+	if !ok && q.UserID != "" {
+		uid = q.UserID
+	}
+	if uid == "" {
+		http.Error(w, "缺少 userId", 400)
+		return
+	}
+	p, err := loadOrCreate(uid)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if err := p.CreateCharacter(q.ClassID, q.HomeLook, q.Name, q.Skills); err != nil {
+		http.Error(w, err.Error(), 409)
+		return
+	}
+	p.Core.HP = maxHpOf(p) // v1.9.27 新角色满血开局（落盘）
+	if err := disk.Save(uid, p); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	jsonOut(w, map[string]any{"state": p, "appearance": p.Appearance})
+}
+
+// ---------- 纯结算（不落库，回放/验证用）----------
+
+// calcEquipItem 装备入参：v1.9.28 起可携带 equipped 标记——
+// 服务端只把"已穿戴"的计入总属性，但每件的战力贡献（equipPowers）全部返回，
+// 这样背包/仓库里未穿戴的装备也能显示战力。
+type calcEquipItem struct {
+	game.EquipItem
+	Equipped *bool `json:"equipped"`
+}
+
+type calcStatsReq struct {
+	Level   int             `json:"level"`
+	ClassID string          `json:"classId"`
+	Equip   []calcEquipItem `json:"equip"`
+	Avatar  *game.Avatar    `json:"avatar"` // 旧格式兼容
+	Items   []game.EquipItem `json:"items"` // 旧格式兼容
+}
+
+// calcStatsResp 总属性（扁平字段）+ 每件装备战力。
+type calcStatsResp struct {
+	game.Stats
+	EquipPowers []game.EquipPower `json:"equipPowers"`
+}
+
+func calcStats(w http.ResponseWriter, r *http.Request) {
+	// v1.9.20 兼容两种请求格式：
+	//   新格式（正确）：{level, classId, equip:[...]}           → 直接解码
+	//   旧格式（历史bug）：{avatar:{level,classId},items:[...]} → 拆包后计算，避免老缓存客户端拿到 0 级裸身属性
+	body, _ := io.ReadAll(r.Body)
+	var q calcStatsReq
+	if err := json.Unmarshal(body, &q); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	a := game.Avatar{Level: q.Level, ClassID: q.ClassID}
+	for _, it := range q.Equip {
+		a.Equip = append(a.Equip, it.EquipItem)
+	}
+	if a.Level == 0 && a.ClassID == "" && len(a.Equip) == 0 && q.Avatar != nil {
+		a = *q.Avatar
+		if len(a.Equip) == 0 && len(q.Items) > 0 {
+			a.Equip = q.Items
+		}
+	}
+	st := game.CalcStats(a)
+
+	// v1.9.28：全量装备逐件折算战力；带 equipped=false 标记的件不计入总属性
+	resp := calcStatsResp{Stats: st, EquipPowers: []game.EquipPower{}}
+	hasFlag := false
+	for _, it := range q.Equip {
+		if it.Equipped != nil {
+			hasFlag = true
+			break
+		}
+	}
+	if hasFlag {
+		worn := make([]game.EquipItem, 0, len(q.Equip))
+		for _, it := range q.Equip {
+			resp.EquipPowers = append(resp.EquipPowers, game.EquipPower{ID: it.ID, Power: game.EquipContribution(a.ClassID, it.EquipItem)})
+			if it.Equipped != nil && *it.Equipped {
+				worn = append(worn, it.EquipItem)
+			}
+		}
+		st2 := game.CalcStats(game.Avatar{Level: a.Level, ClassID: a.ClassID, Equip: worn})
+		resp.Stats = st2
+	} else {
+		for _, it := range a.Equip {
+			resp.EquipPowers = append(resp.EquipPowers, game.EquipPower{ID: it.ID, Power: game.EquipContribution(a.ClassID, it)})
+		}
+	}
+	jsonOut(w, resp)
 }
 
 func resolveBattle(w http.ResponseWriter, r *http.Request) {
@@ -214,6 +336,8 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 		MonsterID string   `json:"monsterId"`
 		MonsterLv int      `json:"monsterLv"`
 		Elite     string   `json:"elite"`
+		WorldID   string   `json:"worldId"` // v1.9.36 群怪：大世界点位战斗必传
+		NodeID    string   `json:"nodeId"`  // v1.9.36 群怪：点位 ID，服务端按点位组合权威结算
 	}
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 		http.Error(w, err.Error(), 400)
@@ -233,13 +357,29 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 			equip = append(equip, game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats})
 		}
 	}
-	// 武器解封：等级不足的技能自动降级为普攻（保守估算，服务端裁定）
-	bd := filterBD(q.BD, p.Core.Level)
-	rep := game.ResolveBattle(game.BattleRequest{
+	// 武器解封 + 职业池校验：等级不足/跨职业的技能自动剔除（服务端裁定）
+	bd := filterBD(p, q.BD)
+	req := game.BattleRequest{
 		UserID: q.UserID, Avatar: game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip},
 		BD: bd, MonsterID: q.MonsterID, MonsterLv: q.MonsterLv, Elite: q.Elite,
-	})
+		StartHP: p.Core.HP, // v1.9.27 全局血量：以当前血量开局，战斗后余量写回存档
+	}
+	// v1.9.36 群怪模版：带点位的大世界战斗 → 服务端取点位当前组合结算（与遭遇贴图同源，所见即所战）
+	if q.WorldID != "" && q.NodeID != "" {
+		if g, ok := game.SM().MonsterGroup(q.WorldID, q.NodeID); ok {
+			req.Group = g
+			req.MonsterID = g[0] // 主怪（精英倍率/奖励/掉落语义锚点）
+		}
+	}
+	rep := game.ResolveBattle(req)
 	logs := store.ApplyBattleReport(p, rep)
+	// v1.9.31 战败回家园：大世界战败后送回家园休整（记录来源世界，出门可返回）
+	if rep.Result != "win" && p.World.WorldID != "HOME" {
+		p.World.LastWorldID = p.World.WorldID
+		p.World.WorldID = "HOME"
+		p.World.X, p.World.Y = 1280, 780
+		logs = append(logs, "你被击败，已回到家园休整（战败保底 1 血，用回血药水恢复后再出发）")
+	}
 	if err := disk.Save(q.UserID, p); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -260,7 +400,7 @@ func idleFinalize(w http.ResponseWriter, r *http.Request) {
 	}
 	now := game.ServerNow()
 	res := game.SettleIdle(game.IdleInput{Now: now, LastSeen: p.World.LastSeen, Level: p.Core.Level})
-	store.ApplyIdleResult(p, res, now)
+	store.ApplyIdleResult(p, res, now, maxHpOf(p))
 	if err := disk.Save(q.UserID, p); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -279,15 +419,21 @@ func transferClass(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	oldCls := p.Core.ClassID
 	old := make([]game.EquipItem, 0, len(p.Equip))
 	for _, e := range p.Equip {
 		old = append(old, game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats})
 	}
-	converted := game.TransferEquip(old, q.To)
+	// 服务端权威：等级/阶段/路径校验 + 技能池重算（转职后原职业技能自动卸下）
+	if err := p.TransferTo(q.To, len(p.World.Unlocked)); err != nil {
+		http.Error(w, err.Error(), 403)
+		return
+	}
+	// v1.9.30 双向换算：按 新/旧职业系数比值 折算，互转数值精确还原
+	converted := game.TransferEquip(old, oldCls, q.To)
 	for i := range p.Equip {
 		p.Equip[i].Stats = converted[i].Stats
 	}
-	p.Core.ClassID = q.To
 	if err := disk.Save(q.UserID, p); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -299,15 +445,17 @@ func transferClass(w http.ResponseWriter, r *http.Request) {
 // 客户端只传意图与参数，服务端校验后落库并返回最新 state。
 func playerAction(w http.ResponseWriter, r *http.Request) {
 	var q struct {
-		UserID  string   `json:"userId"`
-		Action  string   `json:"action"`
-		Slots   []string `json:"slots"`   // submit_bd
-		SkillID string   `json:"skillId"` // unlock_skill
-		ItemID  string   `json:"itemId"`  // equip/unequip/deposit/withdraw
-		Qty     int      `json:"qty"`     // deposit/withdraw
-		Slot    string   `json:"slot"`    // enhance
-		DGID    string   `json:"dungeonId"`
-		QuestID string   `json:"questId"`
+		UserID   string            `json:"userId"`
+		Action   string            `json:"action"`
+		Slots    []string          `json:"slots"`    // submit_bd
+		SkillID  string            `json:"skillId"`  // unlock_skill
+		ItemID   string            `json:"itemId"`   // equip/unequip/deposit/withdraw
+		Qty      int               `json:"qty"`      // deposit/withdraw
+		Slot     string            `json:"slot"`     // enhance
+		DGID     string            `json:"dungeonId"`
+		QuestID  string            `json:"questId"`
+		HomeLook map[string]string `json:"homeLook"` // update_look
+		To       string            `json:"to"`       // class_advance
 	}
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 		http.Error(w, err.Error(), 400)
@@ -326,6 +474,48 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		slots, e := p.SubmitBD(q.Slots)
 		if e != nil { http.Error(w, e.Error(), 400); return }
 		extra["slots"] = slots
+	case "update_look":
+		// 家园换装（服务端权威：只改 appearance，不碰职业/装备/技能）
+		look, e := p.UpdateLook(q.HomeLook)
+		if e != nil { http.Error(w, e.Error(), 400); return }
+		extra["homeLook"] = look
+		p.Logs = append(p.Logs, store.LogEntry{Event: "更换家园外观"})
+	case "class_advance":
+		// 进阶（交付包 C→S class_advance）：等级 44 + 已开启第 2 世界
+		oldCls := p.Core.ClassID
+		old := make([]game.EquipItem, 0, len(p.Equip))
+		for _, e := range p.Equip {
+			old = append(old, game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats})
+		}
+		if e := p.TransferTo(q.To, len(p.World.Unlocked)); e != nil {
+			http.Error(w, e.Error(), 403)
+			return
+		}
+		// v1.9.30 双向换算：按 新/旧职业系数比值 折算，互转数值精确还原
+		converted := game.TransferEquip(old, oldCls, q.To)
+		for i := range p.Equip {
+			p.Equip[i].Stats = converted[i].Stats
+		}
+		// v1.9.38 武器分系：新职业与已穿武器不同系 → 自动卸下（防具/饰品通用不受影响）
+		newWC := game.WeaponClassFor(q.To)
+		for i := range p.Equip {
+			if it := p.Equip[i]; it.Equipped && it.Slot == "weapon" && it.ClassID != "" && it.ClassID != newWC {
+				p.Equip[i].Equipped = false
+				p.Logs = append(p.Logs, store.LogEntry{Event: fmt.Sprintf("武器「%s」为%s系专属，转职后已自动卸下", it.ID, game.WeaponClassCN(it.ClassID))})
+			}
+		}
+		extra["classId"] = q.To
+		extra["from"] = oldCls
+		// v1.9.26 按转职类型给出不同文案（基础互转 / 进阶 / 回退）
+		c := game.C()
+		word := "转职"
+		if cp, ok := c.Skills.Classes[q.To]; ok && cp.Tier == 1 {
+			word = "进阶"
+		} else if cp, ok := c.Skills.Classes[oldCls]; ok && cp.Tier == 1 {
+			word = "回退"
+		}
+		extra["message"] = word + "成功，装备属性已按新职业系数换算"
+		p.Logs = append(p.Logs, store.LogEntry{Event: fmt.Sprintf("职业%s：%s → %s", word, oldCls, q.To)})
 	case "unlock_skill":
 		cost := 300
 		unlocked, e := p.UnlockSkill(q.SkillID, cost)
@@ -338,18 +528,43 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		logs, err = p.UnequipItem(q.ItemID)
 		if err != nil { http.Error(w, err.Error(), 400); return }
 	case "enhance":
-		goldCost := 1200
+		// v1.9.20/21：消耗按配置公式 costBase × costGrowth^当前强化等级 递增；
+		// v1.9.21 支持按装备实例 ID（itemId）精确定位，避免同槽位多件装备强化错对象。
+		enh := game.C().Equipment.Enhance
+		goldBase := 1200
+		if v, ok := enh["costBase"].(float64); ok { goldBase = int(v) }
+		growth := 1.35
+		if v, ok := enh["costGrowth"].(float64); ok { growth = v }
 		matCost := 2
-		if enh, ok := game.C().Equipment.Enhance["costBase"].(float64); ok {
-			goldCost = int(enh)
+		curLv := 0
+		for _, e := range p.Equip {
+			if (q.ItemID != "" && e.ID == q.ItemID) || (q.ItemID == "" && e.Slot == q.Slot) { curLv = e.Enhance; break }
 		}
-		lvl, e := p.EnhanceEquip(q.Slot, goldCost, matCost)
+		goldCost := int(float64(goldBase) * math.Pow(growth, float64(curLv)))
+		lvl, e := p.EnhanceEquip(q.ItemID, q.Slot, goldCost, matCost)
 		if e != nil { http.Error(w, e.Error(), 400); return }
 		extra["enhanceLevel"] = lvl
+		extra["enhanceCost"] = map[string]int{"gold": goldCost, "material": matCost}
+	case "use_potion":
+		// v1.9.27 使用回血药水：服务端权威校验持有/满血，回血量按配置百分比
+		potCfg, _ := game.C().Economy.Drop["potion"].(map[string]any)
+		healPct := 0.35
+		if m, ok := potCfg[q.ItemID].(map[string]any); ok {
+			if v, ok := m["healPct"].(float64); ok && v > 0 && v <= 1 { healPct = v }
+		}
+		healed, e := p.UsePotion(q.ItemID, healPct, maxHpOf(p))
+		if e != nil { http.Error(w, e.Error(), 400); return }
+		extra["healed"] = healed
+		extra["hp"] = p.Core.HP
+		extra["maxHp"] = maxHpOf(p)
 	case "deposit":
 		if err = p.WarehouseDeposit(q.ItemID, q.Qty); err != nil { http.Error(w, err.Error(), 400); return }
 	case "withdraw":
 		if err = p.WarehouseWithdraw(q.ItemID, q.Qty); err != nil { http.Error(w, err.Error(), 400); return }
+	case "wh_equip_in": // 背包装备 → 仓库（点击背包装备存入）
+		if err = p.WarehouseEquipIn(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
+	case "wh_equip_out": // 仓库装备 → 背包（点击仓库装备取出）
+		if err = p.WarehouseEquipOut(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
 	case "dungeon_enter":
 		perDay := 0
 		var mon string; var elite bool; var lvReq int
@@ -370,6 +585,7 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		}
 		extra["remain"] = p.DungeonRemain(q.DGID, perDay)
 	case "guild_donate":
+		if p.Guild == nil { http.Error(w, "尚未加入公会", 409); return }
 		if p.Ext == nil { p.Ext = map[string]any{} }
 		today := time.Now().Format("2006-01-02")
 		if d, _ := p.Ext["guildDay"].(string); d != today {
@@ -388,9 +604,14 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		p.Ext["guildCoin"] = float64(coin)
 		p.Ext["guildDonated"] = float64(donated + 1)
 		p.GainExp(60)
+		// v1.9.18：公会进度 +50，成员等级/战力快照同步进注册表（服务端权威）
+		progress, _, derr := store.Guilds().GuildDonate(p.Guild.ID, p.UserID, p.Core.Level, p.Core.BattlePower)
+		if derr != nil { http.Error(w, derr.Error(), 409); return }
 		extra["guildCoin"] = coin
 		extra["guildDonated"] = donated + 1
+		extra["guildProgress"] = progress
 	case "guild_buy":
+		if p.Guild == nil { http.Error(w, "尚未加入公会", 409); return }
 		if p.Ext == nil { p.Ext = map[string]any{} }
 		prices := map[string]int{"gem_pack": 200, "material_pack": 150, "skill_book": 300}
 		price, ok := prices[q.ItemID]
@@ -484,16 +705,63 @@ func loadOrCreate(userID string) (*store.PlayerState, error) {
 			return nil, err
 		}
 	}
+	// v1.9.27 老档兼容：HP 字段缺省/为 0 → 视为满血回填（战斗前血量兜底）
+	if p.Appearance.Created && p.Core.HP <= 0 {
+		p.Core.HP = maxHpOf(p)
+	}
+	// v1.9.38 老档武器系归一：存量武器按当前职业归入对应系（变更才落盘，避免每请求写盘）
+	if p.MigrateWeaponClass() {
+		if err := disk.Save(userID, p); err != nil {
+			return nil, err
+		}
+	}
 	return p, nil
 }
 
-// filterBD 初跑保守处理：预留等级门槛扩展点，当前原样返回（技能解锁由客户端按配置限制）。
-func filterBD(bd []string, level int) []string {
-	return bd
+// maxHpOf 服务端权威计算角色最大血量（按等级+穿戴装备）。
+func maxHpOf(p *store.PlayerState) float64 {
+	equip := make([]game.EquipItem, 0, len(p.Equip))
+	for _, e := range p.Equip {
+		if e.Equipped {
+			equip = append(equip, game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats})
+		}
+	}
+	return game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip}).HP
+}
+
+// filterBD 服务端二次校验：只保留当前职业技能池内、且已解锁的技能（防客户端篡改）。
+// 若一个都不剩，回退到该职业初始技能，保证战斗不会空转。
+func filterBD(p *store.PlayerState, bd []string) []string {
+	c := game.C()
+	unlocked := map[string]bool{}
+	for _, id := range p.Skills.Unlocked {
+		unlocked[id] = true
+	}
+	out := []string{}
+	for _, id := range bd {
+		if id == "basic" || id == "" {
+			continue
+		}
+		if !unlocked[id] {
+			continue
+		}
+		if !c.InBDPool(p.Core.ClassID, id) {
+			continue
+		}
+		out = append(out, id)
+		if len(out) >= 4 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		pool := c.SkillPoolOf(p.Core.ClassID)
+		out = append(out, pool.Initial...)
+	}
+	return out
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-cache") // HTML 每次校验，确保引用到最新脚本
+	w.Header().Set("Cache-Control", "no-store") // HTML 强制不缓存，确保每次拿到最新脚本引用（v1.9.24 补充）
 	if webFile != "" {
 		if b, err := os.ReadFile(webFile); err == nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
