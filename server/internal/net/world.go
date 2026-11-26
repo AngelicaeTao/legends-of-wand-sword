@@ -266,12 +266,27 @@ func guildView(g *store.Guild) map[string]any {
 	}
 }
 
+// guildList（v1.9.39 公会界面大改）：返回公会列表 + 当前玩家的所在公会 my（服务端权威）。
+// 前端按 my 分流：有 my → 我的公会主界面；无 my → 搜索/加入界面。
 func guildList(w http.ResponseWriter, r *http.Request) {
+	var q struct{ UserID string }
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	uid := q.UserID
+	if uid == "" {
+		uid, _ = authUserID(r)
+	}
 	out := []map[string]any{}
 	for _, g := range store.Guilds().GuildList() {
 		out = append(out, guildView(g))
 	}
-	jsonOut(w, map[string]any{"guilds": out})
+	resp := map[string]any{"guilds": out}
+	if uid != "" {
+		if g, role := store.Guilds().GuildByUser(uid); g != nil {
+			resp["my"] = guildView(g)
+			resp["myRole"] = role
+		}
+	}
+	jsonOut(w, resp)
 }
 
 func guildActionBody(r *http.Request) (string, string, string, error) {

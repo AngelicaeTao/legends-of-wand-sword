@@ -134,6 +134,21 @@ func (r *GuildRegistry) GuildByID(id string) *Guild {
 	return &cp
 }
 
+// GuildByUser 查玩家所在公会与角色（v1.9.39 公会分流服务端权威化）。未加入返回 nil。
+func (r *GuildRegistry) GuildByUser(userID string) (*Guild, string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, g := range r.guilds {
+		for _, m := range g.Members {
+			if m.UserID == userID {
+				cp := *g
+				return &cp, m.Role
+			}
+		}
+	}
+	return nil, ""
+}
+
 // GuildCreate 创建公会：唯一名校验 + 会长入会。返回创建好的公会。
 func (r *GuildRegistry) GuildCreate(id, name, userID, userName string, level, power int) (*Guild, error) {
 	name = strings.TrimSpace(name)

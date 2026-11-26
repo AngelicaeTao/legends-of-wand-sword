@@ -668,7 +668,10 @@ WMap.prototype.applySpots=function(spots){
       const monId=s.contentId||s.bossMonster||'slime';
       // v1.9.36 群怪模版：点位组合随服务端下发（group），遭遇贴图与战斗结算同源
       const group=(s.group&&s.group.length)?s.group:[monId];
-      const sprite=MON_NAMES[monId]?monId:'slime';
+      // v1.9.39 修复：贴图取组合内第一只怪（与实际战斗一致），不再用点位原类型。
+      // 此前用 monId 选贴图、group 算名字 → 出现"名字骷髅兵、贴图史莱姆"的错位。
+      const firstMon=group[0]||monId;
+      const sprite=MON_NAMES[firstMon]?firstMon:(MON_NAMES[monId]?monId:'slime');
       const actor=this.makeFreshActor('mon_'+sprite,'idle');
       // 组合名：按怪物 id 计数（如"史莱姆×2 · 骷髅×1"）
       const cnt={};group.forEach(g=>{cnt[g]=(cnt[g]||0)+1;});
@@ -1345,13 +1348,13 @@ WMap.prototype.openMapModal=function(){
       <button id="wmapClose" title="关闭 (Esc / M)">✕</button></div>
     <canvas id="wmapCv" width="960" height="540"></canvas>
     <div class="wmap-legend">
-      <span><i class="lg lg-hero"></i>你</span>
-      <span><i class="lg lg-gate"></i>传送门</span>
-      <span><i class="lg lg-anchor"></i>锚点</span>
-      <span><i class="lg lg-mob"></i>怪物</span>
-      <span><i class="lg lg-elite"></i>精英/首领</span>
-      <span><i class="lg lg-chest"></i>宝箱</span>
-      <span><i class="lg lg-potion"></i>草药</span>
+      <span><i class="lgdot lgdot-hero"></i>你</span>
+      <span><i class="lgdot lgdot-gate"></i>传送门</span>
+      <span><i class="lgdot lgdot-anchor"></i>锚点</span>
+      <span><i class="lgdot lgdot-mob"></i>怪物</span>
+      <span><i class="lgdot lgdot-elite"></i>精英/首领</span>
+      <span><i class="lgdot lgdot-chest"></i>宝箱</span>
+      <span><i class="lgdot lgdot-potion"></i>草药</span>
     </div>
   </div>`;
   document.body.appendChild(layer);
@@ -1369,16 +1372,16 @@ WMap.prototype.openMapModal=function(){
   }
   const isHome=this.worldId==='HOME';
   const legend=isHome
-    ?`<span><i class="lg lg-hero"></i>你</span>
-      <span><i class="lg lg-chest"></i>功能设施</span>
-      <span><i class="lg lg-gate"></i>出门</span>`
-    :`<span><i class="lg lg-hero"></i>你</span>
-      <span><i class="lg lg-gate"></i>传送门</span>
-      <span><i class="lg lg-anchor"></i>锚点</span>
-      <span><i class="lg lg-mob"></i>怪物</span>
-      <span><i class="lg lg-elite"></i>精英/首领</span>
-      <span><i class="lg lg-chest"></i>宝箱</span>
-      <span><i class="lg lg-potion"></i>草药</span>`;
+    ?`<span><i class="lgdot lgdot-hero"></i>你</span>
+      <span><i class="lgdot lgdot-chest"></i>功能设施</span>
+      <span><i class="lgdot lgdot-gate"></i>出门</span>`
+    :`<span><i class="lgdot lgdot-hero"></i>你</span>
+      <span><i class="lgdot lgdot-gate"></i>传送门</span>
+      <span><i class="lgdot lgdot-anchor"></i>锚点</span>
+      <span><i class="lgdot lgdot-mob"></i>怪物</span>
+      <span><i class="lgdot lgdot-elite"></i>精英/首领</span>
+      <span><i class="lgdot lgdot-chest"></i>宝箱</span>
+      <span><i class="lgdot lgdot-potion"></i>草药</span>`;
   const cv=layer.querySelector('#wmapCv'), g=cv.getContext('2d');
   layer.querySelector('.wmap-legend').innerHTML=legend;
   const loop=()=>{

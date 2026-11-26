@@ -1121,17 +1121,26 @@ const GUILD_SHOP=[
   {id:'material_pack', name:'材料包 ×30',    price:150, ico:'bag'},
   {id:'skill_book',    name:'奥义书（经验+300）', price:300, ico:'book'}
 ];
-// 公会（v1.9.18）：服务端权威。未加入 → 创建或加入；已加入 → 公会主界面
+// 公会（v1.9.39 大改）：分流服务端权威化 —— /api/guild/list 返回 my（我所在公会）。
+// 已加入 → 点击直接进入"我的公会"主界面（不再依赖客户端 state.guild，老档丢失也能正确识别）；
+// 未加入 → 搜索/加入界面（搜索框按公会名过滤）。
 const GUILD_ROLE_TXT={president:'会长',officer:'副会长',member:'成员'};
 async function renderGuild(){
   $('panelTitle').textContent='公会';
   const body=$('panelBody');
-  const g=state&&state.guild;
-  if(!g){ await renderGuildJoin(); return; }
-  // —— 已加入：公会主界面 ——
-  const detail=await api('/api/guild/list');
-  const gv=(detail.guilds||[]).find(x=>x.id===g.id);
-  if(!gv){ state.guild=null; syncHud(); await renderGuildJoin(); return; } // 公会已解散
+  let detail;
+  try{ detail=await api('/api/guild/list',{userId:uid()}); }
+  catch(e){ body.innerHTML='<div class="sec-sub">公会数据加载失败：'+e.message+'</div>'; return; }
+  const my=detail.my||null;
+  if(!my){
+    // 未加入（或公会已解散）：服务端查不到我所在公会 → 搜索界面
+    if(state&&state.guild){ state.guild=null; syncHud(); }
+    await renderGuildJoin(detail);
+    return;
+  }
+  // —— 已加入：公会主界面（同步修复客户端 state.guild 丢失问题） ——
+  state.guild={id:my.id,name:my.name,role:detail.myRole||'member'};syncHud();
+  const gv=my;
   const ext=(state&&state.ext)||{};
   const coin=Math.floor(ext.guildCoin||0);
   const donated=Math.floor(ext.guildDonated||0);
@@ -1139,7 +1148,7 @@ async function renderGuild(){
   const nextLv=prog-(lv-1)*1000;
   const members=(gv.members||[]).slice().sort((a,b)=>(a.role==='president'?-1:0)-(b.role==='president'?-1:0)||b.donate-a.donate);
   const president=(gv.members||[]).find(m=>m.role==='president');
-  const isPresident=g.role==='president';
+  const isPresident=(detail.myRole||'member')==='president';
   body.innerHTML=`
     <div class="guild-hero">
       <div class="gh-emblem">${ICON.shield(40,'#f0d590')}</div>
@@ -1220,9 +1229,9 @@ async function renderGuild(){
     $('cancelLeave').onclick=hideModal;
   };
 }
-// 未加入：创建或加入（服务端权威列表）
-async function renderGuildJoin(){
-  $('panelSub').textContent='创建公会，或加入别人的公会';
+// 未加入：搜索加入为主（v1.9.39：搜索框按公会名实时过滤），创建公会入口保留
+async function renderGuildJoin(preloaded){
+  $('panelSub').textContent='搜索并加入公会，或创建自己的公会';
   const body=$('panelBody');
   const myGold=state&&state.core?state.core.gold:0;
   body.innerHTML=`
@@ -1233,6 +1242,11 @@ async function renderGuildJoin(){
         <div class="gh-sub">加入公会后可每日捐献换公会币，在公会商店兑换钻石礼包 / 材料包 / 奥义书</div>
       </div>
     </div>
+    <div class="sec-title">搜索公会 <button class="btn-gray" id="guildRefresh" style="margin-left:10px;padding:3px 12px">刷新</button></div>
+    <div style="display:flex;gap:8px;margin:6px 0 10px">
+      <input id="guildSearch" placeholder="输入公会名搜索（留空显示全部）" style="flex:1;background:#1b2436;color:#e8e8e8;border:1px solid #3a4a63;padding:7px 10px;border-radius:8px">
+    </div>
+    <div id="guildList" class="sec-sub">正在加载公会列表…</div>
     <div class="sec-title">创建公会</div>
     <div class="guild-donate">
       <div class="gd-info">
@@ -1243,37 +1257,43 @@ async function renderGuildJoin(){
         <input id="guildName" placeholder="输入公会名" maxlength="12" style="width:150px;background:#1b2436;color:#e8e8e8;border:1px solid #3a4a63;padding:7px 10px;border-radius:8px">
         <button class="big-btn goldbtn" id="guildCreateBtn" ${myGold<5000?'disabled style="opacity:.5"':''}>创 建</button>
       </div>
-    </div>
-    <div class="sec-title">加入公会 <button class="btn-gray" id="guildRefresh" style="margin-left:10px;padding:3px 12px">刷新</button></div>
-    <div id="guildList" class="sec-sub">正在加载公会列表…</div>`;
+    </div>`;
+  let gs=[];
+  const renderRows=()=>{
+    const kw=(($('guildSearch')||{}).value||'').trim().toLowerCase();
+    const hit=kw?gs.filter(x=>(x.name||'').toLowerCase().includes(kw)):gs;
+    const el=$('guildList');
+    if(!el)return;
+    el.className='';
+    el.innerHTML=hit.length?hit.map(x=>{
+      const pres=(x.members||[]).find(m=>m.role==='president');
+      return `<div class="gr-row">
+        <div class="gr-emb">${ICON.shield(22,'#f0d590')}</div>
+        <div class="gr-main"><div class="gr-name">${x.name} <em>Lv.${x.level}</em></div>
+          <div class="gr-sub">会长 ${pres?pres.name:'-'} · ${x.size}/30 人 · 进度 ${x.progress}</div></div>
+        <button class="btn-gray gr-join" data-gid="${x.id}" data-gname="${x.name}" ${x.size>=30?'disabled style="opacity:.45"':''}>${x.size>=30?'已满员':'加入'}</button>
+      </div>`;
+    }).join(''):(kw?'没有名字包含「'+kw+'」的公会':'暂无公会，创建第一个吧！');
+    el.querySelectorAll('.gr-join').forEach(b=>b.onclick=async()=>{
+      try{
+        const r2=await api('/api/guild/join',{userId:uid(),guildId:b.dataset.gid});
+        if(r2.state){state=r2.state;syncHud();}
+        window.SFX&&SFX.buy();
+        toastModal('加入成功','欢迎加入 '+b.dataset.gname);
+        renderGuild();
+      }catch(e){ window.SFX&&SFX.fail(); toastModal('加入失败',e.message); }
+    });
+  };
   const loadList=async()=>{
     try{
-      const r=await api('/api/guild/list');
-      const gs=r.guilds||[];
-      const el=$('guildList');
-      if(!el)return;
-      el.className='';
-      el.innerHTML=gs.length?gs.map(x=>{
-        const pres=(x.members||[]).find(m=>m.role==='president');
-        return `<div class="gr-row">
-          <div class="gr-emb">${ICON.shield(22,'#f0d590')}</div>
-          <div class="gr-main"><div class="gr-name">${x.name} <em>Lv.${x.level}</em></div>
-            <div class="gr-sub">会长 ${pres?pres.name:'-'} · ${x.size}/30 人 · 进度 ${x.progress}</div></div>
-          <button class="btn-gray gr-join" data-gid="${x.id}" data-gname="${x.name}" ${x.size>=30?'disabled style="opacity:.45"':''}>${x.size>=30?'已满员':'加入'}</button>
-        </div>`;
-      }).join(''):'<div class="sec-sub">暂无公会，创建第一个吧！</div>';
-      el.querySelectorAll('.gr-join').forEach(b=>b.onclick=async()=>{
-        try{
-          const r2=await api('/api/guild/join',{userId:uid(),guildId:b.dataset.gid});
-          if(r2.state){state=r2.state;syncHud();}
-          window.SFX&&SFX.buy();
-          toastModal('加入成功','欢迎加入 '+b.dataset.gname);
-          renderGuild();
-        }catch(e){ window.SFX&&SFX.fail(); toastModal('加入失败',e.message); }
-      });
+      const r=preloaded||await api('/api/guild/list',{userId:uid()});
+      preloaded=null;               // 只复用一次，之后点刷新重新请求
+      gs=r.guilds||[];
+      renderRows();
     }catch(e){ const el=$('guildList'); if(el)el.textContent='列表加载失败：'+e.message; }
   };
   await loadList();
+  $('guildSearch').oninput=renderRows;
   $('guildRefresh').onclick=loadList;
   $('guildCreateBtn').onclick=async()=>{
     const name=$('guildName').value.trim();
