@@ -951,7 +951,7 @@ WMap.prototype.update=function(dt){
   // 掉落物理
   for(const d of this.drops){
     d.vy+=1400*dt;d.y+=d.vy*dt;
-    if(d.y>=d.groundY){d.y=d.groundY;if(Math.abs(d.vy)>60)d.vy*=-0.42;else{this.chests.push({x:d.x,y:d.y,nodeId:'drop_'+Date.now(),tier:d.tier,state:'closed',actor:d.actor||this.makeFreshActor('item_chest_'+d.tier,'closed'),phase:0,dropped:true});d.done=true;}}
+    if(d.y>=d.groundY){d.y=d.groundY;if(Math.abs(d.vy)>60)d.vy*=-0.42;else{this.chests.push({x:d.x,y:d.y,nodeId:d.nodeId||('drop_'+Date.now()),tier:d.tier,state:'closed',actor:d.actor||this.makeFreshActor('item_chest_'+d.tier,'closed'),phase:0,dropped:true});d.done=true;}}
   }
   this.drops=this.drops.filter(d=>!d.done);
   // 开启动画
@@ -992,17 +992,13 @@ WMap.prototype.openChest=function(c){
   if(c.actor)c.actor.playOnce('open',()=>{c.state='opened';});
   this.opts.onChest&&this.opts.onChest(c);
 };
-WMap.prototype.dropChestFrom=function(mon){
-  mon.state='dead';
-  if(mon.actor)mon.actor.playOnce('die');
-  // v1.9.42：BOSS 掉落可出钻石/水晶箱；普通怪掉落金箱概率小幅上调
-  let tier='wood';
-  const roll=Math.random();
-  if(mon.type==='boss_beetle'){ tier=roll<0.2?'crystal':roll<0.5?'diamond':'gold'; }
-  else if(roll<0.08){ tier='diamond'; }
-  else if(roll<0.16){ tier='gold'; }
-  else if(roll<0.5){ tier='silver'; }
-  this.drops.push({x:mon.x,y:mon.y-90,groundY:mon.y,tier,actor:this.makeFreshActor('item_chest_'+tier,'closed'),vy:-120});
+// v1.9.47：箱档位与 nodeId 由 app.js 向服务端登记后传入，本层只做落地表现。
+// 这里不再直接调 api()——api/uid 定义在 app.js 的 IIFE 内，本文件（全局脚本）取不到，
+// 之前在此判断 typeof api==='function' 恒为 false，导致打怪后不落箱。
+WMap.prototype.spawnChestDrop=function(mon,tier,nodeId){
+  if(!tier) return false;
+  this.drops.push({x:mon.x,y:mon.y-90,groundY:mon.y,tier,nodeId:nodeId||('drop_'+Date.now()),
+    actor:this.makeFreshActor('item_chest_'+tier,'closed'),vy:-120});
   return true;
 };
 WMap.prototype.heroDefeated=function(){};

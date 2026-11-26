@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"zjcs/server/internal/game"
@@ -23,6 +24,36 @@ func numAny(m map[string]any, k string, def float64) float64 {
 		}
 	}
 	return def
+}
+
+// chestDrop：怪物掉落宝箱登记（v1.9.45）。
+// 客户端只上报"在哪个点位打败了什么怪"，档位由服务端按配置权威 roll；
+// 返回登记后的 nodeId + tier，前端据此渲染对应贴图，开箱必然兑现同一档位。
+func chestDrop(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		UserID  string `json:"userId"`
+		WorldID string `json:"worldId"`
+		NodeID  string `json:"nodeId"`
+		Boss    bool   `json:"boss"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	if q.UserID == "" { q.UserID, _ = authUserID(r) }
+	if q.UserID == "" { http.Error(w, "未授权", 401); return }
+	if q.WorldID == "" { q.WorldID = "W1" }
+	if !strings.HasPrefix(q.NodeID, "drop_") || len(q.NodeID) > 64 {
+		http.Error(w, "nodeId 非法（必须以 drop_ 开头且 ≤64 字符）", 400)
+		return
+	}
+	s, ok := game.SM().RegisterDropChest(q.UserID, q.WorldID, q.NodeID, q.Boss)
+	if !ok { http.Error(w, "掉落登记失败（nodeId 重复或未开启掉落箱过多）", 409); return }
+	tierName := "wood"
+	switch s.Tier {
+	case 5: tierName = "crystal"
+	case 4: tierName = "diamond"
+	case 3: tierName = "gold"
+	case 2: tierName = "silver"
+	}
+	jsonOut(w, map[string]any{"nodeId": s.NodeID, "tier": tierName})
 }
 
 // chestOpen：服务端按 tier 权威 roll 奖励并入仓库/存档。
