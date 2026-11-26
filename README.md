@@ -74,6 +74,21 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 >
 > **数值纪律**：配置表里的值均可在 `configs/*.json` 改，但除标注「设计决策 / 已核实」外，其余为 **[PLACEHOLDER]**——未经 playtest 经济闭环验证，不作最终手感。改配置后服务端重启或热重载生效，不改代码。
 
+> ### ⚠️ 数据源权威性说明（2026-11-27 全章节核对）
+>
+> 本节数值此前误用 `client/assets/configs/` 副本（过时）。经逐字段核对确认：**服务端权威配置是 `configs/`**（`server/main.go` 默认 `-config configs`，`game/config.go` 注释明确"所有数值来自 configs/*.json，本包只跑逻辑"），且与 `server/configs_shared/` 逐字节一致。4 套副本核对结果：
+>
+> | 配置 | client/assets/configs | client/assets/resources/configs | configs（权威） | server/configs_shared |
+> |---|---|---|---|---|
+> | classes | 旧（无前缀技能池、斗士/贤者） | 旧 | **权威** | 同权威 |
+> | economy | 旧（3 档箱、材料 0.5） | 旧 | **权威** | 同权威 |
+> | equipment | 旧（5 档品质、强化 1200×1.35） | 旧 | **权威** | 同权威 |
+> | skills | 旧（15 技能无前缀） | 旧 | **权威** | 同权威 |
+> | worlds | 旧（6 世界、坐标×2） | 旧 | **权威**（7 世界、CD=0） | 旧（6 世界、CD=300，未同步） |
+> | monsters | 四副本一致 | 一致 | **权威** | 同权威 |
+>
+> 本版 A2/A3/A4/A6/A7/A8/A9 已全部按权威 `configs/` 与服务端 Go 代码重写，每处与旧稿差异均就地标注。客户端副本不参与权威结算，仅展示用——配置同步失效是已知部署风险，部署时 `-config` 必须指向 `configs/`。
+
 ## Part A · 已上线实际版本（code/v1.9.44 实测）
 
 ### A1. 产品定位、技术栈与运行形态
@@ -101,56 +116,74 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 ### A2. 职业系统（classes.json · 逐字段）
 
-**基础属性 baseStats**：HP `100` / ATK `12` / DEF `5` / 暴击 `0.05`（5%）/ 速度 `10`。
+**基础属性 baseStats**：HP `100` / ATK `12` / DEF `5` / 暴击 `0.05` / 速度 `10`。
 
 **等级成长 levelGrowth**：HP `+18/级`、ATK `+3/级`、DEF `+1.5/级`；升级经验 `= expBase × expGrowth^(等级-1)` = `60 × 1.18^(lv-1)`，四舍五入。
 
-**6 职业逐字段**（bonus 为属性乘数）：
+**6 职业逐字段**（bonus 为属性乘数；权威副本 `configs/classes.json`）：
 
 | id | 名称 | tier | 图标 | 定位描述 | HP× | ATK× | DEF× | 暴击× | 技能池（skillPool） |
 |---|---|:--:|---|---|--:|--:|--:|--:|---|
-| warrior | 战士 | 1 | ui_card_warrior.png | 近战，抗伤与输出兼备 | 1.2 | 1.05 | 1.15 | 1.0 | slash / guard / shield_bash / whirlwind |
-| mage | 法师 | 1 | ui_card_mage.png | 远程输出与控制，攻击范围大 | 0.85 | 1.3 | 0.9 | 1.15 | fireball / heal / frost_nova / arcane_bolt |
-| fighter | 斗士 | 2 | ui_card_fighter.png | 极致速度与爆发 | 1.05 | 1.35 | 0.95 | 1.3 | slash / whirlwind / rage / execute |
-| knight | 骑士 | 2 | ui_card_knight.png | 护盾与格挡，团队之盾 | 1.4 | 0.95 | 1.45 | 0.9 | guard / shield_bash / taunt / holy_guard |
-| sage | 贤者 | 2 | ui_card_sage.png | 召唤、治疗、控制 | 0.9 | 1.15 | 1.0 | 1.05 | heal / frost_nova / summon / arcane_bolt |
-| warlock | 术士 | 2 | ui_card_warlock.png | 大范围群伤，破坏力惊人 | 0.8 | 1.5 | 0.85 | 1.2 | fireball / frost_nova / meteor / curse |
+| warrior | 战士 | 1 | ui_card_warrior.png | 近战，抗伤与输出兼备 | 1.2 | 1.05 | 1.15 | 1.0 | w_slash / w_guard |
+| mage | 法师 | 1 | ui_card_mage.png | 远程输出与控制，攻击范围大 | 0.85 | 1.3 | 0.9 | 1.15 | m_fireball / m_heal |
+| fighter | 拳师 | 2 | ui_card_fighter.png | 极致速度与爆发 | 1.05 | 1.35 | 0.95 | 1.3 | f_combo / f_berserk / f_iron_body |
+| knight | 骑士 | 2 | ui_card_knight.png | 护盾与格挡，团队之盾 | 1.4 | 0.95 | 1.45 | 0.9 | k_aegis / k_taunt / k_holy_strike |
+| sage | 祭祀 | 2 | ui_card_sage.png | 召唤、治疗、控制 | 0.9 | 1.15 | 1.0 | 1.05 | s_bless / s_revive / s_purify |
+| warlock | 术士 | 2 | ui_card_warlock.png | 大范围群伤，破坏力惊人 | 0.8 | 1.5 | 0.85 | 1.2 | wl_curse / wl_summon / wl_drain |
 
 **转职树 transfers**：`warrior → [fighter, knight]`；`mage → [sage, warlock]`。
 
-**转职规则 transferRules**：cost = `0`（零成本），首次转职等级 `Lv44`（二转，多资料站核实：一转开服即选战士/法师，二转 44 级，三转 84 级，四转 104 级）。转职后装备按 equipment.json 的 classCoefficient 自动换算，避免作废。
+**转职规则 transferRules**：cost = `0`（零成本），首次转职等级 `Lv44`，需开启第 `2` 世界（need_stage=2）。转职后装备按 equipment.json 的 classCoefficient 自动换算，避免作废。
+
+> ⚠️ **与旧稿差异（本次核对修正）**：权威副本中 `fighter` 名为**拳师**（非「斗士」）、`sage` 名为**祭祀**（非「贤者」）；技能池 ID 全部带职业前缀（`w_`/`m_`/`k_`/`f_`/`s_`/`wl_`），数量 2~3 个；转职规则新增 `needStage:2`（44级且开第2世界）。旧稿的 `slash/guard/fireball/...` 是无前缀早期稿。
+
 
 ### A3. 技能系统（skills.json · 逐字段）
 
-技能槽 `slots = 4`。普攻 basicAttack：`普攻` kind=physical power=1.0 cd=0（技能全冷却时兜底，永不卡死）。
+技能槽 `slots = 4`。普攻 basicAttack：id=`basic` kind=physical power=1.0 cd=0 element=none fx=fx_dmg_normal（技能全冷却时兜底，永不卡死）。
 
-**15 个技能逐字段**（power 为系数：乘施法者攻击/最大生命；cd 单位秒）：
+**16 个技能逐字段**（权威副本；power 为系数，交付包 100 制已 /100）：
 
-| id | 名称 | kind | power | cd | 元素 | fx | 特殊效果（_note） | 归属职业（由 classes.skillPool 反查） |
-|---|---|---|--:|--:|---|---|---|---|
-| slash | 斩击 | physical | 1.4 | 2 | none | fx_dmg_normal | – | 战士 / 斗士 |
-| guard | 格挡 | shield | 0.8 | 6 | none | fx_heal | 生成相当于攻击力0.8倍的护盾 | 战士 / 骑士 |
-| shield_bash | 盾击 | physical | 1.1 | 4 | none | fx_dmg_normal | – | 战士 / 骑士 |
-| whirlwind | 旋风斩 | physical | 1.6 | 5 | none | fx_dmg_crit | – | 战士 / 斗士 |
-| fireball | 火球术 | magic | 1.8 | 3 | fire | fx_dmg_crit | – | 法师 / 术士 |
-| heal | 治愈术 | heal | 0.3 | 10 | holy | fx_heal | 回复最大生命的30% | 法师 / 贤者 |
-| frost_nova | 冰霜新星 | magic | 1.3 | 6 | ice | fx_dmg_normal | – | 法师 / 贤者 / 术士 |
-| arcane_bolt | 奥术飞弹 | magic | 1.5 | 2 | arcane | fx_dmg_normal | – | 法师 / 贤者 |
-| rage | 狂怒 | buff | 0.3 | 12 | none | fx_dmg_crit | 攻击力提升30%，持续5秒 | 斗士 |
-| execute | 处决 | physical | 2.2 | 8 | none | fx_dmg_crit | 目标生命低于30%时伤害翻倍 | 斗士 |
-| taunt | 嘲讽 | debuff | 0.2 | 9 | none | fx_dmg_normal | – | 骑士 |
-| holy_guard | 神圣护盾 | shield | 1.2 | 10 | holy | fx_heal | – | 骑士 |
-| summon | 召唤 | magic | 1.0 | 12 | arcane | fx_dmg_normal | 原型阶段简化为一次伤害 | 贤者 |
-| meteor | 陨石 | magic | 2.5 | 14 | fire | fx_dmg_crit | – | 术士 |
-| curse | 诅咒 | debuff | 0.25 | 8 | dark | fx_dmg_normal | 降低目标攻击25% | 术士 |
+| id | 名称 | kind | power | cd | 元素 | fx | 归属职业 | tier | 特殊效果 |
+|---|---|---|--:|--:|---|---|---|---|---|
+| w_slash | 重斩 | physical | 1.4 | 3 | physical | fx_dmg_normal | warrior | initial | 单体高伤 |
+| w_guard | 格挡 | shield | 0 | 5 | none | fx_buff_shield | warrior | initial | 格挡姿态：3 回合内受到的伤害降低 40%；减伤3回合×40% |
+| m_fireball | 火球术 | magic | 1.3 | 3 | fire | fx_dmg_fire | mage | initial | 火系单体 |
+| m_heal | 治疗术 | heal | 0.15 | 6 | none | fx_heal | mage | initial | 持续回血：立即回复 15% 最大生命，之后 2 回合每回合再回 15%（共 45%）；持续回血3回合×15% |
+| k_aegis | 圣盾 | shield | 1.2 | 8 | none | fx_buff_shield | knight | advanced | 群体护盾 |
+| k_taunt | 嘲讽 | debuff | 0.2 | 6 | none | fx_debuff | knight | advanced | 吸引仇恨 |
+| k_holy_strike | 圣光斩 | magic | 1.6 | 5 | holy | fx_dmg_holy | knight | advanced | 圣系高伤 |
+| f_combo | 连击 | physical | 0.9 | 2 | none | fx_dmg_normal | fighter | advanced | 多段攻击 |
+| f_berserk | 狂暴 | buff | 0.3 | 10 | none | fx_buff_atk | fighter | advanced | 提升攻击 |
+| f_iron_body | 铁身 | shield | 1.0 | 7 | none | fx_buff_shield | fighter | advanced | 减伤反弹 |
+| s_bless | 祝福 | buff | 0.35 | 8 | none | fx_buff_atk | sage | advanced | 全队增益 |
+| s_revive | 复活 | heal | 1.2 | 15 | none | fx_heal | sage | advanced | 复活队友 |
+| s_purify | 净化 | heal | 0.6 | 5 | none | fx_heal | sage | advanced | 清除负面 |
+| wl_curse | 诅咒 | debuff | 0.25 | 6 | none | fx_debuff | warlock | advanced | 削弱敌人 |
+| wl_summon | 召唤 | magic | 1.0 | 12 | none | fx_dmg_dark | warlock | advanced | 召唤魔物 |
+| wl_drain | 吸取 | magic | 1.1 | 4 | dark | fx_dmg_dark | warlock | advanced | 吸血攻击 |
 
-**技能 BD 规则**：技能库显示 = 服务端下发 `unlocked[]` ∩ 当前 `classId` 的技能集合；只显示该职业可选技能，不显示跨职业灰技能；进阶解锁高阶；转职后原职业技能自动卸下。战斗中提交 BD 不生效（服务端读战前快照）。
+**职业技能池 classes**（initial 初始 / advanced 进阶，转职进阶门槛 needLevel=44 + needStage=2）：
+
+| classId | 名称 | tier | from | initial | advanced |
+|---|---|:--:|---|---|---|
+| warrior | 战士 | 0 | – | w_slash, w_guard | – |
+| mage | 法师 | 0 | – | m_fireball, m_heal | – |
+| knight | 骑士 | 1 | warrior | w_slash, w_guard | k_aegis, k_taunt, k_holy_strike |
+| fighter | 拳师 | 1 | warrior | w_slash, w_guard | f_combo, f_berserk, f_iron_body |
+| sage | 祭祀 | 1 | mage | m_fireball, m_heal | s_bless, s_revive, s_purify |
+| warlock | 术士 | 1 | mage | m_fireball, m_heal | wl_curse, wl_summon, wl_drain |
+
+**技能 BD 规则**：技能库显示 = unlocked[] ∩ (当前 classId 的 initial ∪ advanced)；不显示跨职业技能；转职后原职业技能自动卸下。
+
+> ⚠️ **与旧稿差异（本次核对修正）**：权威版是 **16 个技能**（旧稿 15 个），全部换职业前缀 ID，数值全变（如 fireball 1.8→m_fireball 1.3、heal 0.3→m_heal 0.15、slash cd2→w_slash cd3）。战士格挡改为 `w_guard` 持续减伤（drRounds=3/drPct=0.4），法师治疗改为 `m_heal` 持续回血（hotRounds=3/hotPer=0.15）。新增 `classes` 字段定义每职业 initial/advanced 池。旧稿无前缀技能表已废弃。
+
 
 ### A4. 装备系统（equipment.json · 逐字段）
 
-**4 槽 slots**：weapon / helmet / armor / trinket（weapon=武器、helmet=头盔、armor=护甲、trinket=饰品）。
+**4 槽 slots**：weapon / helmet / armor / trinket（weapon=武器，helmet=头盔，armor=护甲，trinket=饰品）。
 
-**品质档**（equipment.json 内 5 档；v1.9.42 起战斗掉落扩为 8 档，见下）：
+**品质档 quality（权威版 8 档）**：
 
 | id | 名称 | mult | 颜色 |
 |--:|---|--:|---|
@@ -159,17 +192,20 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | 2 | 稀有 | 1.6 | #9C27B0 |
 | 3 | 史诗 | 2.1 | #FF9800 |
 | 4 | 传说 | 2.8 | #F44336 |
+| 5 | 彩虹 | 3.6 | #5fe3c0 |
+| 6 | 暗影 | 4.6 | #8a5cf6 |
+| 7 | 混沌 | 6.0 | #ff5c8a |
 
 **各槽基础属性 baseStatsBySlot**：
 
-- weapon（武器）：atk=10
-- helmet（头盔）：hp=60，def=3
-- armor（护甲）：hp=100，def=6
-- trinket（饰品）：crit=0.03，atk=4
+- weapon：atk=10
+- helmet：hp=60, def=3
+- armor：hp=100, def=6
+- trinket：crit=0.03, atk=4
 
-**强化 enhance**：costBase=`1200`、costGrowth=`1.35`、statGainPerLevel=`0.08`（每级 +8%）、maxLevel=`15`、successRate=`1.0`（必成功，确定性成长）。成本 = `costBase × costGrowth^当前等级`。
+**强化 enhance**：costBase=`800`、costGrowth=`1.25`、statGainPerLevel=`0.08`（每级 +8%）、maxLevel=`15`、successRate=`1.0`（必成功，确定性成长）。成本 = `800 × 1.25^当前等级`。
 
-**转职装备换算 classCoefficient**（转职后装备属性按职业系数重算，武器伤害按职业主属性）：
+**转职装备换算 classCoefficient**：
 
 | 职业 | ATK× | DEF× | HP× |
 |---|--:|--:|--:|
@@ -180,7 +216,19 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | sage | 1.05 | 1.0 | 1.0 |
 | warlock | 1.25 | 0.85 | 0.85 |
 
-**v1.9.42 起的 8 档品质与升品**（项目档案实测）：传说之上新增 彩虹 mult `3.6` / 暗影 `4.6` / 混沌 `6.0`；战斗掉落改权重 roll：普通 38% / 精良 28% / 稀有 18% / 史诗 10% / 传说 4.2% / 彩虹 1.2% / 暗影 0.5% / 混沌 0.1%。升品 = 品质 +1，属性按 mult 比例重算，上限混沌；消耗 = 新档分解基准 × goldMult `1.2` / matMult `0.6`。
+**武器分系 weaponClasses（v1.9.38）**：`warrior` = [warrior, fighter, knight]；`mage` = [mage, sage, warlock]。武器不跨系通用，头盔/护甲/饰品通用。
+
+**武器命名 weaponNames（按品质 0~4）**：
+
+| 系 | 普通 | 精良 | 稀有 | 史诗 | 传说 |
+|---|---|---|---|---|---|
+| warrior | 木剑 | 铁剑 | 精钢战刃 | 骑士重剑 | 屠龙战刃 |
+| mage | 学徒法杖 | 橡木法杖 | 符文法杖 | 贤者宝杖 | 龙魂法杖 |
+
+**升品 qualityUp**：消耗 = 新品质档分解金 × goldMult `1.2` / 材料 × matMult `0.6`，属性按 mult 比例重算，上限混沌。
+
+> ⚠️ **与旧稿差异（本次核对修正）**：权威版品质是 **8 档**（旧稿主表写 5 档，把 5~7 档拆到附注）；强化成本 `1200×1.35^n` → **`800×1.25^n`**（v1.9.41 下调）；新增 `weaponClasses` 武器分系与 `weaponNames` 命名表。
+
 
 ### A5. 怪物系统（monsters.json · 逐字段）
 
@@ -202,7 +250,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 **v1.9.42 怪物数值再削**（对照玩家基准 Lv1 战士 120血/12.6攻/5.8防）：史莱姆 70/8→55/6、骷髅兵 114/13→80/9、蝙蝠 84/17→60/11、血蝙蝠 110/22→78/15、甲虫将军 598/36→480/26（v1.9.43 再降至 280/22/6）。
 
-### A6. 经济与全局数值（economy.json · 逐字段）
+### A6. 经济与全局数值（economy.json · 逐字段，权威 configs/）
 
 **离线收益 idle**：
 
@@ -210,74 +258,42 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 - `efficiency` = 1.0
 - `expPerMinute` = 6
 - `goldPerMinute` = 4
-- `materialPerMinute` = 0.5
+- `materialPerMinute` = 0.25
+- `potionPerHalfHour` = 1
 
-> 离线收益 = 时长 * 速率 * 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。
+> 离线收益 = 时长 × 速率 × 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。v1.9.27 每30分钟额外产出1瓶回血药水（8h 封顶 16 瓶）；v1.9.41 材料 0.5→0.25/分钟。
 
-**体力 stamina**：
+**体力 stamina**：`max`=120、`recoverMinutes`=30、`perRecover`=1、`costPerBattle`=0、`costPerDungeon`=10。
 
-- `max` = 120
-- `recoverMinutes` = 30
-- `perRecover` = 1
-- `costPerBattle` = 0
-- `costPerDungeon` = 10
+**战斗 battle**：`minSeconds`=15、`maxSeconds`=30、`tickMs`=1000。
 
-> 挂机/普通交战不消耗体力；副本消耗体力。原型展示值 86/120。
-
-**战斗 battle**：
-
-- `minSeconds` = 15
-- `maxSeconds` = 30
-- `tickMs` = 1000
-
-> 服务端按累计时间驱动自动战斗；回合数仅作UI展示，不作终止条件。种子由服务端生成随战报记录。
-
-**掉落 drop（以服务端 `server/configs_shared/economy.json` 为准，权威）**：装备掉率 普通 `0.45` / 精英 `0.85` / Boss `0.9`（Boss 掉落循环 `for rng<概率` 加 10 件上限护栏，修复概率=1.0 时的死循环）；Boss 钻石 `50~100`。
+**掉落 drop**：装备掉率 普通 `0.45` / 精英 `0.85` / Boss `0.9`；Boss 钻石 `50~100`。
 
 **宝箱档位金币/宝石范围（drop.chest）**：
 
-| 档位 tier | 语义名 | 金币范围 | 宝石范围 |
-|:--:|---|---|---|
-| 1 | wood 木 | 40~120 | 2~8 |
-| 2 | silver 银 | 120~300 | 8~20 |
-| 3 | gold 金 | 300~800 | 20~50 |
-| 4 | diamond 钻 | 600~1200 | 40~80 |
-| 5 | crystal 水晶 | 1200~2400 | 90~180 |
-
-> **重要：配置副本不一致（实测）**。服务端权威文件 `server/configs_shared/economy.json` 有全部 5 档；客户端副本 `client/assets/configs/economy.json` 和 `client/assets/resources/configs/economy.json` **只有木/银/金 3 档**——客户端不参与 roll，仅展示用，故不影响权威结算。开箱时 `world.go` 读的是 `game.C().Economy.Drop["chest"]`（服务端加载 `configs/`，部署时须指向含 5 档的那份），按 tierName 取档，取不到回退 wood。
-
-**开箱收益计算（`world.go chestOpen`，逐字段对齐代码）**：
-
-| 收益项 | 计算方式 | 代码依据 |
+| 档位 | 金币范围 | 宝石范围 |
 |---|---|---|
-| 金币 gold | 档位 gold 区间 `rand.Intn(hi-lo+1)` 均匀 roll | `rg("gold")` |
-| 宝石 gem | 档位 gem 区间均匀 roll | `rg("gem")` |
-| 经验 exp | `int(gold × chestExpRatio)`，`chestExpRatio = 1.5` | 服务端配置 |
-| 材料 mat | `int(gold × chestMatRatio)`，`chestMatRatio = 0.05`（v1.9.41 由 0.1 下调） | 服务端配置 |
-| 药水 potions | wood 40%×1；silver 60%×(1~2)；gold 80%×(2~3)；diamond **必给 3~4**；crystal **必给 5~7** | switch q.Tier |
-| 装备 equip | 见下表 `RollChestEquip`，按档位概率 roll 一件 | battle.go |
+| wood | 40~120 | 2~8 |
+| silver | 120~300 | 8~20 |
+| gold | 300~800 | 20~50 |
+| diamond | 600~1200 | 40~80 |
+| crystal | 1200~2400 | 90~180 |
 
-**`RollChestEquip` 装备 roll（逐档对齐代码）**：
+**开箱收益比例**：chestExpRatio=`1.5`（经验=金币×1.5）、chestMatRatio=`0.05`（材料=金币×0.05）。
 
-| 档位 | 出装概率 | 品质上限 qCap | 品质下限 | 属性生成 |
-|---|--:|:--:|---|---|
-| wood | 0.12 | 1（精良） | 0 | 槽基值 ×(1 + rand×0.3) |
-| silver | 0.25 | 2（稀有） | 0 | 同上 |
-| gold | 0.45 | 3（史诗） | 0 | 同上 |
-| diamond | 0.70 | 5（彩虹） | 0 | 同上 |
-| crystal | 1.00（必出） | 7（混沌，受 quality 长度钳制） | 5（彩虹，`q=qCap-rand(3)` 且下限 5） | 同上 |
+**分解 decompose**：goldBase=[40, 120, 300, 800, 2000, 4200, 8000, 15000]、matBase=[10, 30, 80, 200, 500, 1200, 2600, 6000]、enhanceMult=0.15。
 
-> 武器按开箱玩家职业分系生成（`weaponClassIf(slot, classID)`，v1.9.38）。品质档索引：0普通/1精良/2稀有/3史诗/4传说/5彩虹/6暗影/7混沌。
+**药水 potion**：potion_s healPct=0.35；potion_l healPct=0.7。
 
-> v1.9.41/42 调整回顾：装备掉率 普通 0.16→0.30→**0.45**、精英 0.45→0.65→**0.85**；挂机材料 0.5→0.25/分钟；强化 1200×1.35^n→800×1.25^n 且材料 2→1；Boss 掉落概率 1.0→0.9。
+**槽位权重 slotWeights**：weapon=0.4；helmet=0.2；armor=0.2；trinket=0.2。
 
-**世界地图 worldMap**：世界尺寸 `15360×8640`、移速 `960px/s`、主通道 `384`px / 支路 `256`px / 暗道 `192`px、触发半径 `48`、仇恨半径 `120`、视野 `1` 屏。
+**世界地图 worldMap（权威值）**：世界尺寸 **`7680×4320`**、移速 `960`px/s、主通道 `384`px / 支路 `256`px / 暗道 `192`px、触发半径 `48`、仇恨半径 `120`、视野 `1` 屏。
 
-> 地图设计 v1.0：世界放大×4(15360×8640)、移速×4(960px/s)、主通道384px=角色显示128px×3。复杂度靠路网拓扑非面积，通行区由掩码确定。
+> ⚠️ **与旧稿差异（本次核对修正）**：世界尺寸旧稿写 `15360×8640`，权威 configs 实际是 **`7680×4320`**（旧值是「放大×4」设计稿描述，非运行值；注释 _note 仍保留旧描述，属注释未同步）。
 
-**渲染 rendering**：逻辑分辨率 `1280×720`（可配置）。v0.8 裁定：运行时可配置逻辑分辨率默认1280×720；原型图1536×1024仅为交互评审稿尺寸，不作运行时基准。相机视野不随世界放大。
+**渲染 rendering**：逻辑分辨率 `1280×720`（可配置）。
 
-**多人 multiplayer**：单线容量 `40` 人、移动广播 `10`Hz、心跳 `5000`ms、重连退避 `[1000, 2000, 4000, 8000]`ms。
+**多人 multiplayer**：单线容量 `40` 人、移动广播 `10`Hz、心跳 `5000`ms、重连退避 [1000, 2000, 4000, 8000]ms。
 
 **副本 dungeons（4 个）**：
 
@@ -288,151 +304,196 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | flame | 赤焰深渊 | 20 | 2 | 掉落装备 | skeleton | ✓ |
 | frost | 霜冻之巅 | 30 | 1 | 掉落稀有材料 | boss_beetle | ✓ |
 
-### A7. 大世界与刷新（worlds.json · 全部点位坐标）
 
-**刷新规则 respawn**：怪 base `60`s / 精英 `180`s / 箱 `300`s；抖动 ±`20%`；活跃密度上限 `8`。每点位独立冷却 = base × (1±jitter)；宝箱玩家实例(userId+nodeId)、怪世界共享。
+### A7. 大世界与刷新（worlds.json · 全部点位坐标，权威 configs/）
 
-**6 世界概览**：W1 青草平原 Lv1 / W2 迷雾森林 Lv10 / W3 赤焰峡谷 Lv20 / W4 冰霜高原 Lv30 / W5 流沙遗迹 Lv40 / W6 星陨之巅 Lv50。
+**刷新规则 respawn（权威值）**：怪 base `60`s / 精英 `180`s / 宝箱 **`0`s（=0 表示开箱后无冷却，下次查询立即刷新）** / 药水 `120`s；抖动 ±`20%`；活跃密度上限 `8`。
 
-#### W1 青草平原（Lv1 · theme=grassland · bg=bg_explore_grassland.png · 18 点位）
+**7 个世界概览**（含家园）：
 
-| nodeId | type | tier | 坐标 (x,y) | 其他 |
-|---|---|:--:|---|---|
-| W1_SAFE | ANCHOR | – | (7680,4320) | – |
-| W1_E01 | ELITE | 2 | (576,4224) | – |
-| W1_E02 | ELITE | 2 | (576,4416) | – |
-| W1_E03 | ELITE | 2 | (14592,4224) | – |
-| W1_C04 | CHEST | 1 | (4032,1728) | – |
-| W1_M05 | MOB | 1 | (11136,1728) | – |
-| W1_M06 | MOB | 1 | (4224,6720) | – |
-| W1_M07 | MOB | 1 | (11136,6720) | – |
-| W1_M08 | MOB | 1 | (7680,8256) | – |
-| W1_M09 | MOB | 1 | (7488,576) | – |
-| W1_C10 | CHEST | 1 | (3264,4224) | – |
-| W1_M11 | MOB | 1 | (10368,4224) | – |
-| W1_E12 | ELITE | 2 | (13440,2112) | – |
-| W1_C13 | CHEST | 1 | (1920,2304) | – |
-| W1_C14 | CHEST | 1 | (12480,4800) | – |
-| W1_M15 | MOB | 1 | (5376,4416) | – |
-| W1_M16 | MOB | 1 | (6336,6528) | – |
-| W1_G_W2 | GATE | – | (15328,4320) | to=W2 requireLevel=10 |
+| id | 名称 | 等级 | theme | bg | 点位数 |
+|---|---|--:|---|---|--:|
+| W1 | 青草平原 | 1 | grassland | bg_explore_grassland.png | 21 |
+| W2 | 迷雾森林 | 10 | forest | bg_explore_forest.png | 23 |
+| W3 | 赤焰峡谷 | 20 | desert | bg_explore_desert.png | 22 |
+| W4 | 冰霜高原 | 30 | snow | bg_explore_snow.png | 22 |
+| W5 | 流沙遗迹 | 40 | cave | bg_explore_cave.png | 22 |
+| W6 | 星陨之巅 | 50 | arena | bg_battle_arena.png | 21 |
+| HOME | 我的家园 | 1 | grassland | – | 5 |
 
-#### W2 迷雾森林（Lv10 · theme=forest · bg=bg_explore_forest.png · 19 点位）
+> ⚠️ **与旧稿差异（本次核对修正）**：权威版是 **7 个世界**（旧稿 6 个，漏了 `HOME 我的家园` 5 点位）；世界坐标整体减半（因 worldSize 减半），每个世界的点位数也变化（W1 18→21、W2 19→23 等）；宝箱冷却 300s→**0s**，新增药水点位 `POTION`（2 分钟刷新）与 `potionBaseSec=120`。
+
+#### W1 青草平原（Lv1 · theme=grassland · bg=bg_explore_grassland.png · 21 点位）
 
 | nodeId | type | tier | 坐标 (x,y) | 其他 |
 |---|---|:--:|---|---|
-| W2_SAFE | ANCHOR | – | (7680,4320) | – |
-| W2_E01 | ELITE | 3 | (576,4224) | – |
-| W2_E02 | ELITE | 3 | (576,4416) | – |
-| W2_E03 | ELITE | 3 | (14592,4224) | – |
-| W2_C04 | CHEST | 2 | (11136,7104) | – |
-| W2_M05 | MOB | 2 | (4224,6912) | – |
-| W2_M06 | MOB | 2 | (4032,1920) | – |
-| W2_M07 | MOB | 2 | (11136,1920) | – |
-| W2_M08 | MOB | 2 | (7488,576) | – |
-| W2_M09 | MOB | 2 | (7680,8256) | – |
-| W2_C10 | CHEST | 2 | (3264,4416) | – |
-| W2_M11 | MOB | 2 | (10368,4416) | – |
-| W2_E12 | ELITE | 3 | (13632,1920) | – |
-| W2_C13 | CHEST | 2 | (1728,2304) | – |
-| W2_C14 | CHEST | 2 | (12672,5376) | – |
-| W2_M15 | MOB | 2 | (5760,3264) | – |
-| W2_M16 | MOB | 2 | (6336,6528) | – |
-| W2_G_W3 | GATE | – | (15328,4320) | to=W3 requireLevel=20 |
-| W2_GS_W4 | GATE | – | (7680,0) | to=W4 requireLevel=30 _note=捷径 |
+| W1_SAFE | ANCHOR | – | (2560,2176) | – |
+| W1_E01 | MOB | 2 | (288,2112) | note=v1.9.5：新手区不放精英（原 Lv.3 精英对 Lv.1 必杀），改为 tier2 普通怪 |
+| W1_E02 | MOB | 2 | (288,2208) | note=v1.9.5：新手区不放精英（原 Lv.3 精英对 Lv.1 必杀），改为 tier2 普通怪 |
+| W1_E03 | ELITE | 2 | (7296,2112) | – |
+| W1_C04 | CHEST | 1 | (2016,864) | – |
+| W1_M05 | MOB | 1 | (5568,864) | – |
+| W1_M06 | MOB | 1 | (2112,3360) | – |
+| W1_M07 | MOB | 1 | (5568,3360) | – |
+| W1_M08 | MOB | 1 | (3840,4128) | – |
+| W1_M09 | MOB | 1 | (3744,288) | – |
+| W1_C10 | CHEST | 1 | (1632,2112) | – |
+| W1_M11 | MOB | 1 | (5184,2112) | – |
+| W1_E12 | MOB | 2 | (6720,1056) | note=v1.9.5：新手区不放精英（原 Lv.3 精英对 Lv.1 必杀），改为 tier2 普通怪 |
+| W1_C13 | CHEST | 1 | (960,1152) | – |
+| W1_C14 | CHEST | 1 | (6240,2400) | – |
+| W1_M15 | MOB | 1 | (2688,2208) | – |
+| W1_M16 | MOB | 1 | (3168,3264) | – |
+| W1_G_W2 | GATE | – | (7664,2160) | to=W2 requireLevel=10 |
+| W1_H01 | POTION | 1 | (2112,864) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W1_H02 | POTION | 1 | (1536,2112) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W1_H03 | POTION | 1 | (1056,1152) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
 
-#### W3 赤焰峡谷（Lv20 · theme=desert · bg=bg_explore_desert.png · 18 点位）
-
-| nodeId | type | tier | 坐标 (x,y) | 其他 |
-|---|---|:--:|---|---|
-| W3_SAFE | ANCHOR | – | (7680,4320) | – |
-| W3_E01 | ELITE | 4 | (576,4224) | – |
-| W3_E02 | ELITE | 4 | (576,4416) | – |
-| W3_E03 | ELITE | 4 | (14592,4224) | – |
-| W3_C04 | CHEST | 3 | (4032,1152) | – |
-| W3_C05 | CHEST | 3 | (4224,7488) | – |
-| W3_M06 | MOB | 3 | (11136,7488) | – |
-| W3_M07 | MOB | 3 | (11136,1152) | – |
-| W3_M08 | MOB | 3 | (7680,8256) | – |
-| W3_M09 | MOB | 3 | (7488,576) | – |
-| W3_M10 | MOB | 3 | (4416,4224) | – |
-| W3_M11 | MOB | 3 | (10944,4224) | – |
-| W3_E12 | ELITE | 4 | (1920,6528) | – |
-| W3_M13 | MOB | 3 | (6144,6144) | – |
-| W3_M14 | MOB | 3 | (9216,6144) | – |
-| W3_C15 | CHEST | 3 | (12864,2688) | – |
-| W3_C16 | CHEST | 3 | (2304,2880) | – |
-| W3_G_W4 | GATE | – | (15328,4320) | to=W4 requireLevel=30 |
-
-#### W4 冰霜高原（Lv30 · theme=snow · bg=bg_explore_snow.png · 18 点位）
+#### W2 迷雾森林（Lv10 · theme=forest · bg=bg_explore_forest.png · 23 点位）
 
 | nodeId | type | tier | 坐标 (x,y) | 其他 |
 |---|---|:--:|---|---|
-| W4_SAFE | ANCHOR | – | (7680,4320) | – |
-| W4_E01 | ELITE | 5 | (576,4224) | – |
-| W4_E02 | ELITE | 5 | (576,4416) | – |
-| W4_E03 | ELITE | 5 | (14592,4224) | – |
-| W4_C04 | CHEST | 4 | (4224,7296) | – |
-| W4_C05 | CHEST | 4 | (11136,7296) | – |
-| W4_C06 | CHEST | 4 | (4032,2112) | – |
-| W4_C07 | CHEST | 4 | (11136,2112) | – |
-| W4_M08 | MOB | 4 | (7488,576) | – |
-| W4_M09 | MOB | 4 | (7680,8256) | – |
-| W4_M10 | MOB | 4 | (11520,4608) | – |
-| W4_M11 | MOB | 4 | (3840,4800) | – |
-| W4_M12 | MOB | 4 | (8832,2304) | – |
-| W4_M13 | MOB | 4 | (6144,2304) | – |
-| W4_M14 | MOB | 4 | (7104,6336) | – |
-| W4_E15 | ELITE | 5 | (12864,3072) | – |
-| W4_M16 | MOB | 4 | (9216,6912) | – |
-| W4_G_W5 | GATE | – | (15328,4320) | to=W5 requireLevel=40 |
+| W2_SAFE | ANCHOR | – | (4192,2160) | – |
+| W2_G_W1 | GATE | – | (4432,2160) | to=W1 requireLevel=0 note=v1.9.6：回程通道（双向传送） |
+| W2_E01 | ELITE | 3 | (288,2112) | – |
+| W2_E02 | ELITE | 3 | (288,2208) | – |
+| W2_E03 | ELITE | 3 | (7296,2112) | – |
+| W2_C04 | CHEST | 2 | (5568,3552) | – |
+| W2_M05 | MOB | 2 | (2112,3456) | – |
+| W2_M06 | MOB | 2 | (2016,960) | – |
+| W2_M07 | MOB | 2 | (5568,960) | – |
+| W2_M08 | MOB | 2 | (3744,288) | – |
+| W2_M09 | MOB | 2 | (3840,4128) | – |
+| W2_C10 | CHEST | 2 | (1632,2208) | – |
+| W2_M11 | MOB | 2 | (5184,2208) | – |
+| W2_E12 | ELITE | 3 | (6816,960) | – |
+| W2_C13 | CHEST | 2 | (864,1152) | – |
+| W2_C14 | CHEST | 2 | (6336,2688) | – |
+| W2_M15 | MOB | 2 | (2880,1632) | – |
+| W2_M16 | MOB | 2 | (3168,3264) | – |
+| W2_G_W3 | GATE | – | (7664,2160) | to=W3 requireLevel=20 |
+| W2_GS_W4 | GATE | – | (3840,0) | to=W4 requireLevel=30 note=捷径 |
+| W2_H01 | POTION | 1 | (5664,3552) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W2_H02 | POTION | 1 | (1536,2208) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W2_H03 | POTION | 1 | (960,1152) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
 
-#### W5 流沙遗迹（Lv40 · theme=cave · bg=bg_explore_cave.png · 18 点位）
-
-| nodeId | type | tier | 坐标 (x,y) | 其他 |
-|---|---|:--:|---|---|
-| W5_SAFE | ANCHOR | – | (7680,4320) | – |
-| W5_E01 | ELITE | 5 | (576,4224) | – |
-| W5_E02 | ELITE | 5 | (576,4416) | – |
-| W5_E03 | ELITE | 5 | (14592,4224) | – |
-| W5_C04 | CHEST | 5 | (4224,7488) | – |
-| W5_C05 | CHEST | 5 | (11136,7488) | – |
-| W5_C06 | CHEST | 5 | (4032,1536) | – |
-| W5_C07 | CHEST | 5 | (11136,1536) | – |
-| W5_M08 | MOB | 5 | (7488,576) | – |
-| W5_M09 | MOB | 5 | (7680,8256) | – |
-| W5_M10 | MOB | 5 | (4608,4416) | – |
-| W5_M11 | MOB | 5 | (10752,4416) | – |
-| W5_M12 | MOB | 5 | (6144,6144) | – |
-| W5_M13 | MOB | 5 | (9216,6144) | – |
-| W5_M14 | MOB | 5 | (6912,2496) | – |
-| W5_M15 | MOB | 5 | (9216,3072) | – |
-| W5_E16 | ELITE | 5 | (2688,4800) | – |
-| W5_G_W6 | GATE | – | (15328,4320) | to=W6 requireLevel=50 |
-
-#### W6 星陨之巅（Lv50 · theme=arena · bg=bg_battle_arena.png · 17 点位）
+#### W3 赤焰峡谷（Lv20 · theme=desert · bg=bg_explore_desert.png · 22 点位）
 
 | nodeId | type | tier | 坐标 (x,y) | 其他 |
 |---|---|:--:|---|---|
-| W6_SAFE | ANCHOR | – | (7680,4320) | – |
-| W6_E01 | ELITE | 5 | (576,4224) | – |
-| W6_E02 | ELITE | 5 | (576,4416) | – |
-| W6_E03 | ELITE | 5 | (14592,4224) | – |
-| W6_C04 | CHEST | 5 | (4224,8064) | – |
-| W6_C05 | CHEST | 5 | (11136,8064) | – |
-| W6_C06 | CHEST | 5 | (4032,1344) | – |
-| W6_M07 | MOB | 5 | (11136,1344) | – |
-| W6_M08 | MOB | 5 | (7488,576) | – |
-| W6_M09 | MOB | 5 | (7680,7872) | – |
-| W6_M10 | MOB | 5 | (3648,4992) | – |
-| W6_M11 | MOB | 5 | (10944,4416) | – |
-| W6_E12 | ELITE | 5 | (13632,1728) | – |
-| W6_C13 | CHEST | 5 | (1728,2112) | – |
-| W6_M14 | MOB | 5 | (6144,2496) | – |
-| W6_M15 | MOB | 5 | (9024,2304) | – |
-| W6_M16 | MOB | 5 | (5952,5760) | – |
+| W3_SAFE | ANCHOR | – | (4192,2160) | – |
+| W3_G_W2 | GATE | – | (3952,2160) | to=W2 requireLevel=0 note=v1.9.6：回程通道（双向传送） |
+| W3_E01 | ELITE | 4 | (288,2112) | – |
+| W3_E02 | ELITE | 4 | (288,2208) | – |
+| W3_E03 | ELITE | 4 | (7296,2112) | – |
+| W3_C04 | CHEST | 3 | (2016,576) | – |
+| W3_C05 | CHEST | 3 | (2112,3744) | – |
+| W3_M06 | MOB | 3 | (5568,3744) | – |
+| W3_M07 | MOB | 3 | (5568,576) | – |
+| W3_M08 | MOB | 3 | (3840,4128) | – |
+| W3_M09 | MOB | 3 | (3744,288) | – |
+| W3_M10 | MOB | 3 | (2208,2112) | – |
+| W3_M11 | MOB | 3 | (5472,2112) | – |
+| W3_E12 | ELITE | 4 | (960,3264) | – |
+| W3_M13 | MOB | 3 | (3072,3072) | – |
+| W3_M14 | MOB | 3 | (4608,3072) | – |
+| W3_C15 | CHEST | 3 | (6432,1344) | – |
+| W3_C16 | CHEST | 3 | (1152,1440) | – |
+| W3_G_W4 | GATE | – | (7664,2160) | to=W4 requireLevel=30 |
+| W3_H01 | POTION | 1 | (2112,576) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W3_H02 | POTION | 1 | (2016,3744) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W3_H03 | POTION | 1 | (6528,1344) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
 
-> 坐标由权威路网按设计格 ×32 采样，精确落在可走通道；远端高风险高价值、近端安全起步。跨世界 GATE 带 requireLevel 门槛（W1→W2 需 10 级，依次 20/30/40/50；W2 另有捷径 GATE→W4 需 30 级）。
+#### W4 冰霜高原（Lv30 · theme=snow · bg=bg_explore_snow.png · 22 点位）
+
+| nodeId | type | tier | 坐标 (x,y) | 其他 |
+|---|---|:--:|---|---|
+| W4_SAFE | ANCHOR | – | (3450,707) | – |
+| W4_G_W3 | GATE | – | (3690,707) | to=W3 requireLevel=0 note=v1.9.6：回程通道（双向传送） |
+| W4_E01 | ELITE | 5 | (288,2112) | – |
+| W4_E02 | ELITE | 5 | (288,2208) | – |
+| W4_E03 | ELITE | 5 | (7296,2112) | – |
+| W4_C04 | CHEST | 4 | (2112,3648) | – |
+| W4_C05 | CHEST | 4 | (5568,3648) | – |
+| W4_C06 | CHEST | 4 | (2016,1056) | – |
+| W4_C07 | CHEST | 4 | (5568,1056) | – |
+| W4_M08 | MOB | 4 | (3744,288) | – |
+| W4_M09 | MOB | 4 | (3840,4128) | – |
+| W4_M10 | MOB | 4 | (5760,2304) | – |
+| W4_M11 | MOB | 4 | (1920,2400) | – |
+| W4_M12 | MOB | 4 | (4416,1152) | – |
+| W4_M13 | MOB | 4 | (3072,1152) | – |
+| W4_M14 | MOB | 4 | (3552,3168) | – |
+| W4_E15 | ELITE | 5 | (6432,1536) | – |
+| W4_M16 | MOB | 4 | (4608,3456) | – |
+| W4_G_W5 | GATE | – | (7664,2160) | to=W5 requireLevel=40 |
+| W4_H01 | POTION | 1 | (2208,3648) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W4_H02 | POTION | 1 | (5472,3648) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W4_H03 | POTION | 1 | (2112,1056) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+
+#### W5 流沙遗迹（Lv40 · theme=cave · bg=bg_explore_cave.png · 22 点位）
+
+| nodeId | type | tier | 坐标 (x,y) | 其他 |
+|---|---|:--:|---|---|
+| W5_SAFE | ANCHOR | – | (4192,2160) | – |
+| W5_G_W4 | GATE | – | (3952,2160) | to=W4 requireLevel=0 note=v1.9.6：回程通道（双向传送） |
+| W5_E01 | ELITE | 5 | (288,2112) | – |
+| W5_E02 | ELITE | 5 | (288,2208) | – |
+| W5_E03 | ELITE | 5 | (7296,2112) | – |
+| W5_C04 | CHEST | 5 | (2112,3744) | – |
+| W5_C05 | CHEST | 5 | (5568,3744) | – |
+| W5_C06 | CHEST | 5 | (2016,768) | – |
+| W5_C07 | CHEST | 5 | (5568,768) | – |
+| W5_M08 | MOB | 5 | (3744,288) | – |
+| W5_M09 | MOB | 5 | (3840,4128) | – |
+| W5_M10 | MOB | 5 | (2304,2208) | – |
+| W5_M11 | MOB | 5 | (5376,2208) | – |
+| W5_M12 | MOB | 5 | (3072,3072) | – |
+| W5_M13 | MOB | 5 | (4608,3072) | – |
+| W5_M14 | MOB | 5 | (3456,1248) | – |
+| W5_M15 | MOB | 5 | (4608,1536) | – |
+| W5_E16 | ELITE | 5 | (1344,2400) | – |
+| W5_G_W6 | GATE | – | (7664,2160) | to=W6 requireLevel=50 |
+| W5_H01 | POTION | 1 | (2208,3744) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W5_H02 | POTION | 1 | (5472,3744) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W5_H03 | POTION | 1 | (2112,768) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+
+#### W6 星陨之巅（Lv50 · theme=arena · bg=bg_battle_arena.png · 21 点位）
+
+| nodeId | type | tier | 坐标 (x,y) | 其他 |
+|---|---|:--:|---|---|
+| W6_SAFE | ANCHOR | – | (2896,2400) | – |
+| W6_G_W5 | GATE | – | (3256,2400) | to=W5 requireLevel=0 note=v1.9.6：回程通道（双向传送） |
+| W6_E01 | ELITE | 5 | (288,2112) | – |
+| W6_E02 | ELITE | 5 | (288,2208) | – |
+| W6_E03 | ELITE | 5 | (7296,2112) | – |
+| W6_C04 | CHEST | 5 | (2112,4032) | – |
+| W6_C05 | CHEST | 5 | (5568,4032) | – |
+| W6_C06 | CHEST | 5 | (2016,672) | – |
+| W6_M07 | MOB | 5 | (5568,672) | – |
+| W6_M08 | MOB | 5 | (3744,288) | – |
+| W6_M09 | MOB | 5 | (3840,3936) | – |
+| W6_M10 | MOB | 5 | (1824,2496) | – |
+| W6_M11 | MOB | 5 | (5472,2208) | – |
+| W6_E12 | ELITE | 5 | (6816,864) | – |
+| W6_C13 | CHEST | 5 | (864,1056) | – |
+| W6_M14 | MOB | 5 | (3072,1248) | – |
+| W6_M15 | MOB | 5 | (4512,1152) | – |
+| W6_M16 | MOB | 5 | (2976,2880) | – |
+| W6_H01 | POTION | 1 | (2208,4032) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W6_H02 | POTION | 1 | (5472,4032) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+| W6_H03 | POTION | 1 | (2112,672) | note=v1.9.27 草药：采集得回血药水，2分钟 respawn |
+
+#### HOME 我的家园（Lv1 · theme=grassland · bg=– · 5 点位）
+
+| nodeId | type | tier | 坐标 (x,y) | 其他 |
+|---|---|:--:|---|---|
+| HOME_SAFE | ANCHOR | – | (1280,780) | – |
+| HOME_WAREHOUSE | FUNC | – | (560,560) | – |
+| HOME_IDLE | FUNC | – | (2000,560) | – |
+| HOME_DRESS | FUNC | – | (560,1180) | – |
+| HOME_GATE | FUNC | – | (2000,1180) | – |
+
 
 ### A8. 已实现系统清单
 
@@ -443,7 +504,9 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 ### A9. 通信协议与存档分表
 
-**协议信封**：`{ "type": "...", "seq": 7, "v": 1, "data": {...} }`；错误带 `code` + `msg`；协议版本 `v=1` 向前兼容。
+**协议信封（设计契约，protocol.md）**：`{ "type": "...", "seq": 7, "v": 1, "data": {...} }`；错误带 `code` + `msg`；协议版本 `v=1` 向前兼容。
+
+**契约消息类型（protocol.md 定义，9 类）**：
 
 | 方向 | type | 主要字段 | 说明 |
 |---|---|---|---|
@@ -457,27 +520,52 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | S→C | player_move | playerId、x、y、ts、action | 位置广播，客户端插值 |
 | 双向 | heartbeat / pong | ts | 心跳保活与断线判定 |
 
-**standalone HTTP API**（初跑验证用）：
+> ⚠️ **契约 vs 实现（本次核对发现）**：服务端 `ws.go` 实际只处理 3 个 type——`heartbeat` / `match_join` / `player_move`；`login`/`submit_bd`/`engage`/`battle_report`/`state_snapshot`/`claim_idle`/`match_req` 这些是 Cocos 客户端契约层定义，在 standalone 模式下多数走 HTTP API 而非 WS。两套并存，协议文档是目标契约、ws.go 是多人同步最小实现。
+
+**standalone HTTP API（api.go 实测 30 个端点）**：
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /health | 健康检查（含 persist 字段） |
 | GET | /api/config | 全量配置 |
 | GET | /api/tables | 分表清单 |
-| POST | /api/stats/calc | 属性计算（body: Avatar） |
-| POST | /api/character/new | 创角并落盘（body: {userId,name,classId}） |
-| POST | /api/state/load | 读档（body: {userId}） |
+| POST | /api/character/new | 创角并落盘 |
+| POST | /api/state/load | 读档 |
+| POST | /api/player/create_character | 创角（player 服务） |
+| POST | /api/auth/device | 设备登录 |
+| POST | /api/auth/register | 账密注册 |
+| POST | /api/auth/login | 账密登录 |
+| POST | /api/auth/bind-device | 绑定设备 |
+| POST | /api/chest/open | 开箱结算 |
+| POST | /api/potion/pick | 采集药水点 |
+| POST | /api/monster/kill | 怪物击杀结算 |
+| GET | /api/guild/list | 公会列表 |
+| POST | /api/guild/create | 创建公会 |
+| POST | /api/guild/join | 加入公会 |
+| POST | /api/guild/leave | 离开公会 |
+| POST | /api/spawn | 刷新点位 |
+| GET | /api/world/unlocks | 世界解锁状态 |
+| POST | /api/world/travel | 跨世界传送（含 CD） |
+| GET | /api/players/online | 在线玩家列表 |
+| GET | /api/player/profile | 玩家档案 |
+| POST | /api/player/action | 玩家动作 |
+| POST | /api/stats/calc | 属性计算 |
 | POST | /api/battle/resolve | 纯战斗结算，不落库（回放用） |
 | POST | /api/battle/fight | 战斗结算 + 奖励入账 + 落库 |
 | POST | /api/idle/settle | 纯离线结算，不落库 |
 | POST | /api/idle/finalize | 离线结算 + 入账 + 推进 lastSeen + 落库 |
 | POST | /api/transfer | 转职 + 装备换算 + 落库 |
+| WS | /ws | WebSocket 多人同步 |
 
-**权威原则**：战斗结果、离线收益、随机种子全部服务端生成，客户端下发数值一概不采信；`engage.seed` 仅用于复现（>0 采用，=0 服务端随机）；断线重连以 `state_snapshot` 覆盖本地缓存。
+> ⚠️ 旧稿只列 11 个端点，本次按 `api.go` 的 `mux.HandleFunc` 实测补全到 30 个。
 
-**存档分表（8 张逻辑表）**：角色核心(userId/level/exp/battlePower/classId)、世界进度(userId/mapId/coord/unlocked/lastSeen)、仓库(userId/itemId/qty/slot)、装备(userId/slot/itemId/enhanceLv)、技能(userId/slots[4]/unlocked[])、幻兽(预留无入口)、家园(预留)、日志(埋点战报索引)、扩展位(userId/key/json，新增系统零改表)。
+**权威原则**：战斗结果、离线收益、随机种子全部服务端生成，客户端下发数值一概不采信；`engage.seed` 仅用于复现（>0 采用，=0 服务端随机）；断线重连以 state_snapshot 覆盖本地缓存。
 
-**多人 Match（opCode）**：1=`move`{x,y,ts,action} C→S；2=`snapshot`{players[],tick,worldId} 10Hz S→C；3=`join`；4=`leave`。RPC `join_world`{worldId}→{matchId,worldId}。防作弊 speedOK：位移 >600 单位/秒丢弃，单线上限 40。
+**存档分表（store/state.go 实测 12 张）**：characters（角色核心）、world_progress（世界进度）、warehouse（仓库）、equipment（装备）、skills（技能 slots[4]/unlocked[]）、pets + pet_state（幻兽，2 张，预留无入口）、home（家园）、logs（埋点战报索引）、ext_data（扩展位，新增系统零改表）、schema_meta（表结构元数据）。
+
+> ⚠️ 旧稿写"8 张逻辑表"，本次按 `store/state.go` 的 `tableNames` 实测为 12 张（pets/pet_state 拆 2 张、新增 ext_data/schema_meta）。
+
+**多人 Match（Nakama opCode，match.go 实测）**：1=`move` {x,y,ts,action} C→S；2=`snapshot` {players[],tick} S→C（10Hz）；3=`join` S→C；4=`leave` S→C。RPC `join_world`{worldId}→{matchId,worldId}。防作弊：位移 >600 单位/秒丢弃，单线上限 40。
 
 ### A10. 版本演进（v1.6 → v1.9.44）
 
@@ -638,6 +726,8 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 **复杂度图论指标**：路网节点 20~26、通道边 28~36、独立环数 E−N+1 **≥6**、死胡同 2~3、暗道 1~2、跨世界通道口 2~3。生成 6 步：骨架→加环（≥3 横向连接）→加岔（2~3 死胡同尽头放高价值）→加暗道（1~2 隐藏捷径）→填点（按 tier，每环路至少 1 收益点）→校验（任意两点≥2 路径、环数≥6、无孤立节点、死胡同尽头必有产出）。示例 W2：20 节点/32 通道/13 独立环/2 死胡同/2 暗道/17 产出点。
 
 **比例锚点（务必按此实现）**：角色 character_size `32` × scaleRoot `4` = 场景显示宽 `128px`（角色创建 v4.1 后逻辑画布改 64×96、scaleRoot 改 2，屏幕显示仍 128×192 不变）；主通道 384px = 128×3（角色=道路 1/3）；世界 15360×8640（设计格 480×270，每格 32px）；移速 960px/s（横穿约 16s）；地图 1 图像像素 = 1 场景单位（1:1 加载不再缩放）；相机视野不变 1280×720。
+
+> ⚠️ **口径差异**：此处是世界尺寸 `15360×8640` 的**设计稿口径**（含×4 放大描述）。权威 `configs/economy.json` 的运行值是 `7680×4320`，`configs/worlds.json` 的点位坐标也按此尺寸。实现以 A6/A7 权威值为准；此段设计稿保留作设计溯源。
 
 **地形分块 + 通行掩码（2.6 节）**：单世界切 2×2=4 块，每块 7680×4320；切缝落在中央安全区(x=240)与横向主通道(y=135)，拼缝藏在地形里。每块附同源 `*_mask.png`（白255可走/黑0墙），程序按逻辑坐标拼成 480×270 网格，白色并集即移动可行走区，据此生成碰撞体/NavMesh。W2 实测 100% 单连通、4 块掩码拼接与全图逐像素一致。交付物每世界：4 地形块 + 4 掩码 + full/full_mask + annotated_preview + stitch_config。
 
