@@ -1,0 +1,37 @@
+# Nakama 配置（初跑默认值）。
+# 注意：server_key 在生产必须改为随机值，且客户端 connection_info.json 同步。
+name: "zjcs-game"
+
+socket:
+  address: "0.0.0.0"
+  port: 7350
+
+console:
+  address: "0.0.0.0"
+  port: 7351
+  # 用户名/密码首次启动可见于日志；切勿把 7351 暴露公网
+
+session:
+  token_expiry_sec: 604800       # 7天
+  refresh_token_expiry_sec: 2592000
+
+# server key：客户端连接 /ws?key= 需一致。公网内测务必改成随机串。
+# 初跑用默认值，联机脚本会生成随机 key 覆盖这里。
+server_key: "defaultkey"
+
+# 日志
+logger:
+  level: "info"
+  stdout: true
+
+# 速率限制（内测放宽）
+rate_limit:
+  max_requests: 60
+
+# Storage：分表存档在 Nakama 关系库中，新增内容走 ext_data 扩展位
+storage:
+  max_value_size: 1048576
+
+# 匹配/实时多人
+match:
+  max_size: 40

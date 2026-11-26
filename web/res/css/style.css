@@ -1,0 +1,923 @@
+/* ============================================================
+   杖剑传说 · 图形界面样式（单通道导航版）
+   导航唯一路径：登录页 →(进入游戏) 大世界 →(右上4按钮) 面板 →(返回) 大世界
+                 遇怪 →(交战) 战斗 →(结算) 大世界  ｜  (退出登录) → 登录页
+   禁止面板互串、禁止面板直接开面板、禁止战斗中被导航。
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070c;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;color:#eef3fb;-webkit-user-select:none;user-select:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input{font-family:inherit}
+.hidden{display:none !important}
+
+/* 视口：固定 1280x720 逻辑分辨率，JS scale 适配窗口 */
+#stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;transform-origin:center center;overflow:hidden;background:#080d15;box-shadow:0 0 60px rgba(0,0,0,.9)}
+.view{position:absolute;inset:0}
+.view canvas{width:1280px;height:720px;display:block;image-rendering:pixelated}
+
+/* ---------- 通用 ---------- */
+.gold-border{border:2px solid #d9b45b;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 8px 30px rgba(0,0,0,.55),inset 0 0 24px rgba(217,180,91,.07)}
+.panel-dark{background:linear-gradient(150deg,rgba(18,26,42,.98),rgba(8,13,22,.99))}
+.btn-red{background:linear-gradient(180deg,#e35d4f,#bf3a2c);color:#fff;font-weight:800;border-radius:9px;box-shadow:0 3px 0 #8e2a20,0 6px 14px rgba(0,0,0,.4)}
+.btn-red:hover{filter:brightness(1.12)}
+.btn-red:active{transform:translateY(2px);box-shadow:0 1px 0 #8e2a20}
+.btn-gray{background:linear-gradient(180deg,#4a5568,#333c4c);color:#e6ecf7;font-weight:700;border-radius:9px;box-shadow:0 3px 0 #232a36}
+.btn-gray:hover{filter:brightness(1.12)}
+.gold{color:#f0d590}
+
+/* ============================================================
+   ① 登录页（唯一入口）
+   ============================================================ */
+#loginView{display:flex;align-items:center;justify-content:center}
+.login-bg{position:absolute;inset:0;
+  background-image:linear-gradient(160deg,rgba(10,16,28,.62) 0%,rgba(8,13,22,.72) 42%,rgba(10,20,14,.8) 100%),url(/res/v3/backgrounds/bg_explore_grassland.png);
+  background-size:cover;background-position:center 62%;filter:saturate(.92) contrast(1.03)}
+/* 暗角 + 地面暖光：中景留出可视的草原场景，四周压暗让登录卡浮起来 */
+.login-bg::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse 62% 58% at 50% 46%,transparent 22%,rgba(4,8,16,.62) 100%)}
+.login-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(217,180,91,.14),transparent 56%),radial-gradient(ellipse at 50% 104%,rgba(88,138,66,.3),transparent 58%),linear-gradient(0deg,rgba(6,12,8,.34),transparent 42%)}
+.login-card{position:relative;width:460px;padding:38px 44px 34px;border-radius:20px;text-align:center;background:linear-gradient(155deg,rgba(24,34,53,.93),rgba(10,16,27,.95));border:2px solid #d9b45b;box-shadow:0 22px 70px rgba(0,0,0,.8),0 0 0 6px rgba(217,180,91,.05),inset 0 0 50px rgba(217,180,91,.07)}
+.login-emblem{width:64px;height:64px;margin:0 auto 10px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;color:#3b2600;background:radial-gradient(circle at 35% 30%,#f6dda0,#c99a3f);border:2px solid #f0d590;box-shadow:0 6px 22px rgba(217,180,91,.4)}
+.login-title{font-size:42px;font-weight:900;letter-spacing:9px;color:#f6dea6;text-shadow:0 2px 0 #6b4a13,0 3px 1px rgba(0,0,0,.55),0 10px 26px rgba(240,213,144,.28)}
+.login-sub{font-size:12px;color:#a9b8cf;letter-spacing:3px;margin-top:8px}
+.login-divider{height:1px;background:linear-gradient(90deg,transparent,#d9b45b,transparent);margin:22px 0}
+.field{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:0 16px;height:48px;border-radius:11px;background:rgba(255,255,255,.05);border:1.5px solid rgba(217,180,91,.35)}
+.field:focus-within{border-color:#f0d590;background:rgba(217,180,91,.08)}
+.field .fl{font-size:13px;color:#c8d4e6;min-width:34px;text-align:left}
+.field input{flex:1;background:none;border:none;outline:none;color:#f4f7fd;font-size:15px}
+.field input::placeholder{color:#5f6d84}
+.auth-err{min-height:18px;font-size:12px;color:#ff8a8a;margin:2px 0 6px;text-align:left}
+.auth-btns{display:flex;gap:12px}
+.login-btn{padding:13px 0;border-radius:11px;font-size:16px;font-weight:800;letter-spacing:2px;transition:filter .12s,transform .08s}
+.login-btn:hover{filter:brightness(1.12)}
+.login-btn:active{transform:translateY(2px)}
+.login-btn.primary{flex:1;background:linear-gradient(180deg,#e8c86e,#b98a35);color:#3b2600;box-shadow:0 3px 0 #8a641f}
+.login-btn.ghost{flex:1;background:rgba(255,255,255,.06);color:#e6ecf7;border:1.5px solid rgba(217,180,91,.5)}
+.login-btn.big{width:100%;padding:16px 0;font-size:19px;background:linear-gradient(180deg,#63c78a,#2f9d5c);color:#fff;box-shadow:0 3px 0 #1d6e3e}
+.auth-tip{font-size:11px;color:#7f8da5;margin-top:14px;line-height:1.6}
+.welcome{font-size:16px;color:#dce5f3;margin-bottom:20px}
+.welcome span{color:#f0d590;font-weight:800}
+.switch-account{font-size:12px;color:#9fb0c8;text-decoration:underline;margin-top:16px}
+
+/* ============================================================
+   ② 大世界场景 UI（左上信息 + 右上4按钮 + 遇怪）
+   ============================================================ */
+.world-hud-left{position:absolute;left:224px;top:26px;display:flex;flex-direction:column;gap:10px;pointer-events:none;z-index:5}
+.mini-profile{display:flex;align-items:center;gap:11px;padding:9px 16px 9px 9px;border-radius:13px;background:linear-gradient(150deg,rgba(20,29,46,.94),rgba(9,14,24,.96));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+.mini-profile img{width:46px;height:46px;border-radius:9px;object-fit:cover;image-rendering:pixelated;background:#1e2637;border:1px solid #d9b45b}
+.mp-name{font-size:15px;font-weight:800;color:#f0d590}
+.mp-lv{font-size:11px;color:#c8d4e6;margin-top:2px}
+.world-scene-name{padding:8px 16px;border-radius:11px;background:rgba(9,14,24,.86);border:1px solid rgba(217,180,91,.5);font-size:14px;color:#f0d590;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.world-scene-name em{font-size:11px;color:#9fb0c8;font-style:normal;margin-left:10px}
+.world-hud-right{position:absolute;right:24px;top:22px;display:flex;gap:9px;z-index:5}
+.world-btn{min-width:78px;height:60px;padding:8px 10px;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-weight:800;font-size:13px;letter-spacing:1px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.2),0 5px 14px rgba(0,0,0,.5);transition:transform .08s,filter .12s}
+.world-btn:hover{filter:brightness(1.14)}
+.world-btn:active{transform:translateY(2px)}
+.world-btn .wi{font-size:21px;line-height:1}
+.wb-role{background:linear-gradient(150deg,#5a9fd8,#316aa8)}
+.wb-bag{background:linear-gradient(150deg,#4fb0ab,#277e7a)}
+.wb-map{background:linear-gradient(150deg,#6fbf6a,#3f8f45)}
+.wb-idle{background:linear-gradient(150deg,#a878cf,#7242a8)}
+/* 遇怪确认弹窗按钮（复用 modal） */
+.enc-btns{display:flex;gap:12px}
+.enc-btns button{flex:1;padding:11px 0;font-size:15px}
+/* 小地图（左上圆形罗盘） */
+.minimap{position:absolute;left:24px;top:22px;width:180px;height:180px;z-index:6;pointer-events:none}
+.minimap canvas{width:180px;height:180px;display:block;border-radius:50%;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+.minimap .mm-n,.minimap .mm-s,.minimap .mm-w,.minimap .mm-e{position:absolute;font-size:11px;font-weight:800;color:#f0d590;text-shadow:0 1px 3px #000}
+.mm-n{left:50%;top:2px;transform:translateX(-50%)}
+.mm-s{left:50%;bottom:2px;transform:translateX(-50%)}
+.mm-w{left:4px;top:50%;transform:translateY(-50%)}
+.mm-e{right:4px;top:50%;transform:translateY(-50%)}
+.mm-progress{position:absolute;left:50%;bottom:-12px;transform:translateX(-50%);padding:3px 12px;border-radius:12px;background:rgba(9,14,24,.92);border:1px solid #d9b45b;color:#f0d590;font-size:12px;font-weight:800;white-space:nowrap}
+/* 交互提示条 */
+.interact-hint{position:absolute;left:0;top:0;transform:translate(-50%,-100%);display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:18px;background:linear-gradient(150deg,rgba(20,29,46,.96),rgba(9,14,24,.97));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.55);font-size:13.5px;color:#f0d590;font-weight:700;z-index:7;white-space:nowrap;pointer-events:none;animation:hintIn .18s ease}
+@keyframes hintIn{from{opacity:0}to{opacity:1}}
+.interact-hint::after{content:"";position:absolute;left:50%;bottom:-6px;width:9px;height:9px;transform:translateX(-50%) rotate(45deg);background:rgba(9,14,24,.97);border-right:1.5px solid #d9b45b;border-bottom:1.5px solid #d9b45b}
+.interact-hint svg{flex:0 0 auto}
+/* 世界横幅 + 在线人数 */
+.world-banner{position:absolute;left:50%;top:22px;transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 20px;border-radius:22px;background:linear-gradient(150deg,rgba(20,29,46,.92),rgba(9,14,24,.94));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:5;pointer-events:none}
+.world-banner #worldTitle{font-size:15px;color:#f0d590;font-weight:800;letter-spacing:1px}
+.online-badge{font-size:11px;color:#7fe0a0;font-weight:700;padding:3px 10px;border-radius:12px;background:rgba(127,224,160,.12);border:1px solid rgba(127,224,160,.4)}
+/* 6 世界地图项 */
+.world-map-item{transition:transform .15s,border-color .15s}
+.world-map-item:hover{transform:translateX(3px);border-color:#f0d590}
+.world-map-item.cur{border-color:#7fe0a0;box-shadow:inset 0 0 0 1px rgba(127,224,160,.4)}
+.world-map-item.locked{opacity:.55;filter:grayscale(.5)}
+/* 虚拟摇杆已移除：仅键盘（WASD/方向键）移动 */
+.world-hint{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);padding:9px 24px;border-radius:20px;background:rgba(9,14,24,.82);border:1px solid rgba(217,180,91,.5);font-size:13px;color:#c8d4e6;z-index:4}
+
+/* ============================================================
+   ③ 战斗场景 UI
+   ============================================================ */
+.battle-top{position:absolute;left:20px;right:20px;top:18px;padding:12px 16px;border-radius:14px;background:linear-gradient(150deg,rgba(20,29,46,.96),rgba(9,14,24,.97));display:flex;align-items:center;gap:18px;z-index:5}
+.round-box{text-align:center;min-width:76px;border-right:1px solid rgba(217,180,91,.3);padding-right:16px}
+.round-box .lbl{font-size:12px;color:#9fb0c8}
+.round-box .val{font-size:22px;font-weight:800;color:#f0d590;line-height:1.1}
+.hp-block{flex:1;max-width:460px}
+.hp-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.hp-name{font-size:14px;font-weight:700;min-width:118px;white-space:nowrap}
+.hp-track{position:relative;flex:1;height:20px;background:#2a1518;border:1px solid #5a2a2e;border-radius:10px;overflow:hidden}
+.hp-fill{position:absolute;left:0;top:0;bottom:0;border-radius:10px;transition:width .35s ease}
+.hp-fill.mon{background:linear-gradient(180deg,#e8604f,#b73327)}
+.hp-fill.hero{background:linear-gradient(180deg,#63d38a,#33a35f)}
+.hp-num{position:absolute;right:8px;top:0;height:20px;line-height:20px;font-size:12px;font-weight:700;color:#fff;text-shadow:0 1px 3px #000}
+.auto-tag{padding:8px 18px;border-radius:20px;background:linear-gradient(180deg,#3fae6a,#2c8b52);color:#fff;font-weight:700;font-size:14px;box-shadow:0 3px 10px rgba(0,0,0,.4)}
+.battle-pause{padding:8px 16px;border-radius:9px;background:rgba(9,14,24,.85);border:1px solid #d9b45b;font-size:13px;font-weight:700}
+.battle-log{position:absolute;left:22px;top:170px;width:290px;max-height:230px;overflow:auto;padding:12px 14px;border-radius:12px;background:linear-gradient(150deg,rgba(20,29,46,.94),rgba(9,14,24,.96));border:1.5px solid rgba(217,180,91,.55);box-shadow:0 6px 22px rgba(0,0,0,.5);z-index:5}
+.battle-log h4{font-size:13px;color:#f0d590;margin-bottom:8px;border-bottom:1px solid rgba(217,180,91,.3);padding-bottom:6px}
+.battle-log .lg{font-size:12px;line-height:1.7;padding:1px 0;border-bottom:1px dashed rgba(255,255,255,.06)}
+.battle-log .lg.hero{color:#8fc0ff}
+.battle-log .lg.mon{color:#ff9a9a}
+.battle-log .lg.sys{color:#f0d590}
+.skill-bar{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);padding:12px 18px 10px;border-radius:16px;background:linear-gradient(150deg,rgba(20,29,46,.96),rgba(9,14,24,.98));border:2px solid #d9b45b;box-shadow:0 10px 34px rgba(0,0,0,.6);text-align:center;z-index:5}
+.skill-bar .cap{font-size:12px;color:#f0d590;font-weight:700;margin-bottom:9px}
+.skill-slots{display:flex;gap:10px}
+.skill-slot{width:74px;height:74px;border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18),0 4px 10px rgba(0,0,0,.5);font-size:24px}
+.skill-slot small{font-size:11px;font-weight:600;margin-top:3px;opacity:.92}
+.skill-bar .tip{font-size:11px;color:#9fb0c8;margin-top:8px}
+.sk-fire{background:linear-gradient(150deg,#e8604f,#b73124)}
+.sk-ice{background:linear-gradient(150deg,#4aa8e0,#2a6ea8)}
+.sk-heal{background:linear-gradient(150deg,#5fd38a,#2f9d5c)}
+.sk-shield{background:linear-gradient(150deg,#e0b74a,#a8801f)}
+.sk-basic{background:linear-gradient(150deg,#8892a4,#5c6678)}
+
+/* ============================================================
+   ④ 功能面板层（只从大世界进入，唯一返回大世界）
+   ============================================================ */
+#panelLayer{position:absolute;inset:0;z-index:30}
+.panel-shade{position:absolute;inset:0;background:rgba(3,6,12,.72);backdrop-filter:blur(2px)}
+.side-panel{position:absolute;right:26px;top:20px;bottom:20px;width:620px;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;animation:slideIn .24s ease}
+.panel-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:13px 20px;background:linear-gradient(90deg,#d9b45b,#b98a35)}
+.panel-head h3{font-size:19px;font-weight:800;color:#2b1d05;letter-spacing:2px}
+.panel-head .sub{font-size:12px;color:#5a3f0d}
+.panel-back{width:34px;height:34px;padding:0;border-radius:50%;background:rgba(43,29,5,.5);border:1px solid rgba(217,180,91,.5);color:#f0d590;font-size:22px;font-weight:700;line-height:32px;text-align:center}
+.panel-back:hover{background:rgba(43,29,5,.85);border-color:#f0d590}
+.panel-body{flex:1;overflow-y:scroll;overflow-x:hidden;padding:18px 20px 26px;scrollbar-width:thin}
+.panel-body::-webkit-scrollbar{width:6px}
+.panel-body::-webkit-scrollbar-thumb{background:rgba(217,180,91,.4);border-radius:3px}
+/* 角色面板 tab */
+.tab-row{display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid rgba(217,180,91,.3);padding-bottom:10px}
+.tab{padding:8px 18px;border-radius:9px;font-size:14px;font-weight:700;color:#c8d4e6;background:rgba(255,255,255,.05)}
+.tab.on{background:linear-gradient(150deg,#d9b45b,#b98a35);color:#3b2600}
+.sec-title{font-size:14px;font-weight:800;color:#f0d590;margin:6px 0 10px;border-bottom:1px solid rgba(217,180,91,.35);padding-bottom:6px}
+.sec-sub{font-size:11px;color:#9fb0c8;margin:-4px 0 10px;line-height:1.6}
+.attr-row{display:flex;justify-content:space-between;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.035);margin-bottom:6px;font-size:14px}
+.attr-row .k{color:#c8d4e6}.attr-row .v{color:#7fe0a0;font-weight:800}
+.equip-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.equip-cell{border-radius:10px;padding:10px 6px;text-align:center;background:rgba(255,255,255,.04);border:1px solid rgba(217,180,91,.4);cursor:pointer;transition:background .12s}
+.equip-cell:hover{background:rgba(217,180,91,.16);border-color:#f0d590}
+.equip-cell .ei{width:48px;height:48px;margin:0 auto 6px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(150deg,#3a4a68,#24304a);border:2px solid #d9b45b}
+.equip-cell .en{font-size:12px;color:#e6ecf7}
+.equip-cell .el{font-size:11px;color:#7fe0a0}
+.skill-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.skill-card{padding:12px 14px;border-radius:10px;display:flex;flex-direction:column;justify-content:space-between;min-height:74px;position:relative}
+.skill-card .sn{font-size:15px;font-weight:800;color:#fff}
+.skill-card .sd{font-size:11px;color:rgba(255,255,255,.85);margin-top:3px}
+.lib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.lib-item{padding:11px 8px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);text-align:center;cursor:pointer;font-size:13px}
+.lib-item:hover{background:rgba(217,180,91,.16);border-color:#d9b45b}
+.class-card{padding:13px 14px;border-radius:10px;margin-bottom:10px;cursor:pointer;border:2px solid transparent;display:flex;justify-content:space-between;align-items:center}
+.class-card:hover{filter:brightness(1.1)}
+.class-card.sel{border-color:#f0d590}
+.class-card .cn{font-size:16px;font-weight:800;color:#fff}.class-card .cd{font-size:12px;color:rgba(255,255,255,.85);margin-top:3px}
+.class-card .chk{font-size:22px;color:#fff}
+/* v1.9.3：结算主按钮改金色（原红色与金色主题冲突） */
+.big-btn{width:100%;padding:13px 0;border-radius:11px;font-size:16px;font-weight:800;margin-top:12px;background:linear-gradient(180deg,#e35d4f,#bf3a2c);color:#fff;box-shadow:0 3px 0 #8e2a20}
+.big-btn.goldbtn{background:linear-gradient(180deg,#e8c86e,#b98a35);color:#3b2600;box-shadow:0 3px 0 #8a641f}
+.big-btn:active{transform:translateY(2px)}
+.preview-box{padding:12px 14px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(217,180,91,.35);margin-top:10px}
+.preview-box .pt{font-size:13px;color:#f0d590;font-weight:700;margin-bottom:8px}
+/* 仓库网格 */
+.filter-tabs{display:flex;gap:8px;margin-bottom:12px}
+.filter-tabs button{padding:6px 14px;border-radius:16px;background:rgba(255,255,255,.06);font-size:12px;color:#c8d4e6}
+.filter-tabs button.on{background:linear-gradient(150deg,#5a9fd8,#316aa8);color:#fff}
+.wg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.wg-cell{aspect-ratio:1;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:#b9c6d8;cursor:pointer;transition:background .12s}
+.wg-cell:hover{background:rgba(217,180,91,.16);border-color:#d9b45b}
+.wg-cell.equip{border-color:rgba(217,180,91,.55)}
+.wg-cell .wgi{width:42px;height:42px;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:19px;color:#fff}
+.wg-cell .wq{font-size:11px;color:#9fb0c8}
+/* 装备详情 + 强化（仓库内子层） */
+.equip-detail{padding:16px;border-radius:14px;background:linear-gradient(155deg,rgba(30,42,64,.9),rgba(12,18,30,.95));border:1.5px solid rgba(217,180,91,.55)}
+.ed-head{display:flex;align-items:center;gap:16px;margin-bottom:14px}
+.ed-ico{width:76px;height:76px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:38px;background:linear-gradient(150deg,#3a4a68,#24304a);border:2px solid #d9b45b}
+.ed-name{font-size:20px;font-weight:800;color:#f0d590}
+.ed-meta{font-size:12px;color:#9fb0c8;margin-top:4px}
+.ed-back{padding:7px 13px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(217,180,91,.5);font-size:12px;margin-left:auto}
+.enhance-bar{margin-top:12px}
+.enhance-bar .elbl{display:flex;justify-content:space-between;font-size:13px;color:#c8d4e6;margin-bottom:7px}
+.enhance-track{height:12px;border-radius:7px;background:#222c3d;overflow:hidden;border:1px solid rgba(217,180,91,.35)}
+.enhance-track i{display:block;height:100%;background:linear-gradient(90deg,#5fd38a,#9be86a)}
+
+/* ============================================================
+   ⑤ 弹窗（结算 / 收益 / 提示）
+   ============================================================ */
+#modalLayer{position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center}
+.modal-shade{position:absolute;inset:0;background:rgba(3,6,12,.72);backdrop-filter:blur(2px)}
+.modal-box{position:relative;width:520px;padding:26px 32px 30px;border-radius:18px;text-align:center;background:linear-gradient(150deg,rgba(20,29,46,.98),rgba(9,14,24,.99));border:2px solid #d9b45b;box-shadow:0 16px 60px rgba(0,0,0,.75),inset 0 0 40px rgba(217,180,91,.06);animation:popIn .3s ease}
+.modal-box h2{font-size:30px;font-weight:900;color:#f0d590;letter-spacing:3px;text-shadow:0 2px 12px rgba(240,213,144,.4)}
+.modal-box h2.fail{color:#ff8a8a;text-shadow:0 2px 12px rgba(255,90,90,.4)}
+.modal-box .msub{font-size:13px;color:#c8d4e6;margin:10px 0 18px;line-height:1.6}
+.modal-box .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(217,180,91,.6),transparent);margin:14px 0}
+.reward-row{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-radius:9px;background:rgba(255,255,255,.045);margin-bottom:9px;font-size:15px}
+.reward-row .rk{color:#dce5f3;display:flex;align-items:center;gap:8px}
+.reward-row .rk em{font-style:normal}
+.reward-row .rk svg{flex:0 0 auto;opacity:.95}.reward-row .rv{font-weight:800;color:#f0d590;font-size:17px}.reward-row .rv.g{color:#7fe0a0}
+.modal-box .note{font-size:11px;color:#9fb0c8;margin:12px 0}
+.modal-box .ghost-line{padding:11px;border-radius:9px;background:rgba(217,180,91,.1);border:1px solid rgba(217,180,91,.4);font-size:13px;color:#e8d49a;margin-top:12px;text-align:left;line-height:1.8}
+.modal-box /* v1.9.3：结算主按钮改金色（原红色与金色主题冲突） */
+.big-btn{margin-top:16px}
+
+/* ============================================================
+   ⑥ 全局退出登录（唯一出口，右下角）
+   ============================================================ */
+.logout-btn{position:absolute;right:20px;bottom:18px;z-index:60;padding:8px 16px;border-radius:9px;background:rgba(9,14,24,.86);border:1.5px solid rgba(217,180,91,.55);color:#d9b45b;font-size:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.logout-btn:hover{background:rgba(217,180,91,.18)}
+
+/* ---------- 动画 / 特效 ---------- */
+@keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:translateX(0)}}
+#fxLayer{position:absolute;inset:0;z-index:15;pointer-events:none}
+.dmg-float{position:absolute;font-size:30px;font-weight:900;color:#ff8a8a;text-shadow:0 2px 0 #5a0000,0 0 12px rgba(255,90,90,.6);animation:floatUp .9s ease-out forwards}
+.dmg-float.heal{color:#7fe0a0;text-shadow:0 2px 0 #0b4a22,0 0 12px rgba(90,220,130,.6)}
+@keyframes floatUp{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(-70px) scale(1.25)}}
+.toast-win{position:absolute;left:50%;top:31%;transform:translate(-50%,-50%);z-index:16;font-size:56px;font-weight:900;letter-spacing:10px;color:#f0d590;text-shadow:0 4px 0 #7a4a00,0 0 30px rgba(240,213,144,.7);pointer-events:none;animation:toastPop 1.2s ease}
+.toast-win.lose{color:#ff8a8a;text-shadow:0 4px 0 #5a0000,0 0 30px rgba(255,90,90,.6)}
+@keyframes toastPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
+
+/* 加载遮罩 */
+#loading{position:absolute;inset:0;z-index:99;background:#05070c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+#loading .lt{font-size:22px;color:#f0d590;letter-spacing:6px;font-weight:800}
+#loading .lbar{width:260px;height:8px;background:#1e2637;border-radius:5px;overflow:hidden}
+#loading .lbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#d9b45b,#f0d590);transition:width .2s}
+#loading .lst{font-size:12px;color:#8e9bb4}
+
+/* ============ v1.6 底部 5 入口导航（角色/副本/家园/工会/地图） ============ */
+.bottom-nav{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:6;display:flex;align-items:flex-end;justify-content:center;gap:14px;padding:10px 30px 8px;border-radius:22px;background:linear-gradient(180deg,rgba(12,17,30,.78),rgba(6,9,17,.94));border:1.5px solid rgba(217,180,91,.45);box-shadow:0 10px 34px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.05)}
+.nav-badge{position:relative;width:74px;padding:9px 6px 7px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;border:3px solid rgba(255,255,255,.28);box-shadow:0 5px 16px rgba(0,0,0,.55),inset 0 0 0 2px rgba(0,0,0,.18);transition:transform .1s,filter .12s}
+.nav-badge:hover{filter:brightness(1.16);transform:translateY(-3px)}
+.nav-badge:active{transform:translateY(1px)}
+.nav-badge .badge-ico{display:flex;align-items:center;justify-content:center;height:32px;font-size:28px;line-height:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4))}
+/* 文字改为框内布局：金边完整包裹图标 + 文字，不再溢出到圆外 */
+.nav-badge .badge-label{position:static;font-size:12px;font-weight:800;line-height:1;white-space:nowrap;color:#f0e2bd;text-shadow:0 1px 3px #000,0 0 6px rgba(0,0,0,.8)}
+.nb-role{background:radial-gradient(circle at 34% 28%,#8ec6f0,#316aa8 70%,#1d4a78)}
+.nb-dungeon{background:radial-gradient(circle at 34% 28%,#c9a3e8,#7a4fb0 70%,#4d2f7d)}
+.nb-guild{background:radial-gradient(circle at 34% 28%,#9fdc86,#4a9c56 70%,#2d6b39)}
+.nb-map{background:radial-gradient(circle at 34% 28%,#8fe0da,#2f9a9c 70%,#1c6b70)}
+/* 家园居中放大 + 金色光环高亮（金边同样完整包裹图标与文字） */
+.nav-badge.nb-home{width:96px;padding:10px 8px 10px;border-radius:24px;margin-bottom:-6px;border:4px solid #f6dda0;background:radial-gradient(circle at 34% 28%,#ffe7a8,#d9a13f 68%,#9c6a1e);box-shadow:0 0 0 5px rgba(240,213,144,.28),0 0 26px rgba(240,213,144,.7),0 8px 22px rgba(0,0,0,.6)}
+.nav-badge.nb-home .badge-ico{height:40px;font-size:40px}
+.nav-badge.nb-home .badge-label{font-size:14px;color:#ffe9b0}
+/* 底栏出现时把原操作提示上移，避免重叠 */
+.world-hint{bottom:120px}
+
+/* ============ v1.6 新页面样式 ============ */
+.sub-back{display:inline-block;margin-bottom:12px;padding:6px 14px;border-radius:8px;background:rgba(217,180,91,.14);border:1px solid rgba(217,180,91,.45);color:#f0d590;font-size:13px;font-weight:700;cursor:pointer}
+.sub-back:hover{background:rgba(217,180,91,.26)}
+/* 家园卡片 */
+.home-cards{display:flex;gap:14px;margin-top:6px}
+.home-card{flex:1;min-height:150px;padding:18px;border-radius:14px;text-align:left;display:flex;flex-direction:column;gap:6px;cursor:pointer;border:1.5px solid rgba(255,255,255,.14);color:#fff;transition:transform .1s,filter .12s,box-shadow .15s}
+.home-card:hover{filter:brightness(1.1);transform:translateY(-2px);box-shadow:0 10px 26px rgba(0,0,0,.45)}
+.home-card:active{transform:translateY(1px)}
+.hc-warehouse{background:linear-gradient(155deg,rgba(38,62,94,.96),rgba(12,20,34,.98));border-color:rgba(143,208,255,.34)}
+.hc-idle{background:linear-gradient(155deg,rgba(62,44,92,.96),rgba(16,12,28,.98));border-color:rgba(185,140,240,.34)}
+.home-card .hc-ico{font-size:30px}
+.home-card .hc-title{font-size:20px;font-weight:800;letter-spacing:1px}
+.home-card .hc-desc{font-size:12px;color:rgba(255,255,255,.8)}
+.home-card .hc-enter{align-self:flex-start;margin-top:auto;padding:6px 20px;border-radius:8px;
+  background:linear-gradient(180deg,#ffe6a3,#e0b455);color:#2a1c08;font-size:12px;font-weight:800;box-shadow:0 2px 0 #8a641f}
+.home-note{font-size:12px;color:#9fb0c8;margin-top:16px}
+.home-status{font-size:12px;color:#c8b78a;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(217,180,91,.08)}
+/* 副本列表 */
+.dungeon-list{display:flex;flex-direction:column;gap:10px}
+.dungeon-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:12px;background:rgba(255,255,255,.045);border:1px solid rgba(217,180,91,.3)}
+.dungeon-item .di-name{font-size:16px;font-weight:800;color:#f0d590}
+.dungeon-item .di-meta{font-size:12px;color:#9fb0c8;margin-top:4px}
+.di-enter{padding:8px 20px;border-radius:9px;background:#c0392b;color:#fff;font-weight:800;font-size:13px;cursor:pointer;border:1px solid rgba(255,255,255,.2)}
+.di-enter:hover{filter:brightness(1.12)}
+/* 工会占位页 */
+.guild-placeholder{padding:24px 10px;text-align:center}
+.guild-placeholder h2{font-size:30px;color:#f0d590;letter-spacing:6px;margin-bottom:18px}
+.guild-placeholder p{font-size:16px;color:#e0e6f0;margin-bottom:14px}
+.guild-placeholder .gp-sub{font-size:13px;color:#9fb0c8}
+.guild-placeholder .gp-note{font-size:12px;color:#7e8ba3;margin-top:30px}
+
+/* 性能角标：版本号 + 实时FPS + GPU纹理上限（排查掉帧用，不挡操作） */
+.perf-badge{position:absolute;left:10px;bottom:8px;z-index:30;padding:3px 9px;border-radius:8px;background:rgba(8,13,21,.72);border:1px solid rgba(217,180,91,.35);color:#9fb4cc;font:11px/1.5 ui-monospace,Consolas,monospace;pointer-events:none;letter-spacing:.5px}
+
+/* ---------- v1.8 图标与货币（内联 SVG，替代 emoji） ---------- */
+.cur{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-weight:800;letter-spacing:.2px}
+.cur i{font-style:normal}
+.cur-gold{color:#f0d590}
+.cur-gem{color:#8fd0ff}
+.hc-ico{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;background:rgba(240,213,144,.12);border:1px solid rgba(240,213,144,.35);margin-bottom:8px}
+.equip-cell .ei{display:flex;align-items:center;justify-content:center;width:48px;height:48px}
+.ed-ico{display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:12px;background:rgba(240,213,144,.12);border:1px solid rgba(240,213,144,.4)}
+.wg-cell .wgi{display:flex;align-items:center;justify-content:center}
+.lib-item .locked,.lib-item svg{margin-left:4px;opacity:.9}
+.deco-item svg{filter:drop-shadow(0 3px 8px rgba(0,0,0,.5))}
+
+/* ---------- v1.9 主线任务追踪 + 经验条 ---------- */
+.exp-strip{position:relative;width:238px;height:14px;margin-top:7px;border-radius:8px;overflow:hidden;
+  background:rgba(9,14,24,.86);border:1px solid rgba(217,180,91,.55);box-shadow:0 3px 10px rgba(0,0,0,.4)}
+.exp-strip i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#4fa3e3,#7fd0ff);transition:width .35s ease}
+.exp-strip span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:#eaf4ff;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:.3px}
+.quest-tracker{position:absolute;right:14px;top:112px;width:248px;padding:10px 11px 11px;border-radius:14px;
+  background:linear-gradient(160deg,rgba(16,24,38,.92),rgba(8,13,22,.95));border:1.5px solid rgba(217,180,91,.5);
+  box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:6;pointer-events:auto}
+.quest-tracker.qt-all-done{border-color:rgba(127,224,160,.5)}
+.qt-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#c9a227;
+  letter-spacing:1px;font-weight:800;padding-bottom:7px;border-bottom:1px solid rgba(217,180,91,.22)}
+.qt-head em{font-style:normal;color:#8fa0b8;font-weight:600;letter-spacing:0}
+.qt-all{font-size:11.5px;color:#9fb0c6;padding:9px 2px 2px;line-height:1.6}
+.qt-item{display:flex;align-items:flex-start;gap:8px;padding:9px 2px 6px;position:relative}
+.qt-item+.qt-item{border-top:1px dashed rgba(217,180,91,.16)}
+.qt-item.next{opacity:.62}
+.qt-item.done .qt-name{color:#7fe0a0}
+.qt-ico{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;background:rgba(240,213,144,.1);border:1px solid rgba(240,213,144,.3)}
+.qt-main{flex:1;min-width:0}
+.qt-name{font-size:12.5px;font-weight:800;color:#f4ead0;letter-spacing:.4px}
+.qt-desc{font-size:11px;color:#9fb0c6;margin-top:2px}
+.qt-bar{height:5px;margin-top:5px;border-radius:4px;background:rgba(255,255,255,.09);overflow:hidden}
+.qt-bar i{display:block;height:100%;background:linear-gradient(90deg,#c9a227,#f0d590);transition:width .3s}
+.qt-item.done .qt-bar i{background:linear-gradient(90deg,#2f9d5c,#7fe0a0)}
+.qt-right{flex:0 0 auto;font-size:11px;color:#8fa0b8;padding-top:2px}
+.qt-right em{font-style:normal}
+.qt-claim{display:inline-block;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;
+  color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);box-shadow:0 2px 0 #8a641f;
+  animation:qtPulse 1.8s ease-in-out infinite}
+@keyframes qtPulse{0%,100%{box-shadow:0 2px 0 #8a641f,0 0 0 rgba(255,220,140,0)}50%{box-shadow:0 2px 0 #8a641f,0 0 14px rgba(255,220,140,.75)}}
+
+/* ---------- v1.9 战斗界面重排 ---------- */
+.bt-bar{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;
+  gap:16px;padding:12px 18px 16px;background:linear-gradient(180deg,rgba(6,10,18,.92),rgba(6,10,18,.55) 70%,transparent);
+  z-index:5}
+.bt-side{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.bt-side.right{justify-content:flex-end}
+.bt-face{width:44px;height:44px;border-radius:10px;object-fit:cover;image-rendering:pixelated;
+  border:1.5px solid rgba(217,180,91,.65);background:#1b2334;box-shadow:0 3px 10px rgba(0,0,0,.5)}
+.bt-meta{flex:1;min-width:0;max-width:368px}
+.bt-name{font-size:13px;font-weight:800;color:#eef3fb;letter-spacing:.4px;margin-bottom:5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-name.gold{color:#f0d590;text-align:right}
+.bt-hp{position:relative;height:19px;border-radius:10px;background:rgba(8,12,20,.9);
+  border:1px solid rgba(255,255,255,.16);overflow:hidden}
+.bt-hp .hp-fill{position:absolute;left:0;top:0;bottom:0;display:block;transition:width .25s ease;border-radius:9px}
+.hp-fill.hero{background:linear-gradient(180deg,#63c78a,#2f9d5c)}
+.hp-fill.mon{background:linear-gradient(180deg,#e35d4f,#b33328)}
+.bt-hpnum{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;
+  font-size:11.5px;font-weight:900;color:#fff;letter-spacing:.4px;
+  text-shadow:0 1px 0 rgba(0,0,0,.85),0 0 4px rgba(0,0,0,.7)}
+.bt-round{flex:0 0 auto;text-align:center;padding:4px 12px;border-radius:10px;
+  background:rgba(12,18,30,.85);border:1px solid rgba(217,180,91,.5)}
+.bt-round em{display:block;font-style:normal;font-size:10px;color:#c9a227;letter-spacing:2px}
+.bt-round b{font-size:15px;color:#fff;letter-spacing:1px}
+.bt-lv{flex:0 0 auto;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:800;color:#ffd590;background:rgba(30,20,10,.8);border:1.5px solid rgba(217,180,91,.5)}
+.battle-tools{position:absolute;right:18px;top:76px;display:flex;gap:8px;z-index:6}
+.auto-tag{font-size:11.5px;font-weight:800;color:#7fe0a0;padding:6px 12px;border-radius:9px;
+  background:rgba(10,26,18,.82);border:1px solid rgba(127,224,160,.4);display:inline-flex;align-items:center;gap:6px}
+.auto-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:#7fe0a0;box-shadow:0 0 8px rgba(127,224,160,.9);animation:tagPulse 1.3s ease-in-out infinite}
+.auto-tag.paused{color:#f0d590;background:rgba(28,22,10,.85);border-color:rgba(217,180,91,.5)}
+.auto-tag.paused::before{background:#d9b45b;animation:none;box-shadow:none}
+@keyframes tagPulse{0%,100%{opacity:1}50%{opacity:.28}}
+.battle-pause{font-size:11.5px;font-weight:800;color:#f0d590;padding:6px 12px;border-radius:9px;
+  background:rgba(28,22,10,.85);border:1px solid rgba(217,180,91,.5)}
+.battle-log{position:absolute;left:auto;top:auto;right:18px;bottom:104px;width:270px;max-height:150px;padding:9px 11px;
+  border-radius:12px;background:linear-gradient(160deg,rgba(10,16,26,.82),rgba(6,10,18,.9));
+  border:1px solid rgba(217,180,91,.28);overflow:hidden;z-index:5;pointer-events:none}
+.battle-log h4{font-size:10.5px;color:#c9a227;letter-spacing:2px;font-weight:800;margin-bottom:6px}
+#battleLog{max-height:108px;overflow:hidden;font-size:11px;line-height:1.65;color:#a9b8cc}
+#battleLog .lg.hero{color:#9ad8ff}
+#battleLog .lg.mon{color:#ff9a8f}
+#battleLog .lg.sys{color:#7f8ea3;font-size:10px}
+.skill-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;z-index:5;
+  display:flex;flex-direction:column;align-items:center;gap:7px}
+.skill-slots{display:flex;gap:10px}
+.skill-slot{width:62px;height:62px;border-radius:14px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;font-size:19px;font-weight:800;color:#fff;letter-spacing:1px;
+  border:2px solid rgba(255,255,255,.22);box-shadow:0 6px 16px rgba(0,0,0,.45),inset 0 0 18px rgba(255,255,255,.08);
+  position:relative;overflow:hidden}
+.skill-slot small{position:absolute;bottom:3px;font-size:9.5px;font-weight:700;color:#e8eef8;
+  letter-spacing:0;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.skill-slot.sk-fire{background:linear-gradient(160deg,#7a2a1e,#3a120c)}
+.skill-slot.sk-ice{background:linear-gradient(160deg,#1e4a6b,#0d2438)}
+.skill-slot.sk-heal{background:linear-gradient(160deg,#1e5a3a,#0b2a1c)}
+.skill-slot.sk-shield{background:linear-gradient(160deg,#4a3a6b,#1c1430)}
+.skill-slot.sk-basic{background:linear-gradient(160deg,#3c4557,#1a202b)}
+.skill-bar .cap{font-size:10.5px;color:#9fb0c6;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+
+/* ---------- v1.9 角色卡 / 属性格 / 装备行 ---------- */
+.hero-card{display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;margin-bottom:14px;
+  background:linear-gradient(150deg,rgba(30,42,64,.9),rgba(12,18,30,.95));border:1.5px solid rgba(217,180,91,.45);
+  box-shadow:0 8px 24px rgba(0,0,0,.4),inset 0 0 30px rgba(217,180,91,.05)}
+.hero-portrait{width:76px;height:96px;border-radius:10px;overflow:hidden;flex:0 0 auto;
+  background:radial-gradient(circle at 50% 30%,#2a3a56,#101828);border:1px solid rgba(217,180,91,.4);
+  display:flex;align-items:center;justify-content:center}
+.hero-portrait img{width:100%;height:100%;object-fit:cover;object-position:50% 42%;
+  image-rendering:pixelated;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6));
+  transform:scale(1.95);transform-origin:50% 42%}   /* 只取卡面人物头肩，不再露出卡片边框与 MAGE 字样 */
+.hero-brief{flex:1;min-width:0}
+.hb-name{font-size:16px;font-weight:800;color:#f4ead0;letter-spacing:.5px;display:flex;align-items:baseline;gap:8px}
+.hb-name em{font-style:normal;font-size:11px;color:#8fa0b8;font-weight:600;letter-spacing:0}
+.hb-lv{font-size:13px;color:#f0d590;font-weight:800;margin:5px 0 7px;display:flex;align-items:center;gap:8px}
+.hb-lv span{font-size:10.5px;color:#8fa0b8;font-weight:600}
+.hb-exp{position:relative;height:15px;border-radius:8px;background:rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(255,255,255,.12)}
+.hb-exp i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#4fa3e3,#7fd0ff);transition:width .3s}
+.hb-exp span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;letter-spacing:.3px;
+  text-shadow:0 1px 0 rgba(0,0,0,.9),0 0 5px rgba(0,0,0,.8)}
+.hero-power{flex:0 0 auto;text-align:center;padding:6px 10px;border-radius:10px;background:rgba(217,180,91,.12);border:1px solid rgba(217,180,91,.4)}
+.hero-power em{display:block;font-style:normal;font-size:9.5px;color:#c9a227;letter-spacing:2px}
+.hero-power b{font-size:18px;color:#ffe6a3;letter-spacing:.5px}
+.attr-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.attr-cell{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:9px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)}
+.attr-cell .ak{font-size:12px;color:#9fb0c6}
+.attr-cell .av{font-size:13.5px;font-weight:800;color:#f4ead0}
+.eq-row{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;border-radius:10px;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-left-width:3px}
+.eq-ico{flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;background:rgba(240,213,144,.08);border:1px solid rgba(240,213,144,.22)}
+.eq-name{font-size:13px;font-weight:800;display:flex;align-items:baseline;gap:7px}
+.eq-name em{font-style:normal;font-size:10px;font-weight:600;color:#8fa0b8}
+.eq-sub{font-size:10.5px;color:#8fa0b8;margin-top:3px}
+.eq-btn{flex:0 0 auto;padding:5px 12px;border-radius:8px;font-size:11.5px;font-weight:800;
+  color:#dfe8f2;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}
+.eq-btn.gold{color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);border-color:#f0d590;box-shadow:0 2px 0 #8a641f}
+
+/* ---------- v1.9 技能卡 / 动态列表 / 头像裁切 ---------- */
+/* 装备概览 4 槽（角色信息页） */
+.qeq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.qeq{padding:10px 8px 9px;border-radius:11px;text-align:center;background:rgba(255,255,255,.04);
+  border:1.5px solid rgba(255,255,255,.08);transition:border-color .15s}
+.qeq.on{background:rgba(255,255,255,.06);box-shadow:inset 0 0 18px rgba(255,255,255,.04)}
+.qeq-i{height:26px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+.qeq-t{font-size:11px;color:#9fb0c8;font-weight:700;letter-spacing:.5px}
+.qeq-s{font-size:12px;font-weight:800;color:#5d6c82;margin-top:3px}
+.skill-card{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;min-height:62px}
+.sk-ico{flex:0 0 auto;width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.18)}
+.lib-item{display:flex;align-items:center;gap:7px;padding:9px 10px;border-radius:9px;font-size:12.5px}
+.li-name{flex:1;min-width:0;font-weight:700}
+.li-cd{font-size:10px;color:#8fa0b8}
+.li-ico{display:flex;align-items:center;justify-content:center;width:20px}
+.log-list{display:flex;flex-direction:column;gap:5px;margin-top:4px}
+.log-row{display:flex;gap:9px;font-size:11.5px;color:#9fb0c6;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.03)}
+.log-row .lr-t{flex:0 0 auto;color:#6f7f95;font-variant-numeric:tabular-nums}
+.log-row .lr-e{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- v1.9.1 音效开关 ---------- */
+.sfx-btn{position:absolute;right:112px;bottom:16px;z-index:20;padding:7px 13px;border-radius:9px;
+  font-size:11.5px;font-weight:800;letter-spacing:1px;color:#f0d590;
+  background:rgba(10,16,26,.86);border:1px solid rgba(217,180,91,.5);box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.sfx-btn.off{color:#8fa0b8;border-color:rgba(143,160,184,.4)}
+
+/* ---------- v1.9.1 副本 / 世界地图卡片 ---------- */
+.dungeon-item{background-size:cover;background-position:center 62%;border-radius:12px;position:relative;overflow:hidden;
+  background-blend-mode:multiply;box-shadow:inset 0 0 40px rgba(6,10,18,.75)}
+.di-name{display:flex;align-items:center;gap:8px}
+.di-star{font-style:normal;display:inline-flex;align-items:center;gap:2px;opacity:.95}
+.di-enter.off{background:linear-gradient(180deg,#4a5568,#333c4c)!important;box-shadow:0 3px 0 #232a36!important;color:#9aa7bd!important}
+.world-map-item{position:relative;display:flex;align-items:center;gap:13px;padding:10px 14px;overflow:hidden}
+.wm-no{flex:0 0 auto;width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:900;letter-spacing:.5px;color:#f0d590;
+  background:rgba(12,18,30,.72);border:1.5px solid rgba(217,180,91,.55)}
+.wm-txt{flex:1;min-width:0}
+.wm-tag{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:700;
+  color:#9aa7bd;background:rgba(255,255,255,.08);vertical-align:middle}
+.wm-tag.ok{color:#8fd0ff;background:rgba(143,208,255,.14)}
+.wm-tag.cur{color:#7fe0a0;background:rgba(127,224,160,.16)}
+.wm-lock{position:absolute;right:16px;top:50%;transform:translateY(-50%);opacity:.85}
+
+/* ---------- v1.9.1 家园场景 / 主按钮统一 ---------- */
+.home-scene::after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 60px rgba(0,0,0,.65);pointer-events:none}
+.deco-item{position:relative;z-index:2;padding:8px 12px;border-radius:12px;background:rgba(8,13,22,.55);
+  border:1px solid rgba(217,180,91,.35);backdrop-filter:blur(2px);transition:transform .15s,border-color .15s}
+.deco-item:hover{transform:translateY(-3px);border-color:#f0d590}
+.di-enter{background:linear-gradient(180deg,#ffe6a3,#e0b455)!important;color:#2a1c08!important;
+  box-shadow:0 3px 0 #8a641f!important;font-weight:800!important}
+
+/* ---------- v1.9.2 公会页 ---------- */
+.guild-hero{display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;margin-bottom:14px;
+  background:linear-gradient(150deg,rgba(34,28,16,.95),rgba(12,14,20,.98));border:1.5px solid rgba(217,180,91,.5)}
+.gh-emblem{flex:0 0 auto;width:58px;height:58px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 40% 30%,rgba(240,213,144,.24),rgba(60,40,10,.5));border:1px solid rgba(240,213,144,.45)}
+.gh-meta{flex:1;min-width:0}
+.gh-name{font-size:15px;font-weight:800;color:#f6ecca;display:flex;align-items:baseline;gap:8px}
+.gh-name em{font-style:normal;font-size:11px;color:#c9a227}
+.gh-sub{font-size:10.5px;color:#93a3b8;margin:4px 0 7px}
+.gh-bar{position:relative;height:8px;border-radius:5px;background:rgba(0,0,0,.5);overflow:hidden}
+.gh-bar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#c9a227,#ffe6a3)}
+.gh-bar span{position:absolute;inset:0;font-size:8.5px;display:flex;align-items:center;justify-content:center;color:#fff;text-shadow:0 1px 2px #000}
+.gh-coin{flex:0 0 auto;text-align:center;padding:6px 10px;border-radius:10px;background:rgba(217,180,91,.12);border:1px solid rgba(217,180,91,.4)}
+.gh-coin em{display:block;font-style:normal;font-size:9px;color:#c9a227;letter-spacing:1px}
+.gh-coin b{font-size:16px;color:#ffe6a3}
+.guild-donate{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
+.gd-info{flex:1;min-width:0}
+.gd-t{font-size:13px;font-weight:800;color:#f4ead0}
+.gd-t b{color:#f0d590}
+.gd-s{font-size:10.5px;color:#93a3b8;margin-top:3px}
+.guild-donate /* v1.9.3：结算主按钮改金色（原红色与金色主题冲突） */
+.big-btn{width:auto;padding:10px 26px;margin:0}
+.guild-shop{display:flex;flex-direction:column;gap:8px}
+.gs-item{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}
+.gs-ico{flex:0 0 auto;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  background:rgba(240,213,144,.1);border:1px solid rgba(240,213,144,.25)}
+.gs-main{flex:1;min-width:0}
+.gs-name{font-size:12.5px;font-weight:700;color:#e8eef8}
+.gs-price{font-size:10.5px;color:#c9a227;margin-top:3px;display:flex;align-items:center;gap:3px}
+.gs-buy{flex:0 0 auto;padding:5px 14px;border-radius:8px;font-size:11.5px;font-weight:800;
+  color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);box-shadow:0 2px 0 #8a641f}
+.guild-members{display:flex;flex-direction:column;gap:5px}
+.gm-row{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.03);font-size:12px}
+.gm-dot{width:6px;height:6px;border-radius:50%;background:#4a5568}
+.gm-dot.on{background:#5fd38a;box-shadow:0 0 6px rgba(95,211,138,.8)}
+.gm-name{flex:1;color:#dfe8f2}
+.gm-role{color:#93a3b8;font-size:10.5px}
+.gm-lv{color:#f0d590;font-weight:700;font-size:11px;min-width:44px;text-align:right}
+.qt-bar.full i{background:linear-gradient(90deg,#2f9d5c,#7fe0a0)}
+
+/* v1.9.3：面板打开时 HUD 退后，避免小地图/任务卡"浮在遮罩之上" */
+#worldView.panel-open .minimap,
+#worldView.panel-open .world-hud-left,
+#worldView.panel-open .quest-tracker,
+#worldView.panel-open .world-banner,
+#worldView.panel-open .hint-bar,
+#worldView.panel-open .interact-hint{opacity:.2;transition:opacity .18s;pointer-events:none}
+/* v1.9.3：面板打开时，右下角全局按钮让位（避免压在面板上） */
+body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer-events:none}
+/* ---------- v1.9.4 副本汇总条 / 公会成员滚动 ---------- */
+.dg-summary{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:9px;margin-top:12px}
+.dgs{padding:11px 14px;border-radius:11px;background:rgba(255,255,255,.045);border:1px solid rgba(217,180,91,.22)}
+.dgs em{display:block;font-style:normal;font-size:10.5px;color:#8fa0b8;letter-spacing:1px;margin-bottom:4px}
+.dgs b{font-size:15px;color:#f0d590;letter-spacing:.5px}
+/* 公会成员：超出一屏可滚动，滚动条细一点 */
+.guild-members{max-height:206px;overflow-y:auto;padding-right:4px;margin-bottom:4px}
+.guild-members::-webkit-scrollbar{width:6px}
+.guild-members::-webkit-scrollbar-thumb{background:rgba(217,180,91,.45);border-radius:3px}
+.guild-members::-webkit-scrollbar-track{background:rgba(255,255,255,.05);border-radius:3px}
+/* v1.9.4：副本卡去掉照片背景（小尺寸拉伸后树干变黑竖条），改主题色 + 帐篷水印 */
+.dungeon-item{background:linear-gradient(100deg,rgba(20,30,46,.96),rgba(12,18,28,.92))!important;
+  border-left:3px solid var(--dc,#5b8f4a)}
+.dungeon-item .di-art{position:absolute;right:-14px;bottom:-26px;opacity:.12;transform:rotate(-8deg);pointer-events:none;
+  color:var(--dc,#5b8f4a)}
+.dungeon-item .di-art svg{width:132px;height:132px;stroke:var(--dc,#5b8f4a)}
+/* ---------- v1.9.5 家园页：装饰升级卡 + 数据条（补底部留白） ---------- */
+.home-scene{position:relative;height:168px;border-radius:14px;margin-bottom:14px;background-size:cover;
+  background-position:center;border:1px solid #2a3a52;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;gap:26px}
+.home-scene::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 105%,rgba(217,180,91,.14),transparent 62%)}
+.deco-item{position:relative;z-index:2;width:190px;padding:12px 12px 11px;text-align:center;cursor:pointer;
+  border-radius:13px;background:linear-gradient(160deg,rgba(20,29,46,.9),rgba(9,14,24,.94));
+  border:1.5px solid rgba(217,180,91,.32);color:#fff;font:inherit;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:transform .14s,border-color .14s,box-shadow .14s}
+.deco-item:hover{transform:translateY(-3px);border-color:#f0d590;box-shadow:0 10px 24px rgba(0,0,0,.5)}
+.deco-item:active{transform:translateY(0)}
+.deco-ico{height:44px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))}
+.dc-cart .deco-ico{color:#e8c661}
+.dc-bed .deco-ico{color:#8fd0ff}
+.deco-name{font-size:12.5px;font-weight:800;color:#e8eef8;letter-spacing:.4px}
+.deco-name em{font-style:normal;color:#f0d590;font-size:11px;margin-left:2px}
+.deco-eff{font-size:10.5px;color:#9fb0c8}
+.deco-up{margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:8px;
+  font-size:11px;font-weight:800;color:#ffe6a3;background:rgba(217,180,91,.16);border:1px solid rgba(217,180,91,.36)}
+.deco-up i{font-style:normal;color:#7fe0a0;font-weight:700}
+.deco-up.no{color:#8b93a3;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12)}
+.deco-up.no i{color:#8b93a3}
+.home-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.hst{padding:11px 14px;border-radius:11px;background:rgba(255,255,255,.045);
+  border:1px solid rgba(217,180,91,.2);display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
+.hst em{font-style:normal;font-size:10.5px;color:#8fa0b8;letter-spacing:1px;width:100%;margin-bottom:2px}
+.hst b{font-size:19px;color:#f0d590;font-weight:900;letter-spacing:.5px}
+.hst i{font-style:normal;font-size:11px;color:#8fa0b8}
+/* ---------- v1.9.5 遭遇战危险度 / 战败诊断 ---------- */
+.enc-foe{margin:14px 0 4px;padding:12px 14px;border-radius:11px;background:rgba(255,255,255,.045);
+  border:1px solid rgba(217,180,91,.22);display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+.ef-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#9fb0c8}
+.ef-row b{color:#e8eef8;font-size:14px;font-weight:800}
+.ef-risk{grid-column:1/-1;margin-top:2px;padding:8px 12px;border-radius:9px;font-size:13px;font-weight:800;
+  display:flex;align-items:center;gap:10px;letter-spacing:.5px}
+.ef-risk i{font-style:normal;font-size:11.5px;font-weight:600;opacity:.85;letter-spacing:0}
+.ef-risk.r0{color:#7fe0a0;background:rgba(60,160,100,.16);border:1px solid rgba(127,224,160,.35)}
+.ef-risk.r1{color:#c8e08a;background:rgba(130,160,60,.16);border:1px solid rgba(200,224,138,.32)}
+.ef-risk.r2{color:#f0d590;background:rgba(217,180,91,.16);border:1px solid rgba(240,213,144,.34)}
+.ef-risk.r3{color:#ffb46b;background:rgba(220,130,50,.16);border:1px solid rgba(255,180,107,.36)}
+.ef-risk.r4{color:#ff6b6b;background:rgba(200,60,60,.18);border:1px solid rgba(255,107,107,.38)}
+.btn-orange{background:linear-gradient(180deg,#ffcf8a,#e08a3c)!important;color:#2a1408!important;
+  box-shadow:0 4px 0 #8a5218!important}
+.fail-hint{margin:14px 0 6px;padding:12px 14px;border-radius:11px;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,107,107,.24);display:flex;flex-direction:column;gap:7px}
+.fh-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#9fb0c8}
+.fh-row b{color:#ffb46b;font-size:14px;font-weight:800}
+.ghost-line em{font-style:normal;color:#f0d590;font-weight:800}
+.ghost-btn{margin-top:9px;width:100%;padding:11px;border-radius:11px;cursor:pointer;font:inherit;
+  font-size:13.5px;font-weight:700;color:#c9d6e8;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.16);transition:background .15s,border-color .15s}
+.ghost-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(217,180,91,.4);color:#f0d590}
+/* v1.9.5 副本页：重置倒计时（填补列表下方空白，同时是玩家真正关心的信息） */
+.dg-reset{margin-top:12px;padding:12px 16px;border-radius:11px;display:flex;align-items:center;gap:9px;
+  font-size:12.5px;color:#9fb0c8;background:linear-gradient(90deg,rgba(217,180,91,.10),rgba(217,180,91,.02));
+  border:1px solid rgba(217,180,91,.22)}
+.dg-reset b{color:#f0d590;font-size:13.5px;font-weight:800;letter-spacing:.5px}
+/* ---------- v1.9.5 公会页：商店改横排三列，把高度让给成员列表 ---------- */
+.guild-shop{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.gs-item{flex-direction:column;align-items:center;text-align:center;gap:6px;padding:11px 8px 10px}
+.gs-item .gs-main{width:100%;text-align:center}
+.gs-item .gs-name{font-size:12px;line-height:1.35}
+.gs-item .gs-price{justify-content:center;margin-top:3px}
+.gs-item .gs-buy{width:100%;margin-top:2px}
+.guild-members{max-height:none;display:flex;flex-direction:column;gap:5px}
+.guild-members .gm-row{padding:5px 10px}
+/* v1.9.5 世界地图：6 个世界必须一屏可见（原 96px 高，第 6 个被裁） */
+.world-map-item{height:67px!important;padding:7px 12px;gap:11px}
+.world-map-item .wm-no{width:38px;height:38px;border-radius:10px;font-size:14px}
+.world-map-item .pt{font-size:13.5px}
+.world-map-item .sec-sub{font-size:11px}
+.world-map-item .wm-lock{width:30px;height:30px;border-radius:9px}
+.world-map-item .wm-lock svg{width:14px;height:14px}
+
+/* ---------- v1.9.6 公会页：收紧纵向间距，让 5 名成员 + 底部说明一屏放下 ---------- */
+.guild-hero{padding:11px 13px;margin-bottom:10px}
+.gh-emblem{width:50px;height:50px}
+.gh-sub{margin:3px 0 5px}
+.guild-donate{padding:10px 12px}
+.panel-body:has(.guild-hero) .sec-title{margin:4px 0 7px;padding-bottom:4px}
+.guild-shop{gap:7px}
+.gs-item{padding:8px 8px 7px;gap:5px}
+.guild-members{gap:3px}
+.guild-members .gm-row{padding:4px 10px;font-size:11.5px}
+.panel-body:has(.guild-hero) .home-note{margin-top:8px}
+
+/* ============================================================
+   v1.9.18 角色创建 / 家园换装（交付包 §2.2 / §4.1）
+   ============================================================ */
+#createView{display:flex;align-items:center;justify-content:center;z-index:70}
+.create-bg{position:absolute;inset:0;
+  background-image:linear-gradient(155deg,rgba(9,14,26,.86) 0%,rgba(12,18,30,.9) 45%,rgba(10,18,14,.92) 100%),url(/res/v3/backgrounds/bg_explore_grassland.png);
+  background-size:cover;background-position:center 60%;filter:saturate(.9)}
+.create-bg::after{content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse 58% 56% at 42% 52%,rgba(217,180,91,.10),transparent 62%)}
+.create-wrap{position:relative;width:1080px;height:620px;display:flex;flex-direction:column;
+  border-radius:18px;padding:18px 22px 16px;
+  background:linear-gradient(150deg,rgba(20,29,46,.97),rgba(8,13,22,.98));
+  border:2px solid #d9b45b;box-shadow:0 24px 70px rgba(0,0,0,.8),inset 0 0 60px rgba(217,180,91,.06)}
+.create-head{display:flex;align-items:baseline;gap:18px;padding-bottom:10px;border-bottom:1px solid rgba(217,180,91,.28)}
+.create-head h2{font-size:21px;font-weight:900;letter-spacing:2px;color:#f6dea6;text-shadow:0 2px 0 #6b4a13}
+.cr-steps{display:flex;gap:8px;margin-left:auto}
+.cr-steps span{font-size:11.5px;color:#7f8da5;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.cr-steps span.on{color:#3b2600;font-weight:800;background:linear-gradient(150deg,#e8c86e,#b98a35);border-color:#f0d590}
+.cr-steps span.done{color:#8fd0a0;border-color:rgba(143,208,160,.4)}
+.create-main{flex:1;display:flex;gap:20px;min-height:0;padding:14px 0 6px}
+.cr-stage{position:relative;flex:0 0 300px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  border-radius:14px;padding:10px 0 8px;
+  background:radial-gradient(ellipse at 50% 78%,rgba(240,213,144,.10),transparent 66%),linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.18));
+  border:1px solid rgba(217,180,91,.22)}
+#createView #crCanvas{width:260px !important;height:440px !important;image-rendering:auto}
+.cr-pv-name{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:4px}
+.cr-pv-name b{font-size:15px;color:#f4f7fd;font-weight:800;letter-spacing:.5px}
+.cr-pv-name em{font-size:11px;font-style:normal;color:#f0d590;letter-spacing:2px}
+.cr-panel{flex:1;min-width:0;overflow-y:auto;padding-right:4px;scrollbar-width:thin}
+.cr-panel::-webkit-scrollbar{width:6px}
+.cr-panel::-webkit-scrollbar-thumb{background:rgba(217,180,91,.4);border-radius:3px}
+.cr-sec{font-size:12.5px;color:#9fb0c8;margin-bottom:10px}
+.cr-tip{font-size:11px;color:#7f8da5;line-height:1.65;margin-top:12px;padding:9px 11px;border-radius:9px;
+  background:rgba(255,255,255,.03);border-left:2px solid rgba(217,180,91,.45)}
+.cr-classes{display:flex;flex-direction:column;gap:10px}
+.cr-class{display:flex;gap:14px;align-items:center;text-align:left;padding:12px 14px;border-radius:12px;
+  background:rgba(255,255,255,.045);border:1.5px solid rgba(255,255,255,.08);transition:border-color .15s,background .15s}
+.cr-class:hover{background:rgba(255,255,255,.075);border-color:rgba(217,180,91,.45)}
+.cr-class.on{border-color:#f0d590;background:linear-gradient(100deg,rgba(240,213,144,.14),rgba(240,213,144,.02));
+  box-shadow:0 0 0 1px rgba(240,213,144,.35),inset 0 0 24px rgba(240,213,144,.07)}
+.cc-pic{flex:0 0 64px;height:96px;display:flex;align-items:flex-end;justify-content:center}
+.cc-pic img{width:64px;height:96px;image-rendering:pixelated}
+.cc-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.cc-txt b{font-size:16px;color:#f6dea6;font-weight:800;letter-spacing:1px}
+.cc-txt em{font-size:11.5px;color:#9fb0c8;font-style:normal;line-height:1.5}
+.cr-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+.cr-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:7px;
+  background:rgba(240,213,144,.10);border:1px solid rgba(240,213,144,.28);font-size:11px;color:#f0d590}
+.cr-chip i{font-style:normal;color:#8fa0b8;font-size:10px}
+.cr-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.cr-tab{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 12px;border-radius:9px;
+  font-size:12px;font-weight:700;color:#c8d4e6;background:rgba(255,255,255,.05);border:1px solid transparent}
+.cr-tab i{font-style:normal;font-size:10px;color:#8fa0b8;font-weight:400}
+.cr-tab.on{background:linear-gradient(150deg,#d9b45b,#b98a35);color:#3b2600;border-color:#f0d590}
+.cr-tab.on i{color:#4a3410}
+.cr-opts{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}
+.cr-opt{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 6px;border-radius:11px;
+  background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);transition:border-color .15s,background .15s}
+.cr-opt:hover{background:rgba(255,255,255,.08);border-color:rgba(217,180,91,.45)}
+.cr-opt.on{border-color:#f0d590;background:rgba(240,213,144,.12);box-shadow:inset 0 0 18px rgba(240,213,144,.08)}
+.cr-opt .oi{height:56px;display:flex;align-items:flex-end;justify-content:center}
+.cr-opt .oi img{max-height:56px;max-width:74px;image-rendering:pixelated}
+.cr-opt .oi.none{width:34px;height:34px;border-radius:50%;align-items:center;color:#8fa0b8;font-size:16px;
+  border:1.5px dashed rgba(255,255,255,.25)}
+.cr-opt em{font-style:normal;font-size:10.5px;color:#c8d4e6;text-align:center;line-height:1.3}
+.cr-opt.on em{color:#f6dea6;font-weight:700}
+.cr-name input{width:100%;height:46px;padding:0 14px;border-radius:11px;background:rgba(255,255,255,.05);
+  border:1.5px solid rgba(217,180,91,.35);color:#f4f7fd;font-size:15px;outline:none}
+.cr-name input:focus{border-color:#f0d590;background:rgba(217,180,91,.08)}
+.cr-sum{display:flex;flex-direction:column;gap:7px;margin-top:14px}
+.cr-sum .sr{display:flex;gap:10px;align-items:baseline;padding:9px 12px;border-radius:9px;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}
+.cr-sum .sr span{flex:0 0 64px;font-size:11.5px;color:#8fa0b8}
+.cr-sum .sr b{font-size:12.5px;color:#e8eef8;font-weight:700;line-height:1.5}
+.cr-sum .sr b.wide{font-size:11.5px;color:#c8d4e6;font-weight:400}
+.create-foot{display:flex;gap:12px;align-items:center;justify-content:flex-end;padding-top:10px;border-top:1px solid rgba(217,180,91,.22)}
+.create-foot .ghost-btn{width:auto;margin:0;padding:11px 30px}
+.create-foot .big-btn{width:auto;padding:11px 40px;margin:0}
+
+/* 家园：角色立绘台 + 换装入口 */
+.home-avatar{display:flex;align-items:center;gap:14px;padding:6px 14px 6px;margin-bottom:10px;border-radius:13px;
+  background:radial-gradient(ellipse at 22% 72%,rgba(240,213,144,.12),transparent 62%),linear-gradient(120deg,rgba(255,255,255,.05),rgba(0,0,0,.16));
+  border:1px solid rgba(217,180,91,.28)}
+.home-avatar canvas{width:128px;height:160px;image-rendering:auto}
+.ha-txt{flex:1;min-width:0}
+.ha-name{font-size:15px;font-weight:800;color:#f6dea6;margin-bottom:3px}
+.ha-sub{font-size:11.5px;color:#9fb0c8;line-height:1.6}
+.ha-look{font-size:11px;color:#7f8da5;margin-top:5px;line-height:1.5}
+.ha-btn{flex:0 0 auto;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:800;
+  background:linear-gradient(180deg,#e8c86e,#b98a35);color:#3b2600;box-shadow:0 3px 0 #8a641f}
+.ha-btn:active{transform:translateY(2px)}
+
+/* v1.9.18 转职卡：进阶门槛徽标（Lv.44 / 第2世界） */
+.class-card .cn{display:flex;align-items:center;gap:8px}
+.cl-req{font-size:9.5px;font-style:normal;font-weight:800;padding:2px 7px;border-radius:6px;letter-spacing:0;white-space:nowrap}
+.cl-req.ok{color:#a8e8bb;background:rgba(143,208,160,.14);border:1px solid rgba(143,208,160,.36)}
+.cl-req.no{color:#ffb0a6;background:rgba(255,120,110,.14);border:1px solid rgba(255,120,110,.36)}
+.class-card.locked{opacity:.6}
+.class-card.locked:hover{filter:brightness(1.02)}
+/* v1.9.18 职业卡属性倾向 */
+.cr-stats{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.cr-stats .cs{font-size:10px;color:#8fa0b8;display:inline-flex;gap:3px;align-items:baseline;
+  padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.04)}
+.cr-stats .cs b{font-size:10.5px;font-weight:800;color:#c8d4e6}
+.cr-stats .cs.up b{color:#8fd0a0}
+.cr-stats .cs.down b{color:#ff9a8f}
+/* v1.9.18 家园：立绘台入住后压缩纵向排布，保证一屏放完（不出现滚动条） */
+.home-scene{height:150px}
+.home-cards{margin-top:8px}
+.home-card{min-height:132px;padding:15px 18px}
+.home-note{margin-top:12px}
+
+/* v1.9.18 仓库：存取交互（点击存入/取出），角标详情不触发存取 */
+.wg-cell{position:relative}
+.wg-detail{position:absolute;right:5px;top:5px;font-size:10px;color:#f0d590;border:1px solid rgba(240,213,144,.55);border-radius:6px;padding:1px 6px;cursor:pointer;background:rgba(10,14,24,.55)}
+.wg-detail:hover{background:rgba(240,213,144,.2)}
+/* v1.9.18 转职页：双列卡栅格，6 职业一屏放下 */
+.class-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.class-grid .class-card{margin-bottom:0;padding:10px 12px}
+/* v1.9.18 角色默认页一屏放下：压缩头像卡/属性行/装备概览/动态行 */
+.hero-card{padding:11px 13px;margin-bottom:10px}
+.hero-portrait{width:62px;height:80px}
+.hb-name{font-size:15px}
+.hb-lv{margin:4px 0 5px}
+.attr-grid{gap:6px}
+.attr-grid .attr-row{padding:6px 12px;margin-bottom:0;font-size:13px}
+.sec-title{margin:5px 0 8px}
+.qeq{padding:8px 6px 7px}
+.qeq-i{height:22px}
+.log-row{padding:5px 10px}
+.log-list{gap:4px;margin-top:2px}
+.qeq-grid{gap:7px}
+.hero-portrait{width:54px;height:70px}
+.qeq-i{height:18px}
+.log-row{font-size:11px}
+/* v1.9.18 公会：创建/加入列表行、成员行、角色徽标 */
+.gr-row{display:flex;align-items:center;gap:12px;background:rgba(14,20,34,.72);border:1px solid #2c3a55;border-radius:10px;padding:10px 14px;margin-bottom:8px}
+.gr-emb{width:36px;height:36px;border-radius:9px;background:#232f47;display:flex;align-items:center;justify-content:center;flex:none}
+.gr-main{flex:1;min-width:0}
+.gr-name{font-size:15px;font-weight:700;color:#f0d590}
+.gr-name em{font-style:normal;font-size:12px;color:#8fd4ff;margin-left:6px}
+.gr-sub{font-size:12px;color:#9aa7bd;margin-top:3px}
+.gr-join{flex:none}
+.gm-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px}
+.gm-row.gm-me{background:rgba(240,213,144,.08);border:1px solid rgba(240,213,144,.25)}
+.gm-power{flex:1;text-align:right;font-size:12px;color:#9aa7bd}
+.gm-role{font-size:11px;color:#9aa7bd;min-width:34px;text-align:center}
+.gm-role.r-p{color:#f0d590;font-weight:700}
+.gm-role.r-o{color:#8fd4ff}
+/* ===== v1.9.21 强化工坊 ===== */
+.forge-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0 4px}
+.forge-cell{display:flex;align-items:center;gap:6px;background:#1b2436;border:1px solid #3a4a63;border-radius:8px;padding:8px 9px;cursor:pointer;min-width:0;position:relative}
+.forge-cell:hover{border-color:#b8862f}
+.forge-cell.sel{border-color:#f0d590;background:#2a2214;box-shadow:0 0 0 1px #f0d590}
+.forge-cell.dis{opacity:.45;cursor:not-allowed}
+.fc-ico{flex:0 0 auto;display:flex}
+.fc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#e8e8e8}
+.fc-lv{flex:0 0 auto;font-size:12px;color:#f0d590;font-weight:700}
+.fc-badge{flex:0 0 auto;font-size:10px;font-style:normal;padding:1px 5px;border-radius:8px;background:#3a4a63;color:#9fb3d1}
+.forge-cell.sel .fc-badge{background:#b8862f;color:#1a1206}
+.forge-empty{background:#1b2436;border:1px dashed #3a4a63;border-radius:8px;padding:22px;text-align:center;color:#9fb3d1;font-size:13px}
+.forge-slot{background:#141c2b;border:1px solid #3a4a63;border-radius:10px;padding:12px}
+.fs-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fs-head b{color:#e8e8e8;font-size:14px}
+.fs-lv{margin-left:auto;color:#f0d590;font-weight:700;font-size:14px}
+.fp-props{margin:8px 0}
+.fp-row{display:flex;align-items:center;gap:10px;padding:5px 8px;border-bottom:1px dashed #2a3648}
+.fp-row:last-child{border-bottom:none}
+.fp-k{width:52px;color:#9fb3d1;font-size:12px}
+.fp-cur{flex:1;color:#e8e8e8;font-size:14px;text-align:right}
+.fp-arrow{color:#b8862f}
+.fp-next{flex:1;color:#7fe0a0;font-size:14px;font-weight:700}
+.forge-cost{margin:10px 0}
+.fco-row{display:flex;align-items:center;gap:12px;padding:4px 8px;font-size:13px}
+.fco-row span{width:40px;color:#9fb3d1;font-size:12px}
+.fco-row.sub b{color:#9fb3d1;font-weight:400;font-size:12px}
+
+/* ===== v1.9.27 全局血条 + 回血药水快用 ===== */
+.hp-strip{position:relative;width:238px;height:14px;margin-top:5px;border-radius:8px;overflow:hidden;
+  background:rgba(9,14,24,.86);border:1px solid rgba(200,90,90,.55);box-shadow:0 3px 10px rgba(0,0,0,.4)}
+.hp-strip i{position:absolute;left:0;top:0;bottom:0;width:100%;background:linear-gradient(90deg,#c8554f,#ff8a7a);transition:width .35s ease}
+.hp-strip span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:#ffecec;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:.3px}
+.hp-actions{margin-top:5px}
+.hp-potion{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:9px;cursor:pointer;
+  font-size:11px;font-weight:800;color:#ffd9d0;background:rgba(9,14,24,.82);border:1px solid rgba(200,110,100,.6);
+  box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.hp-potion:active{transform:scale(.96)}
+.hp-potion b{color:#fff}
+
+/* ===== v1.9.28 装备战力徽章 ===== */
+.eq-pw{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10.5px;font-weight:800;
+  color:#f0d590;background:rgba(240,213,144,.1);border:1px solid rgba(240,213,144,.3);white-space:nowrap}
+.qeq .eq-pw{margin-top:4px}
+.equip-cell .eq-pw{margin-top:4px}
+.ed-pw{margin-top:5px}
+.wg-cell .eq-pw{margin:3px 0 0}
+
+/* ===== v1.9.29 大地图弹窗 ===== */
+#wmapLayer{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;
+  background:rgba(4,8,14,.74);backdrop-filter:blur(2px);animation:wmFadeIn .18s ease}
+@keyframes wmFadeIn{from{opacity:0}to{opacity:1}}
+.wmap-box{width:min(86vw,1000px);border-radius:14px;overflow:hidden;background:#0d1522;
+  border:1.5px solid rgba(217,180,91,.5);box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.wmap-head{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(217,180,91,.08);
+  border-bottom:1px solid rgba(217,180,91,.25)}
+.wmap-head b{font-size:15px;color:#f0d590;letter-spacing:1px}
+.wmap-tip{flex:1;text-align:right;font-size:11px;color:#8fa0b8}
+#wmapClose{width:30px;height:30px;border-radius:8px;border:1px solid rgba(224,120,110,.5);
+  background:rgba(224,90,74,.16);color:#ffb4a8;font-size:14px;font-weight:800;cursor:pointer}
+#wmapClose:hover{background:rgba(224,90,74,.32)}
+#wmapCv{display:block;width:100%;height:auto;background:#101826}
+.wmap-legend{display:flex;flex-wrap:wrap;gap:14px;padding:9px 14px;font-size:11.5px;color:#c8d4e4;
+  border-top:1px solid rgba(217,180,91,.2);background:rgba(255,255,255,.02)}
+.wmap-legend span{display:inline-flex;align-items:center;gap:5px}
+.lg{width:11px;height:11px;border-radius:50%;display:inline-block}
+.lg-hero{background:#ffd65a;box-shadow:0 0 5px #ffd65a}
+.lg-gate{background:#a97fe8}
+.lg-anchor{background:#6fa8dc}
+.lg-mob{background:#c9756a}
+.lg-elite{background:#e05a4a}
+.lg-chest{background:#e0b455}
+.lg-potion{background:#5fd38a}
+
+/* v1.9.32 仓库重构：数量确认条 + 轻量浮条 + 批量按钮 */
+.wh-confirm{display:flex;gap:8px;align-items:center;background:#141c2c;border:1px solid #3a4a63;border-radius:8px;padding:8px 10px;margin:10px 0}
+.wh-confirm.hidden{display:none}
+.wh-c-name{flex:1;color:#f0d590;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#whQtyInput{width:72px;background:#1b2436;color:#e8e8e8;border:1px solid #3a4a63;padding:6px;border-radius:6px}
+.wh-mini{padding:6px 14px;font-size:13px;border-radius:6px;cursor:pointer;border:1px solid #3a4a63;background:#22304a;color:#cfe0f5}
+.wh-mini.wh-ok{background:#b8862f;color:#241a06;font-weight:700;border-color:#b8862f}
+.wh-batch{margin-left:auto;background:#22304a;color:#9fc0e8;border:1px solid #3a4a63;border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer}
+.wh-batch:hover{background:#2c3d5e}
+.wh-batch:disabled{opacity:.45;cursor:not-allowed}
+.wh-flash{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(12,18,30,.94);color:#f0d590;border:1px solid #b8862f;padding:8px 18px;border-radius:20px;font-size:14px;z-index:9999;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.wh-flash.hidden{display:none}
+
+/* v1.9.35 开箱结算：顶部三资源行 + 可拖动物品格子区 */
+.loot-title{font-size:13px;font-weight:800;color:#f0d590;letter-spacing:1px;margin-bottom:8px}
+.loot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:196px;overflow-y:auto;
+  padding:6px;border:1px solid rgba(217,180,91,.18);border-radius:10px;background:rgba(10,16,26,.5);
+  touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.loot-grid:active{cursor:grabbing}
+.loot-grid::-webkit-scrollbar{width:5px}
+.loot-grid::-webkit-scrollbar-thumb{background:#3a4a63;border-radius:3px}
+.loot-cell{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:10px;
+  padding:8px 4px 6px;text-align:center}
+.loot-cell.loot-eq{border-width:1.5px;background:rgba(255,255,255,.08)}
+.loot-ico{width:34px;height:34px;border-radius:8px;margin:0 auto 5px;display:flex;align-items:center;
+  justify-content:center;background:#8892a4}
+.loot-nm{font-size:11px;color:#dfe6f2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loot-qty{font-size:11.5px;color:#f0d590;font-weight:700;margin-top:2px}
+.loot-tip{font-size:11px;color:#8fa0b8;text-align:center;margin-top:6px}
+
+/* v1.9.36 群怪模版：遭遇弹窗敌方阵容贴图 + 战斗多怪座位 */
+.enc-gang{display:flex;gap:10px;justify-content:center;margin:12px 0 4px}
+.enc-mon{width:104px;background:rgba(255,255,255,.05);border:1px solid rgba(217,180,91,.28);border-radius:10px;padding:6px 4px 5px;text-align:center}
+.enc-mon canvas{display:block;width:94px;height:112px;margin:0 auto;image-rendering:pixelated}
+.enc-mon b{display:block;font-size:11px;color:#f0d590;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.enc-gang-tag{display:inline-block;margin-left:8px;padding:1px 8px;font-size:11px;font-weight:700;color:#ffb4a8;
+  background:rgba(224,90,74,.16);border:1px solid rgba(224,120,110,.5);border-radius:10px;vertical-align:middle}
+
+/* v1.9.38 武器分系：战士系/法师系角标 */
+.wc-tag{display:inline-block;margin-top:3px;padding:1px 7px;font-size:10px;font-weight:700;border-radius:9px;vertical-align:middle}
+.wc-tag.w{color:#ffb26b;background:rgba(224,140,60,.14);border:1px solid rgba(224,150,80,.5)}
+.wc-tag.m{color:#8fc8ff;background:rgba(80,140,224,.14);border:1px solid rgba(110,160,230,.5)}

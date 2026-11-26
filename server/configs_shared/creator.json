@@ -1,0 +1,319 @@
+{
+  "format": "creator_parts_v2",
+  "character_size": [
+    64,
+    96
+  ],
+  "scaleRoot": 2,
+  "note": "家园装部件图集切分产物；脸/发型/上衣/裤/鞋/帽各4选项，自由组合4^6=4096；颜色锁定16色板；face与hair用grid对齐模式叠放",
+  "overlay_order": [
+    "face",
+    "hair",
+    "hat",
+    "top",
+    "pants",
+    "shoes"
+  ],
+  "slots": {
+    "face": {
+      "label": "脸型",
+      "mode": "grid",
+      "options": [
+        {
+          "id": "face_01",
+          "name": "圆脸棕眼",
+          "file": "face/face_01.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 14,
+          "mode": "grid"
+        },
+        {
+          "id": "face_02",
+          "name": "鹅蛋脸蓝眼",
+          "file": "face/face_02.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 15,
+          "mode": "grid"
+        },
+        {
+          "id": "face_03",
+          "name": "方脸绿眼",
+          "file": "face/face_03.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 16,
+          "mode": "grid"
+        },
+        {
+          "id": "face_04",
+          "name": "心形脸琥珀眼",
+          "file": "face/face_04.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 15,
+          "mode": "grid"
+        }
+      ]
+    },
+    "hair": {
+      "label": "发型",
+      "mode": "grid",
+      "options": [
+        {
+          "id": "hair_01",
+          "name": "棕短发",
+          "file": "hair/hair_01.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 14,
+          "mode": "grid"
+        },
+        {
+          "id": "hair_02",
+          "name": "黑长直",
+          "file": "hair/hair_02.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 14,
+          "mode": "grid"
+        },
+        {
+          "id": "hair_03",
+          "name": "金短发",
+          "file": "hair/hair_03.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 15,
+          "mode": "grid"
+        },
+        {
+          "id": "hair_04",
+          "name": "红马尾",
+          "file": "hair/hair_04.png",
+          "size": [
+            56,
+            74
+          ],
+          "color_count": 14,
+          "mode": "grid"
+        }
+      ]
+    },
+    "top": {
+      "label": "上衣",
+      "mode": "crop",
+      "options": [
+        {
+          "id": "top_01",
+          "name": "米色亚麻衣",
+          "file": "top/top_01.png",
+          "size": [
+            56,
+            56
+          ],
+          "color_count": 15,
+          "mode": "crop"
+        },
+        {
+          "id": "top_02",
+          "name": "浅蓝衬衫",
+          "file": "top/top_02.png",
+          "size": [
+            56,
+            52
+          ],
+          "color_count": 15,
+          "mode": "crop"
+        },
+        {
+          "id": "top_03",
+          "name": "绿马甲",
+          "file": "top/top_03.png",
+          "size": [
+            56,
+            57
+          ],
+          "color_count": 15,
+          "mode": "crop"
+        },
+        {
+          "id": "top_04",
+          "name": "粉衬衫",
+          "file": "top/top_04.png",
+          "size": [
+            56,
+            50
+          ],
+          "color_count": 16,
+          "mode": "crop"
+        }
+      ]
+    },
+    "pants": {
+      "label": "裤子",
+      "mode": "crop",
+      "options": [
+        {
+          "id": "pants_01",
+          "name": "棕棉裤",
+          "file": "pants/pants_01.png",
+          "size": [
+            56,
+            80
+          ],
+          "color_count": 13,
+          "mode": "crop"
+        },
+        {
+          "id": "pants_02",
+          "name": "灰布裤",
+          "file": "pants/pants_02.png",
+          "size": [
+            56,
+            80
+          ],
+          "color_count": 14,
+          "mode": "crop"
+        },
+        {
+          "id": "pants_03",
+          "name": "深棕工装裤",
+          "file": "pants/pants_03.png",
+          "size": [
+            56,
+            80
+          ],
+          "color_count": 12,
+          "mode": "crop"
+        },
+        {
+          "id": "pants_04",
+          "name": "粉裙",
+          "file": "pants/pants_04.png",
+          "size": [
+            56,
+            51
+          ],
+          "color_count": 15,
+          "mode": "crop"
+        }
+      ]
+    },
+    "shoes": {
+      "label": "鞋子",
+      "mode": "crop",
+      "options": [
+        {
+          "id": "shoes_01",
+          "name": "凉鞋",
+          "file": "shoes/shoes_01.png",
+          "size": [
+            56,
+            55
+          ],
+          "color_count": 15,
+          "mode": "crop"
+        },
+        {
+          "id": "shoes_02",
+          "name": "棕皮靴",
+          "file": "shoes/shoes_02.png",
+          "size": [
+            56,
+            60
+          ],
+          "color_count": 13,
+          "mode": "crop"
+        },
+        {
+          "id": "shoes_03",
+          "name": "短靴",
+          "file": "shoes/shoes_03.png",
+          "size": [
+            56,
+            47
+          ],
+          "color_count": 13,
+          "mode": "crop"
+        },
+        {
+          "id": "shoes_04",
+          "name": "白袜圆鞋",
+          "file": "shoes/shoes_04.png",
+          "size": [
+            56,
+            51
+          ],
+          "color_count": 15,
+          "mode": "crop"
+        }
+      ]
+    },
+    "hat": {
+      "label": "帽子",
+      "mode": "crop",
+      "options": [
+        {
+          "id": "hat_01",
+          "name": "蓝羽帽",
+          "file": "hat/hat_01.png",
+          "size": [
+            56,
+            57
+          ],
+          "color_count": 15,
+          "mode": "crop"
+        },
+        {
+          "id": "hat_02",
+          "name": "白头巾",
+          "file": "hat/hat_02.png",
+          "size": [
+            56,
+            57
+          ],
+          "color_count": 16,
+          "mode": "crop"
+        },
+        {
+          "id": "hat_03",
+          "name": "棕皮帽",
+          "file": "hat/hat_03.png",
+          "size": [
+            56,
+            47
+          ],
+          "color_count": 13,
+          "mode": "crop"
+        },
+        {
+          "id": "hat_04",
+          "name": "粉圆帽",
+          "file": "hat/hat_04.png",
+          "size": [
+            56,
+            54
+          ],
+          "color_count": 16,
+          "mode": "crop"
+        }
+      ]
+    }
+  }
+}

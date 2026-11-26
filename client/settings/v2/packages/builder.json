@@ -1,0 +1,9 @@
+{
+  "__version__": "1.0.0",
+  "initialScene": {
+    "scene": "db://assets/scenes/Main.scene"
+  },
+  "scenes": [
+    { "scene": "db://assets/scenes/Main.scene", "enabled": true }
+  ]
+}

@@ -1,0 +1,874 @@
+{
+  "_readme": "世界地图配置 v1.2：产出点由地形生成器build_design权威路网采样生成，每世界16产出点(8怪/4精英/4箱)+安全锚点+通道口GATE，坐标=设计格×32精确落可走通道。远端高风险高价值，近端安全起步。世界7680×4320主通道192px（v1.8 分辨率折半，视觉比例修正）。",
+  "worlds": [
+    {
+      "id": "W1",
+      "name": "青草平原",
+      "level": 1,
+      "theme": "grassland",
+      "bg": "bg_explore_grassland.png",
+      "spawns": [
+        {
+          "id": "W1_SAFE",
+          "type": "ANCHOR",
+          "x": 2560,
+          "y": 2176
+        },
+        {
+          "id": "W1_E01",
+          "type": "ELITE",
+          "tier": 2,
+          "x": 288,
+          "y": 2112
+        },
+        {
+          "id": "W1_E02",
+          "type": "ELITE",
+          "tier": 2,
+          "x": 288,
+          "y": 2208
+        },
+        {
+          "id": "W1_E03",
+          "type": "ELITE",
+          "tier": 2,
+          "x": 7296,
+          "y": 2112
+        },
+        {
+          "id": "W1_C04",
+          "type": "CHEST",
+          "tier": 1,
+          "x": 2016,
+          "y": 864
+        },
+        {
+          "id": "W1_M05",
+          "type": "MOB",
+          "tier": 1,
+          "x": 5568,
+          "y": 864
+        },
+        {
+          "id": "W1_M06",
+          "type": "MOB",
+          "tier": 1,
+          "x": 2112,
+          "y": 3360
+        },
+        {
+          "id": "W1_M07",
+          "type": "MOB",
+          "tier": 1,
+          "x": 5568,
+          "y": 3360
+        },
+        {
+          "id": "W1_M08",
+          "type": "MOB",
+          "tier": 1,
+          "x": 3840,
+          "y": 4128
+        },
+        {
+          "id": "W1_M09",
+          "type": "MOB",
+          "tier": 1,
+          "x": 3744,
+          "y": 288
+        },
+        {
+          "id": "W1_C10",
+          "type": "CHEST",
+          "tier": 1,
+          "x": 1632,
+          "y": 2112
+        },
+        {
+          "id": "W1_M11",
+          "type": "MOB",
+          "tier": 1,
+          "x": 5184,
+          "y": 2112
+        },
+        {
+          "id": "W1_E12",
+          "type": "ELITE",
+          "tier": 2,
+          "x": 6720,
+          "y": 1056
+        },
+        {
+          "id": "W1_C13",
+          "type": "CHEST",
+          "tier": 1,
+          "x": 960,
+          "y": 1152
+        },
+        {
+          "id": "W1_C14",
+          "type": "CHEST",
+          "tier": 1,
+          "x": 6240,
+          "y": 2400
+        },
+        {
+          "id": "W1_M15",
+          "type": "MOB",
+          "tier": 1,
+          "x": 2688,
+          "y": 2208
+        },
+        {
+          "id": "W1_M16",
+          "type": "MOB",
+          "tier": 1,
+          "x": 3168,
+          "y": 3264
+        },
+        {
+          "id": "W1_G_W2",
+          "type": "GATE",
+          "to": "W2",
+          "requireLevel": 10,
+          "x": 7664,
+          "y": 2160
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "name": "迷雾森林",
+      "level": 10,
+      "theme": "forest",
+      "bg": "bg_explore_forest.png",
+      "spawns": [
+        {
+          "id": "W2_SAFE",
+          "type": "ANCHOR",
+          "x": 4192,
+          "y": 2160
+        },
+
+        {
+          "id": "W2_G_W1",
+          "type": "GATE",
+          "to": "W1",
+          "requireLevel": 0,
+          "x": 4432,
+          "y": 2160,
+          "_note": "v1.9.6：回程通道（双向传送）"
+        },
+        {
+          "id": "W2_E01",
+          "type": "ELITE",
+          "tier": 3,
+          "x": 288,
+          "y": 2112
+        },
+        {
+          "id": "W2_E02",
+          "type": "ELITE",
+          "tier": 3,
+          "x": 288,
+          "y": 2208
+        },
+        {
+          "id": "W2_E03",
+          "type": "ELITE",
+          "tier": 3,
+          "x": 7296,
+          "y": 2112
+        },
+        {
+          "id": "W2_C04",
+          "type": "CHEST",
+          "tier": 2,
+          "x": 5568,
+          "y": 3552
+        },
+        {
+          "id": "W2_M05",
+          "type": "MOB",
+          "tier": 2,
+          "x": 2112,
+          "y": 3456
+        },
+        {
+          "id": "W2_M06",
+          "type": "MOB",
+          "tier": 2,
+          "x": 2016,
+          "y": 960
+        },
+        {
+          "id": "W2_M07",
+          "type": "MOB",
+          "tier": 2,
+          "x": 5568,
+          "y": 960
+        },
+        {
+          "id": "W2_M08",
+          "type": "MOB",
+          "tier": 2,
+          "x": 3744,
+          "y": 288
+        },
+        {
+          "id": "W2_M09",
+          "type": "MOB",
+          "tier": 2,
+          "x": 3840,
+          "y": 4128
+        },
+        {
+          "id": "W2_C10",
+          "type": "CHEST",
+          "tier": 2,
+          "x": 1632,
+          "y": 2208
+        },
+        {
+          "id": "W2_M11",
+          "type": "MOB",
+          "tier": 2,
+          "x": 5184,
+          "y": 2208
+        },
+        {
+          "id": "W2_E12",
+          "type": "ELITE",
+          "tier": 3,
+          "x": 6816,
+          "y": 960
+        },
+        {
+          "id": "W2_C13",
+          "type": "CHEST",
+          "tier": 2,
+          "x": 864,
+          "y": 1152
+        },
+        {
+          "id": "W2_C14",
+          "type": "CHEST",
+          "tier": 2,
+          "x": 6336,
+          "y": 2688
+        },
+        {
+          "id": "W2_M15",
+          "type": "MOB",
+          "tier": 2,
+          "x": 2880,
+          "y": 1632
+        },
+        {
+          "id": "W2_M16",
+          "type": "MOB",
+          "tier": 2,
+          "x": 3168,
+          "y": 3264
+        },
+        {
+          "id": "W2_G_W3",
+          "type": "GATE",
+          "to": "W3",
+          "requireLevel": 20,
+          "x": 7664,
+          "y": 2160
+        },
+        {
+          "id": "W2_GS_W4",
+          "type": "GATE",
+          "to": "W4",
+          "requireLevel": 30,
+          "x": 3840,
+          "y": 0,
+          "_note": "捷径"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "name": "赤焰峡谷",
+      "level": 20,
+      "theme": "desert",
+      "bg": "bg_explore_desert.png",
+      "spawns": [
+        {
+          "id": "W3_SAFE",
+          "type": "ANCHOR",
+          "x": 4192,
+          "y": 2160
+        },
+
+        {
+          "id": "W3_G_W2",
+          "type": "GATE",
+          "to": "W2",
+          "requireLevel": 0,
+          "x": 3952,
+          "y": 2160,
+          "_note": "v1.9.6：回程通道（双向传送）"
+        },
+        {
+          "id": "W3_E01",
+          "type": "ELITE",
+          "tier": 4,
+          "x": 288,
+          "y": 2112
+        },
+        {
+          "id": "W3_E02",
+          "type": "ELITE",
+          "tier": 4,
+          "x": 288,
+          "y": 2208
+        },
+        {
+          "id": "W3_E03",
+          "type": "ELITE",
+          "tier": 4,
+          "x": 7296,
+          "y": 2112
+        },
+        {
+          "id": "W3_C04",
+          "type": "CHEST",
+          "tier": 3,
+          "x": 2016,
+          "y": 576
+        },
+        {
+          "id": "W3_C05",
+          "type": "CHEST",
+          "tier": 3,
+          "x": 2112,
+          "y": 3744
+        },
+        {
+          "id": "W3_M06",
+          "type": "MOB",
+          "tier": 3,
+          "x": 5568,
+          "y": 3744
+        },
+        {
+          "id": "W3_M07",
+          "type": "MOB",
+          "tier": 3,
+          "x": 5568,
+          "y": 576
+        },
+        {
+          "id": "W3_M08",
+          "type": "MOB",
+          "tier": 3,
+          "x": 3840,
+          "y": 4128
+        },
+        {
+          "id": "W3_M09",
+          "type": "MOB",
+          "tier": 3,
+          "x": 3744,
+          "y": 288
+        },
+        {
+          "id": "W3_M10",
+          "type": "MOB",
+          "tier": 3,
+          "x": 2208,
+          "y": 2112
+        },
+        {
+          "id": "W3_M11",
+          "type": "MOB",
+          "tier": 3,
+          "x": 5472,
+          "y": 2112
+        },
+        {
+          "id": "W3_E12",
+          "type": "ELITE",
+          "tier": 4,
+          "x": 960,
+          "y": 3264
+        },
+        {
+          "id": "W3_M13",
+          "type": "MOB",
+          "tier": 3,
+          "x": 3072,
+          "y": 3072
+        },
+        {
+          "id": "W3_M14",
+          "type": "MOB",
+          "tier": 3,
+          "x": 4608,
+          "y": 3072
+        },
+        {
+          "id": "W3_C15",
+          "type": "CHEST",
+          "tier": 3,
+          "x": 6432,
+          "y": 1344
+        },
+        {
+          "id": "W3_C16",
+          "type": "CHEST",
+          "tier": 3,
+          "x": 1152,
+          "y": 1440
+        },
+        {
+          "id": "W3_G_W4",
+          "type": "GATE",
+          "to": "W4",
+          "requireLevel": 30,
+          "x": 7664,
+          "y": 2160
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "name": "冰霜高原",
+      "level": 30,
+      "theme": "snow",
+      "bg": "bg_explore_snow.png",
+      "spawns": [
+        {
+          "id": "W4_SAFE",
+          "type": "ANCHOR",
+          "x": 3450,
+          "y": 707
+        },
+
+        {
+          "id": "W4_G_W3",
+          "type": "GATE",
+          "to": "W3",
+          "requireLevel": 0,
+          "x": 3690,
+          "y": 707,
+          "_note": "v1.9.6：回程通道（双向传送）"
+        },
+        {
+          "id": "W4_E01",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 288,
+          "y": 2112
+        },
+        {
+          "id": "W4_E02",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 288,
+          "y": 2208
+        },
+        {
+          "id": "W4_E03",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 7296,
+          "y": 2112
+        },
+        {
+          "id": "W4_C04",
+          "type": "CHEST",
+          "tier": 4,
+          "x": 2112,
+          "y": 3648
+        },
+        {
+          "id": "W4_C05",
+          "type": "CHEST",
+          "tier": 4,
+          "x": 5568,
+          "y": 3648
+        },
+        {
+          "id": "W4_C06",
+          "type": "CHEST",
+          "tier": 4,
+          "x": 2016,
+          "y": 1056
+        },
+        {
+          "id": "W4_C07",
+          "type": "CHEST",
+          "tier": 4,
+          "x": 5568,
+          "y": 1056
+        },
+        {
+          "id": "W4_M08",
+          "type": "MOB",
+          "tier": 4,
+          "x": 3744,
+          "y": 288
+        },
+        {
+          "id": "W4_M09",
+          "type": "MOB",
+          "tier": 4,
+          "x": 3840,
+          "y": 4128
+        },
+        {
+          "id": "W4_M10",
+          "type": "MOB",
+          "tier": 4,
+          "x": 5760,
+          "y": 2304
+        },
+        {
+          "id": "W4_M11",
+          "type": "MOB",
+          "tier": 4,
+          "x": 1920,
+          "y": 2400
+        },
+        {
+          "id": "W4_M12",
+          "type": "MOB",
+          "tier": 4,
+          "x": 4416,
+          "y": 1152
+        },
+        {
+          "id": "W4_M13",
+          "type": "MOB",
+          "tier": 4,
+          "x": 3072,
+          "y": 1152
+        },
+        {
+          "id": "W4_M14",
+          "type": "MOB",
+          "tier": 4,
+          "x": 3552,
+          "y": 3168
+        },
+        {
+          "id": "W4_E15",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 6432,
+          "y": 1536
+        },
+        {
+          "id": "W4_M16",
+          "type": "MOB",
+          "tier": 4,
+          "x": 4608,
+          "y": 3456
+        },
+        {
+          "id": "W4_G_W5",
+          "type": "GATE",
+          "to": "W5",
+          "requireLevel": 40,
+          "x": 7664,
+          "y": 2160
+        }
+      ]
+    },
+    {
+      "id": "W5",
+      "name": "流沙遗迹",
+      "level": 40,
+      "theme": "cave",
+      "bg": "bg_explore_cave.png",
+      "spawns": [
+        {
+          "id": "W5_SAFE",
+          "type": "ANCHOR",
+          "x": 4192,
+          "y": 2160
+        },
+
+        {
+          "id": "W5_G_W4",
+          "type": "GATE",
+          "to": "W4",
+          "requireLevel": 0,
+          "x": 3952,
+          "y": 2160,
+          "_note": "v1.9.6：回程通道（双向传送）"
+        },
+        {
+          "id": "W5_E01",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 288,
+          "y": 2112
+        },
+        {
+          "id": "W5_E02",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 288,
+          "y": 2208
+        },
+        {
+          "id": "W5_E03",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 7296,
+          "y": 2112
+        },
+        {
+          "id": "W5_C04",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 2112,
+          "y": 3744
+        },
+        {
+          "id": "W5_C05",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 5568,
+          "y": 3744
+        },
+        {
+          "id": "W5_C06",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 2016,
+          "y": 768
+        },
+        {
+          "id": "W5_C07",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 5568,
+          "y": 768
+        },
+        {
+          "id": "W5_M08",
+          "type": "MOB",
+          "tier": 5,
+          "x": 3744,
+          "y": 288
+        },
+        {
+          "id": "W5_M09",
+          "type": "MOB",
+          "tier": 5,
+          "x": 3840,
+          "y": 4128
+        },
+        {
+          "id": "W5_M10",
+          "type": "MOB",
+          "tier": 5,
+          "x": 2304,
+          "y": 2208
+        },
+        {
+          "id": "W5_M11",
+          "type": "MOB",
+          "tier": 5,
+          "x": 5376,
+          "y": 2208
+        },
+        {
+          "id": "W5_M12",
+          "type": "MOB",
+          "tier": 5,
+          "x": 3072,
+          "y": 3072
+        },
+        {
+          "id": "W5_M13",
+          "type": "MOB",
+          "tier": 5,
+          "x": 4608,
+          "y": 3072
+        },
+        {
+          "id": "W5_M14",
+          "type": "MOB",
+          "tier": 5,
+          "x": 3456,
+          "y": 1248
+        },
+        {
+          "id": "W5_M15",
+          "type": "MOB",
+          "tier": 5,
+          "x": 4608,
+          "y": 1536
+        },
+        {
+          "id": "W5_E16",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 1344,
+          "y": 2400
+        },
+        {
+          "id": "W5_G_W6",
+          "type": "GATE",
+          "to": "W6",
+          "requireLevel": 50,
+          "x": 7664,
+          "y": 2160
+        }
+      ]
+    },
+    {
+      "id": "W6",
+      "name": "星陨之巅",
+      "level": 50,
+      "theme": "arena",
+      "bg": "bg_battle_arena.png",
+      "spawns": [
+        {
+          "id": "W6_SAFE",
+          "type": "ANCHOR",
+          "x": 2896,
+          "y": 2400
+        },
+
+        {
+          "id": "W6_G_W5",
+          "type": "GATE",
+          "to": "W5",
+          "requireLevel": 0,
+          "x": 3256,
+          "y": 2400,
+          "_note": "v1.9.6：回程通道（双向传送）"
+        },
+        {
+          "id": "W6_E01",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 288,
+          "y": 2112
+        },
+        {
+          "id": "W6_E02",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 288,
+          "y": 2208
+        },
+        {
+          "id": "W6_E03",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 7296,
+          "y": 2112
+        },
+        {
+          "id": "W6_C04",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 2112,
+          "y": 4032
+        },
+        {
+          "id": "W6_C05",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 5568,
+          "y": 4032
+        },
+        {
+          "id": "W6_C06",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 2016,
+          "y": 672
+        },
+        {
+          "id": "W6_M07",
+          "type": "MOB",
+          "tier": 5,
+          "x": 5568,
+          "y": 672
+        },
+        {
+          "id": "W6_M08",
+          "type": "MOB",
+          "tier": 5,
+          "x": 3744,
+          "y": 288
+        },
+        {
+          "id": "W6_M09",
+          "type": "MOB",
+          "tier": 5,
+          "x": 3840,
+          "y": 3936
+        },
+        {
+          "id": "W6_M10",
+          "type": "MOB",
+          "tier": 5,
+          "x": 1824,
+          "y": 2496
+        },
+        {
+          "id": "W6_M11",
+          "type": "MOB",
+          "tier": 5,
+          "x": 5472,
+          "y": 2208
+        },
+        {
+          "id": "W6_E12",
+          "type": "ELITE",
+          "tier": 5,
+          "x": 6816,
+          "y": 864
+        },
+        {
+          "id": "W6_C13",
+          "type": "CHEST",
+          "tier": 5,
+          "x": 864,
+          "y": 1056
+        },
+        {
+          "id": "W6_M14",
+          "type": "MOB",
+          "tier": 5,
+          "x": 3072,
+          "y": 1248
+        },
+        {
+          "id": "W6_M15",
+          "type": "MOB",
+          "tier": 5,
+          "x": 4512,
+          "y": 1152
+        },
+        {
+          "id": "W6_M16",
+          "type": "MOB",
+          "tier": 5,
+          "x": 2976,
+          "y": 2880
+        }
+      ]
+    }
+  ],
+  "respawn": {
+    "_note": "每点位独立冷却 base×(1±jitter)；宝箱玩家实例(userId+nodeId)，怪世界共享；活跃密度上限8。",
+    "mobBaseSec": 60,
+    "eliteBaseSec": 180,
+    "chestBaseSec": 300,
+    "jitter": 0.2,
+    "activeDensityCap": 8
+  }
+}

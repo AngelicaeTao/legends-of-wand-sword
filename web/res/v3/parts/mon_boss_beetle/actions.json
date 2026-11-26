@@ -1,0 +1,243 @@
+{
+  "bundle": "mon_boss_beetle",
+  "format": "parted_actions_v1",
+  "states": {
+    "idle": {
+      "fps": 6,
+      "loop": true,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 250,
+          "parts": {
+            "shell": {
+              "dy": -1
+            },
+            "head": {
+              "dy": -1
+            },
+            "horn_l": {
+              "dy": -1
+            },
+            "horn_r": {
+              "dy": -1
+            },
+            "eye_l": {
+              "dy": -1
+            },
+            "eye_r": {
+              "dy": -1
+            }
+          }
+        },
+        {
+          "t": 500,
+          "parts": {}
+        },
+        {
+          "t": 750,
+          "parts": {
+            "shell": {
+              "dy": 1,
+              "sy": 0.98
+            },
+            "head": {
+              "dy": 1
+            },
+            "horn_l": {
+              "dy": 1
+            },
+            "horn_r": {
+              "dy": 1
+            },
+            "eye_l": {
+              "dy": 1
+            },
+            "eye_r": {
+              "dy": 1
+            }
+          }
+        },
+        {
+          "t": 1000,
+          "parts": {}
+        }
+      ]
+    },
+    "attack": {
+      "fps": 12,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 100,
+          "parts": {
+            "root": {
+              "sx": 0.92,
+              "sy": 1.06
+            },
+            "horn_l": {
+              "rot": -12
+            },
+            "horn_r": {
+              "rot": 12
+            },
+            "head": {
+              "dy": -2
+            }
+          }
+        },
+        {
+          "t": 200,
+          "parts": {
+            "root": {
+              "dx": 8,
+              "sx": 1.08,
+              "sy": 0.92
+            },
+            "horn_l": {
+              "rot": 8
+            },
+            "horn_r": {
+              "rot": -8
+            }
+          }
+        },
+        {
+          "t": 300,
+          "parts": {
+            "root": {
+              "dx": 3
+            }
+          }
+        },
+        {
+          "t": 400,
+          "parts": {}
+        }
+      ]
+    },
+    "hit": {
+      "fps": 10,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 50,
+          "parts": {
+            "root": {
+              "dx": -3
+            },
+            "shell": {
+              "rot": -4
+            },
+            "head": {
+              "rot": -6
+            },
+            "_flash": 1
+          }
+        },
+        {
+          "t": 100,
+          "parts": {
+            "root": {
+              "dx": -1
+            },
+            "_flash": 0.4
+          }
+        },
+        {
+          "t": 150,
+          "parts": {}
+        }
+      ]
+    },
+    "die": {
+      "fps": 8,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 125,
+          "parts": {
+            "root": {
+              "rot": 18,
+              "dy": -2
+            },
+            "leg_l1": {
+              "rot": -20
+            },
+            "leg_r1": {
+              "rot": 20
+            },
+            "horn_l": {
+              "rot": -15
+            },
+            "horn_r": {
+              "rot": 15
+            }
+          }
+        },
+        {
+          "t": 250,
+          "parts": {
+            "root": {
+              "rot": 45,
+              "dy": -5
+            },
+            "leg_l1": {
+              "rot": -40
+            },
+            "leg_r1": {
+              "rot": 40
+            },
+            "head": {
+              "rot": -10
+            }
+          }
+        },
+        {
+          "t": 375,
+          "parts": {
+            "root": {
+              "rot": 70,
+              "dy": -8
+            },
+            "_alpha": 0.7
+          }
+        },
+        {
+          "t": 500,
+          "parts": {
+            "root": {
+              "rot": 85,
+              "dy": -10
+            },
+            "_alpha": 0.35
+          }
+        }
+      ]
+    }
+  },
+  "transform_fields": {
+    "dx": "x offset logic px",
+    "dy": "y offset logic px (up+)",
+    "rot": "degrees, clockwise+",
+    "sx": "x scale",
+    "sy": "y scale",
+    "alpha": "0..1, default 1"
+  },
+  "interpolation": "between keyframes: linear unless ease specified"
+}

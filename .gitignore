@@ -1,0 +1,8 @@
+data/saves/
+data/accounts/
+data/token_secret
+data/server.log
+data/zjcs-server
+*.tmp
+node_modules/
+data/guilds.json

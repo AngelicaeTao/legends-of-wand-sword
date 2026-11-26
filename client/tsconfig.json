@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "strict": false,
+    "allowJs": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["ES2019", "DOM"],
+    "paths": {
+      "cc": ["./temp/declarations/cc.d.ts"]
+    }
+  },
+  "include": [
+    "assets/**/*.ts",
+    "temp/declarations/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "library",
+    "temp",
+    "build",
+    "profiles"
+  ]
+}

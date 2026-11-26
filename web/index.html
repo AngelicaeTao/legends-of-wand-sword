@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>杖剑传说</title>
+<link rel="stylesheet" href="/res/css/style.css?v=1.9.38">
+</head>
+<body>
+<div id="stage">
+
+  <!-- ============ 视图①：登录页（唯一入口网关） ============ -->
+  <div class="view" id="loginView">
+    <div class="login-bg"></div>
+    <div class="login-card">
+      <div class="login-emblem"><svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true"><path d="M24 3 L28 9 L27 30 L21 30 L20 9 Z" fill="#3b2600"/><path d="M12 30 L36 30 L36 34 L12 34 Z" fill="#3b2600"/><path d="M22 34 L26 34 L25 43 L23 43 Z" fill="#3b2600"/><circle cx="24" cy="44" r="3" fill="#3b2600"/></svg></div>
+      <h1 class="login-title">杖 剑 传 说</h1>
+      <div class="login-sub">— 放 置 幻 想 · 大 世 界 —</div>
+      <div class="login-divider"></div>
+
+      <!-- 未登录：登录 / 注册 -->
+      <div id="authBox">
+        <div class="field"><span class="fl">账号</span><input id="authUser" placeholder="请输入用户名" autocomplete="off"></div>
+        <div class="field"><span class="fl">密码</span><input id="authPwd" type="password" placeholder="请输入密码" autocomplete="off"></div>
+        <div class="auth-err" id="authErr"></div>
+        <div class="auth-btns">
+          <button class="login-btn primary" id="loginBtn">登 录</button>
+          <button class="login-btn ghost" id="registerBtn">注 册</button>
+        </div>
+        <div class="auth-tip">注册账号可跨设备续玩 · 也可点「设备登录」免注册快速体验</div>
+        <button class="switch-account" id="deviceLoginBtn" style="margin-top:8px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" fill="currentColor" stroke="none"/></svg> 设备登录（免注册）</button>
+      </div>
+
+      <!-- 已登录：进入游戏 -->
+      <div id="enterBox" class="hidden">
+        <div class="welcome">欢迎回来，<span id="welcomeName">冒险者</span></div>
+        <button class="login-btn primary big" id="enterBtn">进 入 游 戏</button>
+        <button class="switch-account" id="switchBtn">切换账号</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 视图②：大世界（唯一枢纽场景） ============ -->
+  <div class="view hidden" id="worldView">
+    <canvas id="cvExplore" width="1280" height="720"></canvas>
+    <!-- 左上：玩家信息条 + 场景名 -->
+    <div class="world-hud-left">
+      <div class="mini-profile">
+        <img id="worldClsIco" src="/res/characters/cards/ui_card_mage.png">
+        <div class="mp-txt">
+          <div class="mp-name" id="worldName">魔法师 · 艾琳</div>
+          <div class="mp-lv" id="worldLv">Lv.44 · 战力 1,248</div>
+        </div>
+      </div>
+      <div class="exp-strip" id="expStrip" title="经验进度"><i id="expFill"></i><span id="expTxt">0 / 100</span></div>
+      <!-- v1.9.27 全局血条 + 回血药水快用 -->
+      <div class="hp-strip" id="hpStrip" title="生命（全局：战斗后不自动回满，采草药/用回血药水恢复）"><i id="hpFill"></i><span id="hpTxt">-- / --</span></div>
+      <div class="hp-actions" id="hpActions">
+        <button class="hp-potion" id="usePotionBtn" title="使用回血药水（地图采草药 / 离线挂机可获得）">🧪 回血药水 <b id="potionCnt">0</b></button>
+      </div>
+      <div class="world-scene-name"><span id="worldSceneName">翡翠草原 · 大世界</span><em>探索中</em></div>
+    </div>
+    <!-- 底部 5 入口导航（v1.6：角色/副本/家园(中)/公会/地图，唯一功能入口） -->
+    <nav class="bottom-nav" id="bottomNav">
+      <button class="nav-badge nb-role" data-panel="role"><span class="badge-ico"><svg viewBox="0 0 32 32" width="30" height="30"><path d="M6 26 L22 10 M24 4 L28 8 L24 12 L20 8 Z M4 22 L10 28 M22 10 L26 14" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg></span><span class="badge-label">角色</span></button>
+      <button class="nav-badge nb-bag" data-panel="bag"><span class="badge-ico"><svg viewBox="0 0 32 32" width="30" height="30"><path d="M8 12 H24 L26 28 H6 Z" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M12 12 V9 Q12 5 16 5 Q20 5 20 9 V12" fill="none" stroke="#fff" stroke-width="2.5"/><rect x="13" y="17" width="6" height="5" rx="1" fill="#f0d590"/></svg></span><span class="badge-label">背包</span></button>
+      <button class="nav-badge nb-home" data-panel="home"><span class="badge-ico"><svg viewBox="0 0 40 40" width="38" height="38"><path d="M8 18 L20 7 L32 18 L32 33 L8 33 Z" fill="#5a3a12" stroke="#fff5d0" stroke-width="2"/><path d="M4 18 L20 5 L36 18" fill="none" stroke="#fff5d0" stroke-width="3" stroke-linecap="round"/><rect x="17" y="24" width="6" height="9" fill="#f0d590"/></svg></span><span class="badge-label">家园</span></button>
+      <button class="nav-badge nb-guild" data-panel="guild"><span class="badge-ico"><svg viewBox="0 0 32 32" width="30" height="30"><path d="M16 3 L27 7 L27 17 Q27 25 16 29 Q5 25 5 17 L5 7 Z" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M16 9 L19 15 L16 21 L13 15 Z" fill="#f0d590"/></svg></span><span class="badge-label">公会</span></button>
+      <button class="nav-badge nb-map" data-panel="map"><span class="badge-ico"><svg viewBox="0 0 32 32" width="30" height="30"><path d="M4 8 L11 5 L21 8 L28 5 L28 25 L21 28 L11 25 L4 28 Z" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M11 5 L11 25 M21 8 L21 28" stroke="#fff" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="#f0d590"/></svg></span><span class="badge-label">地图</span></button>
+    </nav>
+    <!-- 左上：小地图（罗盘 + 探索进度） -->
+    <div class="minimap" id="minimap">
+      <canvas id="miniMapCv" width="180" height="180"></canvas>
+      <div class="mm-n">N</div><div class="mm-s">S</div><div class="mm-w">W</div><div class="mm-e">E</div>
+      <div class="mm-progress" id="mmProgress">0/20</div>
+    </div>
+    <!-- 世界名 + 在线人数 -->
+    <div class="world-banner" id="worldBanner">
+      <span id="worldTitle">W1 · 青草平原</span>
+      <span class="online-badge" id="onlineBadge">● 在线 1</span>
+    </div>
+    <!-- 主线任务追踪（右侧常驻） -->
+    <div class="quest-tracker" id="questTracker"></div>
+    <!-- 交互提示条（靠近实体时出现） -->
+    <div class="interact-hint hidden" id="interactHint"></div>
+    <div class="perf-badge" id="perfBadge">--</div>
+    <!-- 操作提示（已移除摇杆与点击移动：仅键盘移动） -->
+    <div class="world-hint"><span id="worldHintText">WASD/方向键移动 · 点怪交战 · 点宝箱开启 · 点⇄传送</span> · <span id="wsHint">多人同步中</span></div>
+  </div>
+
+  <!-- ============ 视图③：战斗（独立场景，零输入自动演出） ============ -->
+  <div class="view hidden" id="battleView">
+    <canvas id="cvBattle" width="1280" height="720"></canvas>
+    <!-- 顶部：双方信息 + 回合 -->
+    <div class="bt-bar">
+      <div class="bt-side">
+        <img class="bt-face" id="btHeroFace" src="/res/characters/cards/ui_card_mage.png" alt="">
+        <div class="bt-meta">
+          <div class="bt-name" id="heroName">艾琳 Lv.1</div>
+          <div class="bt-hp"><i class="hp-fill hero" id="heroHpFill" style="width:100%"></i><span class="bt-hpnum" id="heroHpNum">85 / 85</span></div>
+        </div>
+      </div>
+      <div class="bt-round"><em>回合</em><b id="roundVal">1 / 30</b></div>
+      <div class="bt-side right">
+        <div class="bt-meta">
+          <div class="bt-name gold" id="monName">史莱姆</div>
+          <div class="bt-hp"><i class="hp-fill mon" id="monHpFill" style="width:100%"></i><span class="bt-hpnum" id="monHpNum">214 / 214</span></div>
+        </div>
+        <div class="bt-lv" id="monLvTag">Lv.1</div>
+      </div>
+    </div>
+    <div class="battle-tools">
+      <div class="auto-tag" id="autoTag">自动战斗中</div>
+      <button class="battle-pause" id="btPause">暂停</button>
+    </div>
+    <div class="battle-log" id="battleLogBox"><h4>战斗记录</h4><div id="battleLog"></div></div>
+    <div class="skill-bar">
+      <div class="skill-slots" id="skillSlots"></div>
+      <div class="cap" id="skillCap">生效技能：自动释放</div>
+    </div>
+  </div>
+
+  <!-- ============ 视图④：角色创建 / 家园换装（v1.9.18 交付包接入） ============ -->
+  <div class="view hidden" id="createView">
+    <div class="create-bg"></div>
+    <div class="create-wrap">
+      <div class="create-head">
+        <h2 id="crTitle">角色创建</h2>
+        <div class="cr-steps" id="crSteps"></div>
+      </div>
+      <div class="create-main">
+        <div class="cr-stage">
+          <canvas id="crCanvas" width="260" height="440"></canvas>
+          <div class="cr-pv-name"><b id="crPvName">未命名</b><em id="crPvCls">战士</em></div>
+        </div>
+        <div class="cr-panel" id="crPanel"></div>
+      </div>
+      <div class="create-foot">
+        <button class="ghost-btn" id="crBack">上一步</button>
+        <button class="big-btn goldbtn" id="crNext">下一步</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 特效层 ============ -->
+  <div id="fxLayer"></div>
+
+  <!-- ============ 功能面板层（只能从大世界进入，唯一返回大世界） ============ -->
+  <div id="panelLayer" class="hidden">
+    <div class="panel-shade" id="panelShade"></div>
+    <div class="side-panel panel-dark gold-border">
+      <div class="panel-head">
+        <div><h3 id="panelTitle">角色</h3><div class="sub" id="panelSub"></div></div>
+        <button class="panel-back" id="panelBack" aria-label="返回大世界" title="返回大世界">×</button>
+      </div>
+      <div class="panel-body" id="panelBody"></div>
+    </div>
+  </div>
+
+  <!-- ============ 弹窗层（结算 / 收益 / 提示） ============ -->
+  <div id="modalLayer" class="hidden">
+    <div class="modal-shade" id="modalShade"></div>
+    <div class="modal-box" id="modalBox"></div>
+  </div>
+
+  <!-- ============ 全局退出登录（唯一出口，右下角） ============ -->
+  <button id="logoutBtn" class="logout-btn hidden">退出登录</button>
+  <button id="sfxBtn" class="sfx-btn hidden" title="音效开关">音效</button>
+
+  <!-- ============ 加载遮罩 ============ -->
+  <div id="loading">
+    <div class="lt">杖 剑 传 说</div>
+    <div class="lbar"><i id="loadBar"></i></div>
+    <div class="lst" id="loadTxt">正在加载资源…</div>
+  </div>
+
+</div>
+<script src="/res/js/sfx.js?v=1.9.18"></script>
+<script src="/res/js/icons.js?v=1.9.18"></script>
+<script src="/res/js/PartActor.js?v=1.9.18"></script>
+<script src="/res/js/StandeeActor.js?v=1.9.18"></script>
+<script src="/res/js/look.js?v=1.9.18"></script>
+<script src="/res/js/deco.js?v=1.9.18"></script>
+<script src="/res/js/worldmap.js?v=1.9.37"></script>
+<script src="/res/js/quests.js?v=1.9.20"></script>
+<script src="/res/js/creator.js?v=1.9.18"></script>
+<script src="/res/js/app.js?v=1.9.38"></script>
+</body>
+</html>

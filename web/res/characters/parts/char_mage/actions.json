@@ -1,0 +1,144 @@
+{
+  "bundle": "char_mage",
+  "format": "standee_actions_v1",
+  "note": "整体级动画（root变换），数值[PLACEHOLDER]待playtest；_flash/_alpha由程序实现",
+  "states": {
+    "idle": {
+      "fps": 6,
+      "loop": true,
+      "keys": [
+        {
+          "t": 0,
+          "root": {
+            "sy": 1.0
+          }
+        },
+        {
+          "t": 800,
+          "root": {
+            "sy": 1.03
+          }
+        },
+        {
+          "t": 1600,
+          "root": {
+            "sy": 1.0
+          }
+        }
+      ]
+    },
+    "walk": {
+      "fps": 12,
+      "loop": true,
+      "keys": [
+        {
+          "t": 0,
+          "root": {
+            "dy": 0,
+            "rot": -2
+          }
+        },
+        {
+          "t": 250,
+          "root": {
+            "dy": 2
+          }
+        },
+        {
+          "t": 500,
+          "root": {
+            "dy": 0,
+            "rot": 2
+          }
+        }
+      ]
+    },
+    "attack": {
+      "fps": 12,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "root": {
+            "dx": 0,
+            "rot": 0
+          }
+        },
+        {
+          "t": 120,
+          "root": {
+            "dx": 10,
+            "rot": 5
+          }
+        },
+        {
+          "t": 260,
+          "root": {
+            "dx": -3,
+            "rot": -3
+          }
+        },
+        {
+          "t": 400,
+          "root": {
+            "dx": 0,
+            "rot": 0
+          }
+        }
+      ]
+    },
+    "hit": {
+      "fps": 10,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "root": {
+            "dx": 0,
+            "_flash": 0
+          }
+        },
+        {
+          "t": 100,
+          "root": {
+            "dx": -5,
+            "_flash": 1
+          }
+        },
+        {
+          "t": 250,
+          "root": {
+            "dx": 0,
+            "_flash": 0
+          }
+        }
+      ]
+    },
+    "die": {
+      "fps": 8,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "root": {
+            "rot": 0,
+            "_alpha": 1
+          }
+        },
+        {
+          "t": 400,
+          "root": {
+            "rot": 60
+          }
+        },
+        {
+          "t": 700,
+          "root": {
+            "rot": 90,
+            "_alpha": 0
+          }
+        }
+      ]
+    }
+  }
+}

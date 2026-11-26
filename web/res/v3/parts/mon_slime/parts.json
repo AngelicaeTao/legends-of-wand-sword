@@ -1,0 +1,88 @@
+{
+  "bundle": "mon_slime",
+  "format": "parted_sprite_v1",
+  "character_size": [
+    32,
+    32
+  ],
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "pivot": "rotation center relative to cropped PNG top-left (logic px)",
+  "anchor": "pivot position in character coord (y up+)",
+  "z": "draw order, larger=front",
+  "parts": {
+    "shadow": {
+      "file": "mon_slime_shadow.png",
+      "size": [
+        23,
+        4
+      ],
+      "pivot": [
+        11,
+        2
+      ],
+      "anchor": [
+        0,
+        1
+      ],
+      "z": 0
+    },
+    "body": {
+      "file": "mon_slime_body.png",
+      "size": [
+        27,
+        22
+      ],
+      "pivot": [
+        13,
+        21
+      ],
+      "anchor": [
+        0,
+        1
+      ],
+      "z": 1
+    },
+    "face": {
+      "file": "mon_slime_face.png",
+      "size": [
+        14,
+        11
+      ],
+      "pivot": [
+        7,
+        7
+      ],
+      "anchor": [
+        0,
+        7
+      ],
+      "z": 2
+    },
+    "shine": {
+      "file": "mon_slime_shine.png",
+      "size": [
+        4,
+        3
+      ],
+      "pivot": [
+        1,
+        1
+      ],
+      "anchor": [
+        -4,
+        19
+      ],
+      "z": 3
+    }
+  },
+  "palette": [
+    "#262234",
+    "#342e2c",
+    "#4ba09b",
+    "#7ddccd",
+    "#aff5e6",
+    "#fafafc"
+  ],
+  "color_count": 6,
+  "note": "史莱姆软体；body挤压变形+整体位移，无骨架"
+}

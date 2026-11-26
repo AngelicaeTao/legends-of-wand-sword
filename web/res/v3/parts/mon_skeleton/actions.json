@@ -1,0 +1,233 @@
+{
+  "bundle": "mon_skeleton",
+  "format": "parted_actions_v1",
+  "states": {
+    "idle": {
+      "fps": 6,
+      "loop": true,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 250,
+          "parts": {
+            "head": {
+              "rot": -4
+            },
+            "arm_l": {
+              "rot": 5
+            },
+            "arm_r": {
+              "rot": -5
+            },
+            "weapon": {
+              "rot": 3
+            }
+          }
+        },
+        {
+          "t": 500,
+          "parts": {}
+        },
+        {
+          "t": 750,
+          "parts": {
+            "head": {
+              "rot": 4
+            },
+            "arm_l": {
+              "rot": -5
+            },
+            "arm_r": {
+              "rot": 5
+            },
+            "weapon": {
+              "rot": -3
+            }
+          }
+        },
+        {
+          "t": 1000,
+          "parts": {}
+        }
+      ]
+    },
+    "attack": {
+      "fps": 12,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 83,
+          "parts": {
+            "arm_r": {
+              "rot": -50
+            },
+            "weapon": {
+              "rot": -45
+            },
+            "torso": {
+              "rot": -4
+            }
+          }
+        },
+        {
+          "t": 167,
+          "parts": {
+            "root": {
+              "dx": 5
+            },
+            "arm_r": {
+              "rot": 40
+            },
+            "weapon": {
+              "rot": 50
+            },
+            "torso": {
+              "rot": 6
+            }
+          }
+        },
+        {
+          "t": 250,
+          "parts": {
+            "root": {
+              "dx": 2
+            },
+            "arm_r": {
+              "rot": 15
+            },
+            "weapon": {
+              "rot": 20
+            }
+          }
+        },
+        {
+          "t": 333,
+          "parts": {}
+        }
+      ]
+    },
+    "hit": {
+      "fps": 10,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 50,
+          "parts": {
+            "root": {
+              "dx": -3
+            },
+            "head": {
+              "rot": -10
+            },
+            "torso": {
+              "rot": -6
+            },
+            "_flash": 1
+          }
+        },
+        {
+          "t": 100,
+          "parts": {
+            "root": {
+              "dx": -1
+            },
+            "_flash": 0.4
+          }
+        },
+        {
+          "t": 150,
+          "parts": {}
+        }
+      ]
+    },
+    "die": {
+      "fps": 8,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 125,
+          "parts": {
+            "root": {
+              "rot": 25,
+              "dy": -2
+            },
+            "head": {
+              "rot": -15
+            },
+            "arm_l": {
+              "rot": -40
+            },
+            "arm_r": {
+              "rot": 40
+            },
+            "weapon": {
+              "rot": 30
+            }
+          }
+        },
+        {
+          "t": 250,
+          "parts": {
+            "root": {
+              "rot": 55,
+              "dy": -5
+            },
+            "head": {
+              "rot": -30
+            },
+            "arm_l": {
+              "rot": -60
+            },
+            "arm_r": {
+              "rot": 60
+            }
+          }
+        },
+        {
+          "t": 375,
+          "parts": {
+            "root": {
+              "rot": 80,
+              "dy": -7
+            },
+            "_alpha": 0.7
+          }
+        },
+        {
+          "t": 500,
+          "parts": {
+            "root": {
+              "rot": 88,
+              "dy": -8
+            },
+            "_alpha": 0.4
+          }
+        }
+      ]
+    }
+  },
+  "transform_fields": {
+    "dx": "x offset logic px",
+    "dy": "y offset logic px (up+)",
+    "rot": "degrees, clockwise+",
+    "sx": "x scale",
+    "sy": "y scale",
+    "alpha": "0..1, default 1"
+  },
+  "interpolation": "between keyframes: linear unless ease specified"
+}

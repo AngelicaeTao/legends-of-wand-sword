@@ -1,0 +1,134 @@
+{
+  "_readme": "经济与全局数值。全部为 [PLACEHOLDER]，按需求文档表4与地图设计第七节，待 playtest 后用本表 tuning。",
+  "idle": {
+    "maxHours": 8,
+    "efficiency": 1.0,
+    "expPerMinute": 6,
+    "goldPerMinute": 4,
+    "materialPerMinute": 0.5,
+    "_note": "离线收益 = 时长 * 速率 * 效率，封顶8h。结算只用服务端时间戳 lastSeen，客户端改系统时间无效。"
+  },
+  "stamina": {
+    "max": 120,
+    "recoverMinutes": 30,
+    "perRecover": 1,
+    "costPerBattle": 0,
+    "costPerDungeon": 10,
+    "_note": "挂机/普通交战不消耗体力；副本消耗体力。原型展示值 86/120。"
+  },
+  "battle": {
+    "minSeconds": 15,
+    "maxSeconds": 30,
+    "tickMs": 1000,
+    "_note": "服务端按累计时间驱动自动战斗；回合数仅作UI展示，不作终止条件。种子由服务端生成随战报记录。"
+  },
+  "drop": {
+    "equipChanceNormal": 0.16,
+    "equipChanceElite": 0.45,
+    "equipChanceBoss": 1.0,
+    "bossDiamondMin": 50,
+    "bossDiamondMax": 100,
+    "chest": {
+      "wood": {
+        "gold": [
+          40,
+          120
+        ],
+        "gem": [
+          2,
+          8
+        ]
+      },
+      "silver": {
+        "gold": [
+          120,
+          300
+        ],
+        "gem": [
+          8,
+          20
+        ]
+      },
+      "gold": {
+        "gold": [
+          300,
+          800
+        ],
+        "gem": [
+          20,
+          50
+        ]
+      }
+    }
+  },
+  "worldMap": {
+    "worldSize": {
+      "w": 15360,
+      "h": 8640
+    },
+    "moveSpeed": 960,
+    "corridorWidth": 384,
+    "branchWidth": 256,
+    "darkWidth": 192,
+    "triggerRadius": 48,
+    "aggroRadius": 120,
+    "renderRadiusScreens": 1,
+    "_note": "地图设计 v1.0：世界放大×4(15360×8640)、移速×4(960px/s)、主通道384px=角色显示128px×3。复杂度靠路网拓扑非面积，通行区由掩码确定。"
+  },
+  "rendering": {
+    "logicSize": {
+      "w": 1280,
+      "h": 720
+    },
+    "_note": "v0.8 裁定：运行时可配置逻辑分辨率默认1280×720；原型图1536×1024仅为交互评审稿尺寸，不作运行时基准。相机视野不随世界放大。"
+  },
+  "multiplayer": {
+    "channelCapacity": 40,
+    "moveBroadcastHz": 10,
+    "heartbeatMs": 5000,
+    "reconnectBackoffMs": [
+      1000,
+      2000,
+      4000,
+      8000
+    ]
+  },
+  "dungeons": [
+    {
+      "id": "grass",
+      "name": "青草试炼",
+      "lv": 1,
+      "perDay": 3,
+      "drop": "掉落基础材料",
+      "mon": "slime",
+      "elite": false
+    },
+    {
+      "id": "mist",
+      "name": "迷雾回廊",
+      "lv": 10,
+      "perDay": 2,
+      "drop": "掉落强化材料",
+      "mon": "bat",
+      "elite": false
+    },
+    {
+      "id": "flame",
+      "name": "赤焰深渊",
+      "lv": 20,
+      "perDay": 2,
+      "drop": "掉落装备",
+      "mon": "skeleton",
+      "elite": true
+    },
+    {
+      "id": "frost",
+      "name": "霜冻之巅",
+      "lv": 30,
+      "perDay": 1,
+      "drop": "掉落稀有材料",
+      "mon": "boss_beetle",
+      "elite": true
+    }
+  ]
+}

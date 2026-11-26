@@ -1,0 +1,72 @@
+{
+  "_readme": "世界地图配置。6个世界链式主线+2条捷径成环；每世界的点位坐标固定（空间可学习），刷新时刻与内容随机。初跑版每世界给出核心点位，可按 map design 2.5 节扩展路网到20~26节点。",
+  "worlds": [
+    {
+      "id": "W1", "name": "青草平原", "level": 1, "theme": "grassland", "bg": "bg_explore_grassland.png",
+      "spawns": [
+        { "id": "W1_N01", "type": "ANCHOR", "x": 1920, "y": 1080 },
+        { "id": "W1_N02", "type": "MOB", "tier": 1, "x": 1200, "y": 900 },
+        { "id": "W1_N03", "type": "MOB", "tier": 1, "x": 2600, "y": 1100 },
+        { "id": "W1_N04", "type": "ELITE", "tier": 2, "x": 2800, "y": 700 },
+        { "id": "W1_N05", "type": "CHEST", "tier": 1, "x": 1500, "y": 1400 },
+        { "id": "W1_G_W2", "type": "GATE", "to": "W2", "requireLevel": 10, "x": 3400, "y": 1080 },
+        { "id": "W1_G_W3", "type": "GATE", "to": "W3", "requireLevel": 20, "x": 600, "y": 600, "_note": "捷径" }
+      ]
+    },
+    {
+      "id": "W2", "name": "迷雾森林", "level": 10, "theme": "forest", "bg": "bg_explore_forest.png",
+      "spawns": [
+        { "id": "W2_N01", "type": "ANCHOR", "x": 1920, "y": 1080 },
+        { "id": "W2_N02", "type": "MOB", "tier": 2, "x": 1100, "y": 800 },
+        { "id": "W2_N03", "type": "ELITE", "tier": 3, "x": 2600, "y": 700 },
+        { "id": "W2_N04", "type": "CHEST", "tier": 2, "x": 2000, "y": 1500 },
+        { "id": "W2_G_W3", "type": "GATE", "to": "W3", "requireLevel": 20, "x": 3400, "y": 1080 },
+        { "id": "W2_G_W4", "type": "GATE", "to": "W4", "requireLevel": 30, "x": 700, "y": 1500, "_note": "捷径" }
+      ]
+    },
+    {
+      "id": "W3", "name": "赤焰峡谷", "level": 20, "theme": "desert", "bg": "bg_explore_desert.png",
+      "spawns": [
+        { "id": "W3_N01", "type": "ANCHOR", "x": 1920, "y": 1080 },
+        { "id": "W3_N02", "type": "MOB", "tier": 3, "x": 1300, "y": 1300 },
+        { "id": "W3_N03", "type": "ELITE", "tier": 3, "x": 2700, "y": 900 },
+        { "id": "W3_N04", "type": "CHEST", "tier": 3, "x": 900, "y": 600 },
+        { "id": "W3_G_W4", "type": "GATE", "to": "W4", "requireLevel": 30, "x": 3400, "y": 1080 }
+      ]
+    },
+    {
+      "id": "W4", "name": "冰霜高原", "level": 30, "theme": "snow", "bg": "bg_explore_snow.png",
+      "spawns": [
+        { "id": "W4_N01", "type": "ANCHOR", "x": 1920, "y": 1080 },
+        { "id": "W4_N02", "type": "MOB", "tier": 4, "x": 1200, "y": 800 },
+        { "id": "W4_N03", "type": "ELITE", "tier": 4, "x": 2600, "y": 1400 },
+        { "id": "W4_N04", "type": "CHEST", "tier": 4, "x": 2200, "y": 600 },
+        { "id": "W4_G_W5", "type": "GATE", "to": "W5", "requireLevel": 40, "x": 3400, "y": 1080 }
+      ]
+    },
+    {
+      "id": "W5", "name": "流沙遗迹", "level": 40, "theme": "cave", "bg": "bg_explore_cave.png",
+      "spawns": [
+        { "id": "W5_N01", "type": "ANCHOR", "x": 1920, "y": 1080 },
+        { "id": "W5_N02", "type": "MOB", "tier": 4, "x": 1100, "y": 1300 },
+        { "id": "W5_N03", "type": "ELITE", "tier": 5, "x": 2700, "y": 800 },
+        { "id": "W5_N04", "type": "CHEST", "tier": 5, "x": 800, "y": 500 },
+        { "id": "W5_G_W6", "type": "GATE", "to": "W6", "requireLevel": 50, "x": 3400, "y": 1080 }
+      ]
+    },
+    {
+      "id": "W6", "name": "星陨之巅", "level": 50, "theme": "arena", "bg": "bg_battle_arena.png",
+      "spawns": [
+        { "id": "W6_N01", "type": "ANCHOR", "x": 1920, "y": 1080 },
+        { "id": "W6_N02", "type": "MOB", "tier": 5, "x": 1200, "y": 900 },
+        { "id": "W6_N03", "type": "ELITE", "tier": 5, "x": 2600, "y": 1300 },
+        { "id": "W6_N04", "type": "BOSS", "tier": 5, "x": 2900, "y": 600, "bossMonster": "boss_beetle" }
+      ]
+    }
+  ],
+  "respawn": {
+    "_note": "每点位独立冷却，冷却=base*(1+U(-jitter,jitter))，服务端常驻推进。宝箱为玩家实例（按userId+nodeId分键），怪为世界实例共享。",
+    "mobBaseSec": 60, "eliteBaseSec": 180, "chestBaseSec": 300, "jitter": 0.2,
+    "activeDensityCap": 8
+  }
+}

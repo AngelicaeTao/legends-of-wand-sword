@@ -1,0 +1,194 @@
+{
+  "bundle": "char_hero_mage",
+  "format": "parted_sprite_v1",
+  "character_size": [
+    32,
+    48
+  ],
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "pivot": "rotation center relative to cropped PNG top-left (logic px)",
+  "anchor": "pivot position in character coord (y up+)",
+  "z": "draw order, larger=front",
+  "parts": {
+    "shadow": {
+      "file": "char_hero_mage_shadow.png",
+      "size": [
+        15,
+        4
+      ],
+      "pivot": [
+        7,
+        1
+      ],
+      "anchor": [
+        0,
+        2
+      ],
+      "z": 0
+    },
+    "cape": {
+      "file": "char_hero_mage_cape.png",
+      "size": [
+        5,
+        16
+      ],
+      "pivot": [
+        4,
+        0
+      ],
+      "anchor": [
+        -6,
+        22
+      ],
+      "z": 1
+    },
+    "leg_l": {
+      "file": "char_hero_mage_leg_l.png",
+      "size": [
+        6,
+        4
+      ],
+      "pivot": [
+        2,
+        0
+      ],
+      "anchor": [
+        -4,
+        6
+      ],
+      "z": 2
+    },
+    "leg_r": {
+      "file": "char_hero_mage_leg_r.png",
+      "size": [
+        6,
+        4
+      ],
+      "pivot": [
+        2,
+        0
+      ],
+      "anchor": [
+        4,
+        6
+      ],
+      "z": 2
+    },
+    "body": {
+      "file": "char_hero_mage_body.png",
+      "size": [
+        19,
+        17
+      ],
+      "pivot": [
+        9,
+        0
+      ],
+      "anchor": [
+        0,
+        22
+      ],
+      "z": 3
+    },
+    "arm_l": {
+      "file": "char_hero_mage_arm_l.png",
+      "size": [
+        6,
+        11
+      ],
+      "pivot": [
+        4,
+        0
+      ],
+      "anchor": [
+        -6,
+        21
+      ],
+      "z": 4
+    },
+    "arm_r": {
+      "file": "char_hero_mage_arm_r.png",
+      "size": [
+        6,
+        11
+      ],
+      "pivot": [
+        1,
+        0
+      ],
+      "anchor": [
+        6,
+        21
+      ],
+      "z": 6
+    },
+    "head": {
+      "file": "char_hero_mage_head.png",
+      "size": [
+        11,
+        11
+      ],
+      "pivot": [
+        5,
+        10
+      ],
+      "anchor": [
+        0,
+        23
+      ],
+      "z": 7
+    },
+    "hat": {
+      "file": "char_hero_mage_hat.png",
+      "size": [
+        20,
+        15
+      ],
+      "pivot": [
+        9,
+        12
+      ],
+      "anchor": [
+        0,
+        35
+      ],
+      "z": 8
+    },
+    "staff": {
+      "file": "char_hero_mage_staff.png",
+      "size": [
+        7,
+        29
+      ],
+      "pivot": [
+        3,
+        23
+      ],
+      "anchor": [
+        10,
+        12
+      ],
+      "z": 9
+    }
+  },
+  "palette": [
+    "#262234",
+    "#304e98",
+    "#342e2c",
+    "#4e76cd",
+    "#693e26",
+    "#78a0f0",
+    "#962d30",
+    "#96603a",
+    "#9e6a3a",
+    "#be9632",
+    "#c84648",
+    "#e1aa7d",
+    "#eec34e",
+    "#f5cd5f",
+    "#fafafc",
+    "#ffd2a5"
+  ],
+  "color_count": 16,
+  "note": "主角Q版法师；部件10个；root为整体容器虚拟节点(程序建)，_flash/_alpha为整体特效字段"
+}

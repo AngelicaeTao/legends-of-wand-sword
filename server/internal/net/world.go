@@ -1,0 +1,336 @@
+// Package net · 世界/点位/宝箱权威接口（对应 /api/chest/open、/api/world/*、/api/spawn）。
+// 所有数值由服务端按配置 roll，客户端只传意图（nodeId / worldId）。
+package net
+
+import (
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"net/http"
+	"time"
+
+	"zjcs/server/internal/game"
+	"zjcs/server/internal/store"
+)
+
+// numAny 从 map[string]any 安全取数
+func numAny(m map[string]any, k string, def float64) float64 {
+	if v, ok := m[k]; ok {
+		switch n := v.(type) {
+		case float64: return n
+		case int: return float64(n)
+		case int64: return float64(n)
+		}
+	}
+	return def
+}
+
+// chestOpen：服务端按 tier 权威 roll 奖励并入仓库/存档。
+func chestOpen(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		UserID  string `json:"userId"`
+		WorldID string `json:"worldId"`
+		NodeID  string `json:"nodeId"`
+		Tier    string `json:"tier"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	uid, ok := authUserID(r)
+	if !ok && q.UserID != "" { uid = q.UserID } // 兼容旧链路
+	if uid == "" { http.Error(w, "未授权", 401); return }
+	if q.WorldID == "" { q.WorldID = "W1" }
+	if q.NodeID == "" { http.Error(w, "nodeId 不能为空", 400); return }
+	if q.Tier == "" { q.Tier = "wood" }
+
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+
+	// 点位状态机校验：宝箱必须处于 ACTIVE，并返回服务端权威档位
+	spot, ok := game.SM().OpenChest(uid, q.WorldID, q.NodeID)
+	if !ok {
+		http.Error(w, "宝箱不可开启（冷却中或不存在）", 409); return
+	}
+	// 服务端权威 tier：忽略请求体 tier，按点位状态机 roll 出的档位发放（防客户端伪造）
+	tierName := "wood"
+	switch spot.Tier {
+	case 3: tierName = "gold"
+	case 2: tierName = "silver"
+	default: tierName = "wood"
+	}
+	q.Tier = tierName
+
+	// 按 tier 从 economy.drop.chest 权威 roll（语义档位：wood/silver/gold）
+	drop := game.C().Economy.Drop["chest"]
+	tierMap, _ := drop.(map[string]any)
+	cfg, _ := tierMap[q.Tier].(map[string]any)
+	if cfg == nil { cfg = tierMap["wood"].(map[string]any) }
+	rg := func(key string) int {
+		arr, _ := cfg[key].([]any)
+		if len(arr) >= 2 {
+			lo, hi := numAny(map[string]any{"v": arr[0]}, "v", 0), numAny(map[string]any{"v": arr[1]}, "v", 0)
+			return int(lo) + rand.Intn(int(hi-lo)+1)
+		}
+		return 0
+	}
+	gold, gem := rg("gold"), rg("gem")
+	// 经验/材料按 gold 派生（语义档位，外置比例，可改 economy 配置）
+	exp := int(float64(gold) * numAny(game.C().Economy.Drop, "chestExpRatio", 1.5))
+	mat := int(float64(gold) * numAny(game.C().Economy.Drop, "chestMatRatio", 0.1))
+	// v1.9.35 详细掉落：药水按档位概率/数量 roll，装备按档位概率 roll 一件
+	potions := 0
+	switch q.Tier {
+	case "gold":
+		if rand.Intn(100) < 80 { potions = 2 + rand.Intn(2) }
+	case "silver":
+		if rand.Intn(100) < 60 { potions = 1 + rand.Intn(2) }
+	default:
+		if rand.Intn(100) < 40 { potions = 1 }
+	}
+	var equips []game.EquipItem
+	if e, ok := game.RollChestEquip(p.Core.ClassID, q.Tier, rand.New(rand.NewSource(time.Now().UnixNano()))); ok {
+		equips = []game.EquipItem{e}
+	}
+	logs, items := store.ApplyChestReward(p, exp, gold, gem, mat, potions, equips)
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{
+		"reward": map[string]any{"exp": exp, "gold": gold, "gem": gem, "tier": q.Tier, "items": items},
+		"logs": logs, "state": p,
+	})
+}
+
+// potionPick：v1.9.27 采集地图草药 → 服务端权威 roll 回血药水/金币入仓。
+// 点位为玩家实例，采集后进入 potionBaseSec 冷却自动复活。
+func potionPick(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		UserID  string `json:"userId"`
+		WorldID string `json:"worldId"`
+		NodeID  string `json:"nodeId"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	uid, ok := authUserID(r)
+	if !ok && q.UserID != "" { uid = q.UserID }
+	if uid == "" { http.Error(w, "未授权", 401); return }
+	if q.WorldID == "" { q.WorldID = "W1" }
+	if q.NodeID == "" { http.Error(w, "nodeId 不能为空", 400); return }
+
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if _, ok := game.SM().PickPotion(uid, q.WorldID, q.NodeID); !ok {
+		http.Error(w, "草药尚未长成（冷却中或不存在）", 409); return
+	}
+	// 服务端权威 roll：1 瓶保底，30% 概率 +1；顺带少量金币
+	potions := 1
+	if rand.Intn(100) < 30 { potions = 2 }
+	gold := 10 + rand.Intn(30)
+	logs := store.ApplyPotionPick(p, potions, gold)
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{
+		"reward": map[string]any{"potions": potions, "gold": gold},
+		"logs": logs, "state": p,
+	})
+}
+
+// monsterKill：击败怪物 → 世界共享点位进入冷却（供战斗胜利后调用）。
+func monsterKill(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		WorldID string `json:"worldId"`
+		NodeID  string `json:"nodeId"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	if q.WorldID == "" || q.NodeID == "" { http.Error(w, "worldId/nodeId 不能为空", 400); return }
+	ok := game.SM().KillMonster(q.WorldID, q.NodeID)
+	jsonOut(w, map[string]any{"ok": ok})
+}
+
+// spawnQuery：查询世界当前 ACTIVE 点位（含玩家宝箱实例）。
+// userId 优先取 query 参数（前端传 uid()，避免网关剥离 token 导致宝箱丢失），再 fallback token。
+func spawnQuery(w http.ResponseWriter, r *http.Request) {
+	uid := r.URL.Query().Get("userId")
+	if uid == "" { uid, _ = authUserID(r) }
+	worldID := r.URL.Query().Get("worldId")
+	if worldID == "" { worldID = "W1" }
+	spots := game.SM().ActiveSpots(worldID, uid)
+	jsonOut(w, map[string]any{"worldId": worldID, "spots": spots, "serverNow": game.ServerNow()})
+}
+
+// reqUserID 统一取 userId：query/body 优先（前端传 uid()），再 fallback token。
+func reqUserID(r *http.Request) string {
+	if u := r.URL.Query().Get("userId"); u != "" { return u }
+	if u, ok := authUserID(r); ok { return u }
+	return ""
+}
+
+// worldUnlocks：返回玩家的世界解锁状态 + 可传送 GATE 列表。
+func worldUnlocks(w http.ResponseWriter, r *http.Request) {
+	uid := reqUserID(r)
+	if uid == "" { http.Error(w, "未授权", 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	gates := []map[string]any{}
+	for _, wd := range game.C().Worlds.Worlds {
+		for _, s := range wd.Spawns {
+			if s.Type == "GATE" {
+				gates = append(gates, map[string]any{
+					"from": wd.ID, "to": s.To, "requireLevel": s.RequireLevel,
+					"nodeId": s.ID, "x": s.X, "y": s.Y,
+				})
+			}
+		}
+	}
+	jsonOut(w, map[string]any{"unlocked": p.World.Unlocked, "current": p.World.WorldID, "gates": gates})
+}
+
+// worldTravel：世界切换/传送（免费 5s CD，服务端权威），校验等级门槛。
+func worldTravel(w http.ResponseWriter, r *http.Request) {
+	uid := reqUserID(r)
+	var q struct {
+		To     string `json:"to"`
+		UserID string `json:"userId"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	if uid == "" { uid = q.UserID }
+	if uid == "" { http.Error(w, "未授权", 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	// 目标世界必须存在
+	var target *game.WorldDef
+	for i := range game.C().Worlds.Worlds {
+		if game.C().Worlds.Worlds[i].ID == q.To { target = &game.C().Worlds.Worlds[i] }
+	}
+	if target == nil { http.Error(w, "目标世界不存在", 400); return }
+	// v1.9.34：HOME 幂等——战败/API 已把存档切到 HOME 但前端地图未同步时，
+	// 再点家园按钮不应报"已在当前世界"卡死，直接返回成功让前端对齐。
+	if q.To == "HOME" {
+		if p.World.WorldID != "HOME" {
+			p.World.LastWorldID = p.World.WorldID
+		}
+		p.World.WorldID = "HOME"
+		p.World.X, p.World.Y = 1280, 780 // 家园锚点
+		if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+		jsonOut(w, map[string]any{"worldId": "HOME", "state": p})
+		return
+	}
+	if q.To == p.World.WorldID { http.Error(w, "已在当前世界", 400); return }
+	// 找当前世界通往目标的 GATE：有通道 → 校验等级门槛；
+	// 没有通道但目标已解锁（回访已探索世界）→ 允许直接传送。
+	// 旧逻辑只认 GATE，导致"从迷雾森林回青草平原"被判成"无通道"，与面板上
+	// "点已解锁世界可直接传送"的说明自相矛盾。
+	var gate *game.SpawnDef
+	for _, wd := range game.C().Worlds.Worlds {
+		if wd.ID != p.World.WorldID { continue }
+		for i, s := range wd.Spawns {
+			if s.Type == "GATE" && s.To == q.To { gate = &wd.Spawns[i] }
+		}
+	}
+	if gate == nil {
+		if !containsStr(p.World.Unlocked, q.To) {
+			http.Error(w, "尚未解锁该世界：请沿世界通道推进", 400)
+			return
+		}
+	} else if p.Core.Level < gate.RequireLevel {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(403)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": fmt.Sprintf("等级不足：当前 Lv.%d，前往 %s 需 Lv.%d，请先打怪或挂机升级", p.Core.Level, target.Name, gate.RequireLevel)})
+		return
+	}
+	// v1.9.24：传送 CD 已取消（与宝箱冷却同期需求）
+	p.World.WorldID = q.To
+	if !containsStr(p.World.Unlocked, q.To) { p.World.Unlocked = append(p.World.Unlocked, q.To) }
+	// 落到新世界锚点
+	for _, wd := range game.C().Worlds.Worlds {
+		if wd.ID == q.To {
+			for _, s := range wd.Spawns {
+				if s.Type == "ANCHOR" { p.World.X, p.World.Y = s.X, s.Y }
+			}
+		}
+	}
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{"worldId": q.To, "state": p})
+}
+
+func containsStr(ss []string, s string) bool { for _, x := range ss { if x == s { return true } }; return false }
+
+// ---- 公会（v1.9.18）：服务端权威的创建 / 加入 / 退出 / 列表 ----
+
+// guildView 公会对客户端的展示结构（等级实时按进度折算）。
+func guildView(g *store.Guild) map[string]any {
+	ms := make([]map[string]any, 0, len(g.Members))
+	for _, m := range g.Members {
+		ms = append(ms, map[string]any{
+			"userId": m.UserID, "name": m.Name, "level": m.Level,
+			"power": m.Power, "role": m.Role, "donate": m.Donate, "joinedAt": m.JoinedAt,
+		})
+	}
+	return map[string]any{
+		"id": g.ID, "name": g.Name, "level": g.Level(), "progress": g.Progress,
+		"members": ms, "size": len(g.Members), "createdAt": g.CreatedAt,
+	}
+}
+
+func guildList(w http.ResponseWriter, r *http.Request) {
+	out := []map[string]any{}
+	for _, g := range store.Guilds().GuildList() {
+		out = append(out, guildView(g))
+	}
+	jsonOut(w, map[string]any{"guilds": out})
+}
+
+func guildActionBody(r *http.Request) (string, string, string, error) {
+	var q struct{ UserID, Name, GuildID string }
+	_ = json.NewDecoder(r.Body).Decode(&q)
+	uid := q.UserID
+	if uid == "" { uid, _ = authUserID(r) }
+	if uid == "" { return "", "", "", fmt.Errorf("未授权") }
+	return uid, q.Name, q.GuildID, nil
+}
+
+func guildCreate(w http.ResponseWriter, r *http.Request) {
+	uid, name, _, err := guildActionBody(r)
+	if err != nil { http.Error(w, err.Error(), 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if p.Guild != nil { http.Error(w, "你已加入公会，请先退出再创建", 409); return }
+	if p.Core.Gold < store.GuildCreateCost {
+		http.Error(w, fmt.Sprintf("金币不足：创建公会需 %d（当前 %d）", store.GuildCreateCost, p.Core.Gold), 400); return
+	}
+	gid := fmt.Sprintf("g_%s_%d", uid[:8], time.Now().Unix()%100000)
+	g, err := store.Guilds().GuildCreate(gid, name, p.UserID, p.Core.Name, p.Core.Level, p.Core.BattlePower)
+	if err != nil { http.Error(w, err.Error(), 409); return }
+	p.Core.Gold -= store.GuildCreateCost
+	p.Guild = &store.GuildRef{ID: g.ID, Name: g.Name, Role: "president"}
+	p.AppendLogs([]string{fmt.Sprintf("创建公会：%s（消耗 %d 金币）", g.Name, store.GuildCreateCost)})
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{"state": p, "guild": guildView(g), "message": "公会创建成功"})
+}
+
+func guildJoin(w http.ResponseWriter, r *http.Request) {
+	uid, _, gid, err := guildActionBody(r)
+	if err != nil { http.Error(w, err.Error(), 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if p.Guild != nil { http.Error(w, "你已加入公会，请先退出再加入其他公会", 409); return }
+	g, err := store.Guilds().GuildJoin(gid, p.UserID, p.Core.Name, p.Core.Level, p.Core.BattlePower)
+	if err != nil { http.Error(w, err.Error(), 409); return }
+	p.Guild = &store.GuildRef{ID: g.ID, Name: g.Name, Role: "member"}
+	p.AppendLogs([]string{fmt.Sprintf("加入公会：%s", g.Name)})
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{"state": p, "guild": guildView(g), "message": "加入公会成功"})
+}
+
+func guildLeave(w http.ResponseWriter, r *http.Request) {
+	uid, _, _, err := guildActionBody(r)
+	if err != nil { http.Error(w, err.Error(), 401); return }
+	p, err := loadOrCreate(uid)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	if p.Guild == nil { http.Error(w, "你尚未加入公会", 409); return }
+	gname := p.Guild.Name
+	rest, err := store.Guilds().GuildLeave(p.Guild.ID, p.UserID)
+	if err != nil { http.Error(w, err.Error(), 409); return }
+	p.Guild = nil
+	if rest == nil {
+		p.AppendLogs([]string{fmt.Sprintf("公会 %s 已解散（最后一名成员退出）", gname)})
+	} else {
+		p.AppendLogs([]string{fmt.Sprintf("退出公会：%s", gname)})
+	}
+	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	jsonOut(w, map[string]any{"state": p, "message": "已退出公会"})
+}
