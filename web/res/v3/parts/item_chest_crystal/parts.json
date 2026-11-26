@@ -1,0 +1,73 @@
+{
+  "bundle": "item_chest_crystal",
+  "format": "parted_sprite_v1",
+  "character_size": [
+    32,
+    32
+  ],
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "pivot": "rotation center relative to cropped PNG top-left (logic px)",
+  "anchor": "pivot position in character coord (y up+)",
+  "z": "draw order, larger=front",
+  "parts": {
+    "shadow": {
+      "file": "item_chest_crystal_shadow.png",
+      "size": [
+        25,
+        4
+      ],
+      "pivot": [
+        12,
+        1
+      ],
+      "anchor": [
+        0,
+        1
+      ],
+      "z": 0
+    },
+    "box": {
+      "file": "item_chest_crystal_box.png",
+      "size": [
+        25,
+        15
+      ],
+      "pivot": [
+        12,
+        1
+      ],
+      "anchor": [
+        0,
+        13
+      ],
+      "z": 2
+    },
+    "lid": {
+      "file": "item_chest_crystal_lid.png",
+      "size": [
+        25,
+        8
+      ],
+      "pivot": [
+        0,
+        7
+      ],
+      "anchor": [
+        -12,
+        13
+      ],
+      "z": 3
+    }
+  },
+  "palette": [
+    "#262234",
+    "#342e2c",
+    "#9ea8b9",
+    "#b28a28",
+    "#eec34e",
+    "#fafafc",
+    "#ffe68c"
+  ],
+  "color_count": 7,
+  "note": "gold宝箱；lid绕后铰链旋转开启"
+}

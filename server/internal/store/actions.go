@@ -132,6 +132,58 @@ func (p *PlayerState) UnequipItem(itemID string) ([]string, error) {
 	return nil, fmt.Errorf("未找到装备：%s", itemID)
 }
 
+// QualityUp 装备升品（v1.9.42）：仓库或背包中的装备品质 +1（最高混沌=7），
+// stats 按 mult 重算（品质乘数 × 原基值）。消耗由 net 层按配置算好传入。
+// 返回新品质档与更新后的属性。
+func (p *PlayerState) QualityUp(itemID string, goldCost, matCost int, mults []float64) (int, map[string]float64, error) {
+	if p.Core.Gold < goldCost || p.Core.Material < matCost {
+		return 0, nil, fmt.Errorf("资源不足（需 %d 金币 / %d 材料）", goldCost, matCost)
+	}
+	for i := range p.Equip {
+		if p.Equip[i].ID == itemID {
+			e := &p.Equip[i]
+			return qualityUpOne(e, goldCost, matCost, mults, p)
+		}
+	}
+	for i := range p.Warehouse {
+		if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == itemID {
+			e := p.Warehouse[i].Equip
+			if e == nil { return 0, nil, fmt.Errorf("装备数据异常") }
+			q, st, err := qualityUpOne(e, goldCost, matCost, mults, p)
+			if err != nil { return 0, nil, err }
+			p.Warehouse[i].Equip = e
+			return q, st, nil
+		}
+	}
+	return 0, nil, fmt.Errorf("未找到装备：%s", itemID)
+}
+
+func qualityUpOne(e *Equip, goldCost, matCost int, mults []float64, p *PlayerState) (int, map[string]float64, error) {
+	maxQ := len(mults) - 1
+	if maxQ < 0 { maxQ = 7 }
+	if e.Quality >= maxQ {
+		return 0, nil, fmt.Errorf("已达最高品质（混沌），无法继续升品")
+	}
+	// 用旧品质 mult 反推基值，再乘新品质 mult（保留装备成长一致性）
+	oldMult := 1.0
+	newMult := 1.0
+	if e.Quality < len(mults) { oldMult = mults[e.Quality] }
+	if e.Quality+1 < len(mults) { newMult = mults[e.Quality+1] }
+	ratio := 1.0
+	if oldMult > 0 { ratio = newMult / oldMult }
+	for k, v := range e.Stats {
+		e.Stats[k] = round2f(v * ratio)
+	}
+	e.Quality++
+	p.Core.Gold -= goldCost
+	p.Core.Material -= matCost
+	p.refreshPower()
+	p.appendLogs([]string{fmt.Sprintf("装备升品：%s → 品质+%d（消耗 %d 金币 / %d 材料）", e.ID, e.Quality, goldCost, matCost)})
+	return e.Quality, e.Stats, nil
+}
+
+func round2f(v float64) float64 { return float64(int(v*100+0.5)) / 100 }
+
 // EnhanceEquip 强化装备（必成功，消耗金币+材料），战力即时更新。
 // v1.9.21 支持按装备实例 ID 精确定位（同一槽位可能有多件装备，按槽位强化会打错对象）；
 // itemID 为空时按槽位回退（兼容旧链路）。

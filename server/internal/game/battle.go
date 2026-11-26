@@ -335,7 +335,7 @@ func rollDrops(req BattleRequest, mon MonsterDef, rng *rand.Rand) []EquipItem {
 	out := []EquipItem{}
 	for rng.Float64() < chance {
 		slot := rollSlot(c, rng)
-		q := rng.Intn(len(c.Equipment.Quality))
+		q := rollQuality(rng) // v1.9.42 品质权重 roll（高阶品质递减，可出彩虹/暗影/混沌）
 		base := c.Equipment.BaseStatsBySlot[slot]
 		stats := map[string]float64{}
 		for k, v := range base {
@@ -354,18 +354,24 @@ func rollDrops(req BattleRequest, mon MonsterDef, rng *rand.Rand) []EquipItem {
 }
 
 // RollChestEquip 宝箱按 tier roll 一件装备（v1.9.35 开箱详细掉落）。
-// 概率与品质上限内置于表：wood 12%/精良，silver 25%/稀有，gold 45%/史诗。
+// 概率与品质上限内置于表：wood 12%/精良，silver 25%/稀有，gold 45%/史诗，
+// v1.9.42 新增 diamond 70%/彩虹、crystal 100%/混沌。
 // 返回 (装备, 是否命中)。复用战斗掉落同款属性生成（基值 ×0.0~1.3 随机浮动）。
 // v1.9.38：classID 用于武器分系——开出的武器按开箱玩家职业所属系生成。
 func RollChestEquip(classID, tier string, rng *rand.Rand) (EquipItem, bool) {
 	c := C()
-	chance := map[string]float64{"wood": 0.12, "silver": 0.25, "gold": 0.45}[tier]
+	chance := map[string]float64{"wood": 0.12, "silver": 0.25, "gold": 0.45, "diamond": 0.70, "crystal": 1.0}[tier]
 	if chance == 0 { chance = 0.12 }
 	if rng.Float64() >= chance { return EquipItem{}, false }
-	qCap := map[string]int{"wood": 1, "silver": 2, "gold": 3}[tier]
+	qCap := map[string]int{"wood": 1, "silver": 2, "gold": 3, "diamond": 5, "crystal": 7}[tier]
 	if qCap >= len(c.Equipment.Quality) { qCap = len(c.Equipment.Quality) - 1 }
 	slot := rollSlot(c, rng)
 	q := rng.Intn(qCap + 1)
+	if tier == "crystal" {
+		// 水晶箱品质下限彩虹（5）：在 5..qCap 内偏高端 roll
+		q = qCap - rng.Intn(3)
+		if q < 5 { q = 5 }
+	}
 	base := c.Equipment.BaseStatsBySlot[slot]
 	stats := map[string]float64{}
 	for k, v := range base {
@@ -375,6 +381,21 @@ func RollChestEquip(classID, tier string, rng *rand.Rand) (EquipItem, bool) {
 		ID: "chest_" + slot + "_" + fmtID(rng.Int63()), Slot: slot, Quality: q, Enhance: 0, Stats: stats,
 		ClassID: weaponClassIf(slot, classID),
 	}, true
+}
+
+// rollQuality 战斗掉落品质权重（v1.9.42 品质 8 档）：普通38/精良28/稀有18/史诗10/传说4.2/彩虹1.2/暗影0.5/混沌0.1（合计100）。
+func rollQuality(rng *rand.Rand) int {
+	r := rng.Float64() * 100
+	switch {
+	case r < 38: return 0
+	case r < 66: return 1
+	case r < 84: return 2
+	case r < 94: return 3
+	case r < 98.2: return 4
+	case r < 99.4: return 5
+	case r < 99.9: return 6
+	default: return 7
+	}
 }
 
 // weaponClassIf 仅武器槽返回职业所属武器系，其余槽位返回空（通用）。

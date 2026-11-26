@@ -106,12 +106,16 @@ func (m *SpawnManager) rollContent(spotType string, pityKey string) (tier int) {
 	r := m.rand.Float64()
 	if m.rolls[pityKey] >= pity { tier = 3; m.rolls[pityKey] = 0; return }
 	if spotType == "CHEST" {
-		// 木60 / 银30 / 金10
+		// v1.9.42：木52 / 银28 / 金12 / 钻2.5 / 水晶1.5（新增钻石箱/水晶箱，高档位总出现率 10%→16%）
 		switch {
-		case r < 0.10:
-			tier = 3 // 金
+		case r < 0.015:
+			tier = 5 // 水晶
 			m.rolls[pityKey] = 0
-		case r < 0.40:
+		case r < 0.04:
+			tier = 4 // 钻石
+		case r < 0.16:
+			tier = 3 // 金
+		case r < 0.44:
 			tier = 2 // 银
 		default:
 			tier = 1 // 木

@@ -24,8 +24,8 @@
     "_note": "服务端按累计时间驱动自动战斗；回合数仅作UI展示，不作终止条件。种子由服务端生成随战报记录。"
   },
   "drop": {
-    "equipChanceNormal": 0.3,
-    "equipChanceElite": 0.65,
+    "equipChanceNormal": 0.45,
+    "equipChanceElite": 0.85,
     "equipChanceBoss": 1.0,
     "bossDiamondMin": 50,
     "bossDiamondMax": 100,
@@ -59,6 +59,26 @@
           20,
           50
         ]
+      },
+      "diamond": {
+        "gold": [
+          600,
+          1200
+        ],
+        "gem": [
+          40,
+          80
+        ]
+      },
+      "crystal": {
+        "gold": [
+          1200,
+          2400
+        ],
+        "gem": [
+          90,
+          180
+        ]
       }
     },
     "potion": {
@@ -82,20 +102,31 @@
         120,
         300,
         800,
-        2000
+        2000,
+        4200,
+        8000,
+        15000
       ],
       "enhanceMult": 0.15,
-      "_note": "分解仓库装备返还：金币 goldBase[品质]×(1+强化×0.15) + 材料 matBase[品质]",
+      "_note": "v1.9.42 品质扩 8 档（+彩虹/暗影/混沌）；分解返金币+材料",
       "matBase": [
         10,
         30,
         80,
         200,
-        500
+        500,
+        1200,
+        2600,
+        6000
       ]
     },
     "chestExpRatio": 1.5,
-    "chestMatRatio": 0.05
+    "chestMatRatio": 0.05,
+    "qualityUp": {
+      "goldMult": 1.2,
+      "matMult": 0.6,
+      "_note": "升品消耗=新品质档分解金×goldMult / 材料×matMult"
+    }
   },
   "worldMap": {
     "worldSize": {

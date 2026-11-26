@@ -1,0 +1,67 @@
+{
+  "bundle": "item_chest_diamond",
+  "format": "parted_actions_v1",
+  "states": {
+    "closed": {
+      "fps": 1,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        }
+      ]
+    },
+    "open": {
+      "fps": 8,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 100,
+          "parts": {
+            "lid": {
+              "rot": -35
+            }
+          }
+        },
+        {
+          "t": 200,
+          "parts": {
+            "lid": {
+              "rot": -75
+            }
+          }
+        },
+        {
+          "t": 300,
+          "parts": {
+            "lid": {
+              "rot": -105
+            }
+          }
+        },
+        {
+          "t": 400,
+          "parts": {
+            "lid": {
+              "rot": -110
+            }
+          }
+        }
+      ]
+    }
+  },
+  "transform_fields": {
+    "dx": "x offset logic px",
+    "dy": "y offset logic px (up+)",
+    "rot": "degrees, clockwise+",
+    "sx": "x scale",
+    "sy": "y scale",
+    "alpha": "0..1, default 1"
+  },
+  "interpolation": "between keyframes: linear unless ease specified"
+}

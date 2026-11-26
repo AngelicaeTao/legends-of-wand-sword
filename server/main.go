@@ -51,5 +51,8 @@ func main() {
 		}
 		srv.Close()
 	}()
-	log.Fatal(srv.ListenAndServe())
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+	log.Println("服务已退出")
 }

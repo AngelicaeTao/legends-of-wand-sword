@@ -94,6 +94,29 @@ func (h *Hub) loop() {
 	}
 }
 
+// OnlinePlayers 当前在线玩家列表（v1.9.42 在线玩家面板）：按 lastSeen 去重（同一 userId 多连接取最新）。
+func OnlinePlayers() []map[string]any {
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	type key struct{ uid string }
+	seen := map[key]*WsClient{}
+	now := time.Now().UnixMilli()
+	for c := range hub.clients {
+		if now-c.lastSeen > 15000 { continue }
+		k := key{c.userID}
+		if old, ok := seen[k]; ok && c.lastSeen <= old.lastSeen { continue }
+		seen[k] = c
+	}
+	out := make([]map[string]any, 0, len(seen))
+	for _, c := range seen {
+		out = append(out, map[string]any{
+			"userId": c.userID, "name": c.name, "classId": c.classID,
+			"worldId": c.worldID, "channel": c.channel, "x": c.x, "y": c.y,
+		})
+	}
+	return out
+}
+
 // wsHandler HTTP Upgrade → WebSocket 连接。
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get("Sec-WebSocket-Key")

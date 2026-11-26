@@ -926,3 +926,7 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 
 /* v1.9.41 满血检测：HUD 回血药水快用按钮满血置灰 */
 .hp-potion.hp-full{opacity:.45;filter:grayscale(.7);cursor:default}
+
+/* v1.9.42 升品角标 / 新品质色 */
+.wg-detail.qup{color:#c9a0ff}
+.wg-detail.qup:hover{background:rgba(138,92,246,.18)}

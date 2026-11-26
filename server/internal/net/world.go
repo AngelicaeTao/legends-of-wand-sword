@@ -52,6 +52,8 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 	// 服务端权威 tier：忽略请求体 tier，按点位状态机 roll 出的档位发放（防客户端伪造）
 	tierName := "wood"
 	switch spot.Tier {
+	case 5: tierName = "crystal" // v1.9.42 水晶箱
+	case 4: tierName = "diamond" // v1.9.42 钻石箱
 	case 3: tierName = "gold"
 	case 2: tierName = "silver"
 	default: tierName = "wood"
@@ -78,6 +80,10 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 	// v1.9.35 详细掉落：药水按档位概率/数量 roll，装备按档位概率 roll 一件
 	potions := 0
 	switch q.Tier {
+	case "crystal": // v1.9.42 水晶箱：必给 5~7 瓶
+		potions = 5 + rand.Intn(3)
+	case "diamond": // v1.9.42 钻石箱：必给 3~4 瓶
+		potions = 3 + rand.Intn(2)
 	case "gold":
 		if rand.Intn(100) < 80 { potions = 2 + rand.Intn(2) }
 	case "silver":

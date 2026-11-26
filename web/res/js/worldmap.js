@@ -683,7 +683,7 @@ WMap.prototype.applySpots=function(spots){
       continue;
     }
     if(s.type==='CHEST'){
-      const tier=['wood','silver','gold'][Math.max(0,Math.min(2,(s.tier||1)-1))]||'wood';
+      const tier=['wood','silver','gold','diamond','crystal'][Math.max(0,Math.min(2,(s.tier||1)-1))]||'wood';
       const actor=this.makeFreshActor('item_chest_'+tier,'closed');
       this.chests.push({x:s.x,y:s.y,nodeId:s.nodeId,tier,state:'closed',actor,phase:Math.random()*6});
     }
@@ -887,6 +887,9 @@ WMap.prototype.bindInput=function(){
     // v1.9.31 家园功能点（仓库/挂机/换装镜）
     const hi=self.nearestHomeItem(wx,wy,200);
     if(hi)cands.push({d:Math.hypot(hi.x-wx,hi.y-wy),fn:()=>self.tryUseHomeItem(hi)});
+    // v1.9.42 点其他玩家 → 查看档案
+    const rp=self.nearestRemote(wx,wy,160);
+    if(rp)cands.push({d:Math.hypot(rp.x-wx,rp.y-wy),fn:()=>self.opts.onPlayer&&self.opts.onPlayer(rp)});
     if(cands.length){cands.sort((a,b)=>a.d-b.d);cands[0].fn();return;}
     // 已移除点击地面移动：仅保留 WASD/方向键移动，点击只用于交互（怪/箱/传送门）
   });
@@ -896,6 +899,7 @@ WMap.prototype.nearestMonster=function(x,y,maxd){let b=null,d0=maxd||110;for(con
 WMap.prototype.nearestChest=function(x,y,maxd){let b=null,d0=maxd||80;for(const c of this.chests){if(c.state!=='closed')continue;const d=Math.hypot(c.x-x,c.y-y);if(d<d0){d0=d;b=c;}}return b;};
 WMap.prototype.nearestPotion=function(x,y,maxd){let b=null,d0=maxd||80;for(const p of this.potions){if(p.state!=='ready')continue;const d=Math.hypot(p.x-x,p.y-y);if(d<d0){d0=d;b=p;}}return b;};
 WMap.prototype.nearestHomeItem=function(x,y,maxd){let b=null,d0=maxd||200;for(const h of this.homeItems){const d=Math.hypot(h.x-x,h.y-y);if(d<d0){d0=d;b=h;}}return b;};
+WMap.prototype.nearestRemote=function(x,y,maxd){let b=null,d0=maxd||120;for(const id in this.remote){const r=this.remote[id];const d=Math.hypot(r.x-x,r.y-y);if(d<d0){d0=d;b=r;}}return b;};
 /* v1.9.31 家园功能点交互：需走到附近（与宝箱/草药同规则） */
 WMap.prototype.tryUseHomeItem=function(h){
   if(Math.hypot(h.x-this.hero.x,h.y-this.hero.y)>300){
@@ -991,7 +995,13 @@ WMap.prototype.openChest=function(c){
 WMap.prototype.dropChestFrom=function(mon){
   mon.state='dead';
   if(mon.actor)mon.actor.playOnce('die');
-  const tier=mon.type==='boss_beetle'?'gold':(Math.random()<0.5?'silver':'wood');
+  // v1.9.42：BOSS 掉落可出钻石/水晶箱；普通怪掉落金箱概率小幅上调
+  let tier='wood';
+  const roll=Math.random();
+  if(mon.type==='boss_beetle'){ tier=roll<0.2?'crystal':roll<0.5?'diamond':'gold'; }
+  else if(roll<0.08){ tier='diamond'; }
+  else if(roll<0.16){ tier='gold'; }
+  else if(roll<0.5){ tier='silver'; }
   this.drops.push({x:mon.x,y:mon.y-90,groundY:mon.y,tier,actor:this.makeFreshActor('item_chest_'+tier,'closed'),vy:-120});
   return true;
 };
@@ -1321,12 +1331,12 @@ WMap.prototype.applySnapshot=function(players,selfId){
       const rb='char_'+((p.classId&&['warrior','mage','knight','fighter','sage','warlock'].indexOf(p.classId)>=0)?p.classId:'warrior');
       const actor=new this.StandeeActor(rb);
       actor.init().then(()=>actor.play('idle'));
-      this.remote[p.id]={x:p.x,y:p.y,name:p.name,actor};
+      this.remote[p.id]={x:p.x,y:p.y,name:p.name,userId:p.userId||'',actor};
     } else {
       const r=this.remote[p.id];
       // 插值：向目标坐标平滑移动（网络姿态平滑）
       r.x+=(p.x-r.x)*0.3;r.y+=(p.y-r.y)*0.3;
-      r.name=p.name;
+      r.name=p.name;r.userId=p.userId||'';
     }
   }
   for(const id in this.remote)if(!seen[id])delete this.remote[id];
@@ -1345,6 +1355,7 @@ WMap.prototype.openMapModal=function(){
   layer.id='wmapLayer';
   layer.innerHTML=`<div class="wmap-box">
     <div class="wmap-head"><b>${title}</b><span class="wmap-tip">M / Esc 关闭 · 点✕退出</span>
+      <button class="btn-gray" id="wmapOnline" style="margin-right:8px;padding:3px 12px">在线玩家</button>
       <button id="wmapClose" title="关闭 (Esc / M)">✕</button></div>
     <canvas id="wmapCv" width="960" height="540"></canvas>
     <div class="wmap-legend">
@@ -1360,6 +1371,7 @@ WMap.prototype.openMapModal=function(){
   document.body.appendChild(layer);
   const self=this;
   layer.querySelector('#wmapClose').onclick=()=>self.closeMapModal();
+  layer.querySelector('#wmapOnline').onclick=()=>{ self.opts.onOnlineList&&self.opts.onOnlineList(); };
   layer.addEventListener('mousedown',e=>{ if(e.target===layer)self.closeMapModal(); });
   // 底图兜底：当前世界缩略位图未就绪时再拉一张（家园用程序化整图兜底）
   if(!this.thumb){

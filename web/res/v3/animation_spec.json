@@ -1,347 +1,403 @@
 {
-  "version": "2.0",
-  "style": "parted_sprite_v1",
-  "driver": "cocos_example/PartActor.ts",
-  "coord": "origin=feet-center, x=right+/y=up+; pivot y-down, anchor y-up",
-  "scale": 4,
-  "palette_max_per_bundle": 16,
-  "bundles": {
-    "char_hero_mage": {
-      "parts": 10,
-      "part_names": [
-        "arm_l",
-        "arm_r",
-        "body",
-        "cape",
-        "hat",
-        "head",
-        "leg_l",
-        "leg_r",
-        "shadow",
-        "staff"
-      ],
-      "color_count": 16,
-      "states": {
-        "idle": {
-          "keys": 5,
-          "fps": 6,
-          "loop": true
-        },
-        "walk": {
-          "keys": 7,
-          "fps": 12,
-          "loop": true
-        },
-        "attack": {
-          "keys": 5,
-          "fps": 12,
-          "loop": false
-        },
-        "hit": {
-          "keys": 4,
-          "fps": 10,
-          "loop": false
-        },
-        "die": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "char_hero_mage_shadow.png",
-        "char_hero_mage_cape.png",
-        "char_hero_mage_leg_l.png",
-        "char_hero_mage_leg_r.png",
-        "char_hero_mage_body.png",
-        "char_hero_mage_arm_l.png",
-        "char_hero_mage_arm_r.png",
-        "char_hero_mage_head.png",
-        "char_hero_mage_hat.png",
-        "char_hero_mage_staff.png"
-      ]
+ "version": "2.0",
+ "style": "parted_sprite_v1",
+ "driver": "cocos_example/PartActor.ts",
+ "coord": "origin=feet-center, x=right+/y=up+; pivot y-down, anchor y-up",
+ "scale": 4,
+ "palette_max_per_bundle": 16,
+ "bundles": {
+  "char_hero_mage": {
+   "parts": 10,
+   "part_names": [
+    "arm_l",
+    "arm_r",
+    "body",
+    "cape",
+    "hat",
+    "head",
+    "leg_l",
+    "leg_r",
+    "shadow",
+    "staff"
+   ],
+   "color_count": 16,
+   "states": {
+    "idle": {
+     "keys": 5,
+     "fps": 6,
+     "loop": true
     },
-    "mon_slime": {
-      "parts": 4,
-      "part_names": [
-        "body",
-        "face",
-        "shadow",
-        "shine"
-      ],
-      "color_count": 6,
-      "states": {
-        "idle": {
-          "keys": 5,
-          "fps": 6,
-          "loop": true
-        },
-        "attack": {
-          "keys": 5,
-          "fps": 12,
-          "loop": false
-        },
-        "hit": {
-          "keys": 4,
-          "fps": 10,
-          "loop": false
-        },
-        "die": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "mon_slime_shadow.png",
-        "mon_slime_body.png",
-        "mon_slime_face.png",
-        "mon_slime_shine.png"
-      ]
+    "walk": {
+     "keys": 7,
+     "fps": 12,
+     "loop": true
     },
-    "mon_skeleton": {
-      "parts": 9,
-      "part_names": [
-        "arm_l",
-        "arm_r",
-        "cape",
-        "head",
-        "leg_l",
-        "leg_r",
-        "shadow",
-        "torso",
-        "weapon"
-      ],
-      "color_count": 9,
-      "states": {
-        "idle": {
-          "keys": 5,
-          "fps": 6,
-          "loop": true
-        },
-        "attack": {
-          "keys": 5,
-          "fps": 12,
-          "loop": false
-        },
-        "hit": {
-          "keys": 4,
-          "fps": 10,
-          "loop": false
-        },
-        "die": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "mon_skeleton_shadow.png",
-        "mon_skeleton_leg_l.png",
-        "mon_skeleton_leg_r.png",
-        "mon_skeleton_torso.png",
-        "mon_skeleton_cape.png",
-        "mon_skeleton_arm_l.png",
-        "mon_skeleton_arm_r.png",
-        "mon_skeleton_weapon.png",
-        "mon_skeleton_head.png"
-      ]
+    "attack": {
+     "keys": 5,
+     "fps": 12,
+     "loop": false
     },
-    "mon_bat": {
-      "parts": 7,
-      "part_names": [
-        "body",
-        "eye_l",
-        "eye_r",
-        "head",
-        "shadow",
-        "wing_l",
-        "wing_r"
-      ],
-      "color_count": 8,
-      "states": {
-        "idle": {
-          "keys": 5,
-          "fps": 8,
-          "loop": true
-        },
-        "attack": {
-          "keys": 5,
-          "fps": 12,
-          "loop": false
-        },
-        "hit": {
-          "keys": 4,
-          "fps": 10,
-          "loop": false
-        },
-        "die": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "mon_bat_shadow.png",
-        "mon_bat_body.png",
-        "mon_bat_wing_l.png",
-        "mon_bat_wing_r.png",
-        "mon_bat_head.png",
-        "mon_bat_eye_l.png",
-        "mon_bat_eye_r.png"
-      ]
+    "hit": {
+     "keys": 4,
+     "fps": 10,
+     "loop": false
     },
-    "mon_boss_beetle": {
-      "parts": 11,
-      "part_names": [
-        "eye_l",
-        "eye_r",
-        "head",
-        "horn_l",
-        "horn_r",
-        "leg_l1",
-        "leg_l2",
-        "leg_r1",
-        "leg_r2",
-        "shadow",
-        "shell"
-      ],
-      "color_count": 8,
-      "states": {
-        "idle": {
-          "keys": 5,
-          "fps": 6,
-          "loop": true
-        },
-        "attack": {
-          "keys": 5,
-          "fps": 12,
-          "loop": false
-        },
-        "hit": {
-          "keys": 4,
-          "fps": 10,
-          "loop": false
-        },
-        "die": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "mon_boss_beetle_shadow.png",
-        "mon_boss_beetle_leg_l1.png",
-        "mon_boss_beetle_leg_l2.png",
-        "mon_boss_beetle_leg_r1.png",
-        "mon_boss_beetle_leg_r2.png",
-        "mon_boss_beetle_shell.png",
-        "mon_boss_beetle_head.png",
-        "mon_boss_beetle_horn_l.png",
-        "mon_boss_beetle_horn_r.png",
-        "mon_boss_beetle_eye_l.png",
-        "mon_boss_beetle_eye_r.png"
-      ]
-    },
-    "item_chest_wood": {
-      "parts": 3,
-      "part_names": [
-        "box",
-        "lid",
-        "shadow"
-      ],
-      "color_count": 8,
-      "states": {
-        "closed": {
-          "keys": 1,
-          "fps": 1,
-          "loop": false
-        },
-        "open": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "item_chest_wood_shadow.png",
-        "item_chest_wood_box.png",
-        "item_chest_wood_lid.png"
-      ]
-    },
-    "item_chest_silver": {
-      "parts": 3,
-      "part_names": [
-        "box",
-        "lid",
-        "shadow"
-      ],
-      "color_count": 9,
-      "states": {
-        "closed": {
-          "keys": 1,
-          "fps": 1,
-          "loop": false
-        },
-        "open": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "item_chest_silver_shadow.png",
-        "item_chest_silver_box.png",
-        "item_chest_silver_lid.png"
-      ]
-    },
-    "item_chest_gold": {
-      "parts": 3,
-      "part_names": [
-        "box",
-        "lid",
-        "shadow"
-      ],
-      "color_count": 7,
-      "states": {
-        "closed": {
-          "keys": 1,
-          "fps": 1,
-          "loop": false
-        },
-        "open": {
-          "keys": 5,
-          "fps": 8,
-          "loop": false
-        }
-      },
-      "files": [
-        "parts.json",
-        "actions.json",
-        "item_chest_gold_shadow.png",
-        "item_chest_gold_box.png",
-        "item_chest_gold_lid.png"
-      ]
+    "die": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
     }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "char_hero_mage_shadow.png",
+    "char_hero_mage_cape.png",
+    "char_hero_mage_leg_l.png",
+    "char_hero_mage_leg_r.png",
+    "char_hero_mage_body.png",
+    "char_hero_mage_arm_l.png",
+    "char_hero_mage_arm_r.png",
+    "char_hero_mage_head.png",
+    "char_hero_mage_hat.png",
+    "char_hero_mage_staff.png"
+   ]
   },
-  "summary": {
-    "total_bundles": 8,
-    "total_part_png": 50,
-    "total_actions": 27,
-    "legacy_frame_png": 0
+  "mon_slime": {
+   "parts": 4,
+   "part_names": [
+    "body",
+    "face",
+    "shadow",
+    "shine"
+   ],
+   "color_count": 6,
+   "states": {
+    "idle": {
+     "keys": 5,
+     "fps": 6,
+     "loop": true
+    },
+    "attack": {
+     "keys": 5,
+     "fps": 12,
+     "loop": false
+    },
+    "hit": {
+     "keys": 4,
+     "fps": 10,
+     "loop": false
+    },
+    "die": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "mon_slime_shadow.png",
+    "mon_slime_body.png",
+    "mon_slime_face.png",
+    "mon_slime_shine.png"
+   ]
+  },
+  "mon_skeleton": {
+   "parts": 9,
+   "part_names": [
+    "arm_l",
+    "arm_r",
+    "cape",
+    "head",
+    "leg_l",
+    "leg_r",
+    "shadow",
+    "torso",
+    "weapon"
+   ],
+   "color_count": 9,
+   "states": {
+    "idle": {
+     "keys": 5,
+     "fps": 6,
+     "loop": true
+    },
+    "attack": {
+     "keys": 5,
+     "fps": 12,
+     "loop": false
+    },
+    "hit": {
+     "keys": 4,
+     "fps": 10,
+     "loop": false
+    },
+    "die": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "mon_skeleton_shadow.png",
+    "mon_skeleton_leg_l.png",
+    "mon_skeleton_leg_r.png",
+    "mon_skeleton_torso.png",
+    "mon_skeleton_cape.png",
+    "mon_skeleton_arm_l.png",
+    "mon_skeleton_arm_r.png",
+    "mon_skeleton_weapon.png",
+    "mon_skeleton_head.png"
+   ]
+  },
+  "mon_bat": {
+   "parts": 7,
+   "part_names": [
+    "body",
+    "eye_l",
+    "eye_r",
+    "head",
+    "shadow",
+    "wing_l",
+    "wing_r"
+   ],
+   "color_count": 8,
+   "states": {
+    "idle": {
+     "keys": 5,
+     "fps": 8,
+     "loop": true
+    },
+    "attack": {
+     "keys": 5,
+     "fps": 12,
+     "loop": false
+    },
+    "hit": {
+     "keys": 4,
+     "fps": 10,
+     "loop": false
+    },
+    "die": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "mon_bat_shadow.png",
+    "mon_bat_body.png",
+    "mon_bat_wing_l.png",
+    "mon_bat_wing_r.png",
+    "mon_bat_head.png",
+    "mon_bat_eye_l.png",
+    "mon_bat_eye_r.png"
+   ]
+  },
+  "mon_boss_beetle": {
+   "parts": 11,
+   "part_names": [
+    "eye_l",
+    "eye_r",
+    "head",
+    "horn_l",
+    "horn_r",
+    "leg_l1",
+    "leg_l2",
+    "leg_r1",
+    "leg_r2",
+    "shadow",
+    "shell"
+   ],
+   "color_count": 8,
+   "states": {
+    "idle": {
+     "keys": 5,
+     "fps": 6,
+     "loop": true
+    },
+    "attack": {
+     "keys": 5,
+     "fps": 12,
+     "loop": false
+    },
+    "hit": {
+     "keys": 4,
+     "fps": 10,
+     "loop": false
+    },
+    "die": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "mon_boss_beetle_shadow.png",
+    "mon_boss_beetle_leg_l1.png",
+    "mon_boss_beetle_leg_l2.png",
+    "mon_boss_beetle_leg_r1.png",
+    "mon_boss_beetle_leg_r2.png",
+    "mon_boss_beetle_shell.png",
+    "mon_boss_beetle_head.png",
+    "mon_boss_beetle_horn_l.png",
+    "mon_boss_beetle_horn_r.png",
+    "mon_boss_beetle_eye_l.png",
+    "mon_boss_beetle_eye_r.png"
+   ]
+  },
+  "item_chest_wood": {
+   "parts": 3,
+   "part_names": [
+    "box",
+    "lid",
+    "shadow"
+   ],
+   "color_count": 8,
+   "states": {
+    "closed": {
+     "keys": 1,
+     "fps": 1,
+     "loop": false
+    },
+    "open": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "item_chest_wood_shadow.png",
+    "item_chest_wood_box.png",
+    "item_chest_wood_lid.png"
+   ]
+  },
+  "item_chest_silver": {
+   "parts": 3,
+   "part_names": [
+    "box",
+    "lid",
+    "shadow"
+   ],
+   "color_count": 9,
+   "states": {
+    "closed": {
+     "keys": 1,
+     "fps": 1,
+     "loop": false
+    },
+    "open": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "item_chest_silver_shadow.png",
+    "item_chest_silver_box.png",
+    "item_chest_silver_lid.png"
+   ]
+  },
+  "item_chest_gold": {
+   "parts": 3,
+   "part_names": [
+    "box",
+    "lid",
+    "shadow"
+   ],
+   "color_count": 7,
+   "states": {
+    "closed": {
+     "keys": 1,
+     "fps": 1,
+     "loop": false
+    },
+    "open": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "item_chest_gold_shadow.png",
+    "item_chest_gold_box.png",
+    "item_chest_gold_lid.png"
+   ]
+  },
+  "item_chest_diamond": {
+   "parts": 3,
+   "part_names": [
+    "box",
+    "lid",
+    "shadow"
+   ],
+   "color_count": 7,
+   "states": {
+    "closed": {
+     "keys": 1,
+     "fps": 1,
+     "loop": false
+    },
+    "open": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "item_chest_gold_shadow.png",
+    "item_chest_gold_box.png",
+    "item_chest_gold_lid.png"
+   ]
+  },
+  "item_chest_crystal": {
+   "parts": 3,
+   "part_names": [
+    "box",
+    "lid",
+    "shadow"
+   ],
+   "color_count": 7,
+   "states": {
+    "closed": {
+     "keys": 1,
+     "fps": 1,
+     "loop": false
+    },
+    "open": {
+     "keys": 5,
+     "fps": 8,
+     "loop": false
+    }
+   },
+   "files": [
+    "parts.json",
+    "actions.json",
+    "item_chest_gold_shadow.png",
+    "item_chest_gold_box.png",
+    "item_chest_gold_lid.png"
+   ]
   }
+ },
+ "summary": {
+  "total_bundles": 8,
+  "total_part_png": 50,
+  "total_actions": 27,
+  "legacy_frame_png": 0
+ }
 }

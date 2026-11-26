@@ -1,16 +1,16 @@
 {
-  "_readme": "怪物配置。sprite 为像素资源包中的主体名（动画帧 = sprites_{idle,attack,hit,die}）。改这里即可调怪物强度/掉落。。v1.9.40 全员强度下调（hp 约-12%、atk 约-16%、def 下调）。",
+  "_readme": "怪物配置。sprite 为像素资源包中的主体名（动画帧 = sprites_{idle,attack,hit,die}）。改这里即可调怪物强度/掉落。。v1.9.40 全员强度下调（hp 约-12%、atk 约-16%、def 下调）。。v1.9.42 参照玩家基准（Lv1 战士 120血/12.6攻/5.8防）再下调约 30%：tier1 怪单次攻击 ≤ 角色血量 8%，血蝙蝠攻 22→15。",
   "monsters": [
     {
       "id": "slime",
       "name": "史莱姆",
       "sprite": "slime",
       "base": {
-        "hp": 70,
-        "atk": 8,
-        "def": 2
+        "hp": 55,
+        "atk": 6,
+        "def": 1
       },
-      "growth": 1.15,
+      "growth": 1.12,
       "exp": 36,
       "gold": 24,
       "dropTier": 0
@@ -20,11 +20,11 @@
       "name": "骷髅兵",
       "sprite": "skeleton",
       "base": {
-        "hp": 114,
-        "atk": 13,
-        "def": 5
+        "hp": 80,
+        "atk": 9,
+        "def": 3
       },
-      "growth": 1.18,
+      "growth": 1.14,
       "exp": 66,
       "gold": 45,
       "dropTier": 1
@@ -34,11 +34,11 @@
       "name": "洞穴蝙蝠",
       "sprite": "bat",
       "base": {
-        "hp": 84,
-        "atk": 17,
-        "def": 2
+        "hp": 60,
+        "atk": 11,
+        "def": 1
       },
-      "growth": 1.16,
+      "growth": 1.12,
       "exp": 78,
       "gold": 54,
       "dropTier": 1
@@ -49,11 +49,11 @@
       "sprite": "boss_beetle",
       "isBoss": true,
       "base": {
-        "hp": 598,
-        "atk": 36,
-        "def": 12
+        "hp": 480,
+        "atk": 26,
+        "def": 9
       },
-      "growth": 1.22,
+      "growth": 1.18,
       "exp": 540,
       "gold": 660,
       "dropTier": 3
@@ -63,11 +63,11 @@
       "name": "毒液史莱姆",
       "sprite": "slime_toxic",
       "base": {
-        "hp": 101,
-        "atk": 13,
-        "def": 3
+        "hp": 72,
+        "atk": 9,
+        "def": 2
       },
-      "growth": 1.19,
+      "growth": 1.15,
       "exp": 58,
       "gold": 44,
       "dropTier": 1
@@ -77,11 +77,11 @@
       "name": "骷髅弓手",
       "sprite": "skeleton_archer",
       "base": {
-        "hp": 92,
-        "atk": 18,
-        "def": 3
+        "hp": 66,
+        "atk": 12,
+        "def": 2
       },
-      "growth": 1.19,
+      "growth": 1.15,
       "exp": 76,
       "gold": 54,
       "dropTier": 1
@@ -91,11 +91,11 @@
       "name": "血蝙蝠",
       "sprite": "bat_crimson",
       "base": {
-        "hp": 110,
-        "atk": 22,
-        "def": 3
+        "hp": 78,
+        "atk": 15,
+        "def": 2
       },
-      "growth": 1.17,
+      "growth": 1.13,
       "exp": 94,
       "gold": 66,
       "dropTier": 1

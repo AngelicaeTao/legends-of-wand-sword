@@ -88,7 +88,7 @@ async function preload(){
   for(const c of ['warrior','mage','fighter','knight','sage','warlock']) add(`${RES}v3/characters/cards/ui_card_${c}.png`,'card_'+c);
   for(const ic of ['bag','coin','guild','hero','map','potion','quest','skill','storage','sword']) add(`${RES}v3/icons/icon_${ic}.png`,'icon_'+ic);
   // 预载部件动画 bundle（角色+怪物+宝箱）
-  const parts=['char_hero_mage','mon_slime','mon_skeleton','mon_bat','mon_boss_beetle','item_chest_wood','item_chest_silver','item_chest_gold'];
+  const parts=['char_hero_mage','mon_slime','mon_skeleton','mon_bat','mon_boss_beetle','item_chest_wood','item_chest_silver','item_chest_gold','item_chest_diamond','item_chest_crystal'];
   jobs.push(window.PartActor.preload(parts));
   let done=0; const total=jobs.length;
   await Promise.all(jobs.map(j=>Promise.resolve(j).then(()=>{$('loadBar').style.width=Math.round(++done/total*100)+'%';})));
@@ -114,6 +114,8 @@ const worldMap=new WorldMap($('cvExplore'),{
   onChest:(chest)=>onChestOpened(chest),         // 开箱动画开始 → 服务端权威入账
   onPotion:(p)=>onPotionPicked(p),               // v1.9.27 采集草药 → 服务端权威入仓
   onGate:(gate)=>askTravel(gate),                // 点传送门 → 世界切换确认（家园大门 to=BACK）
+  onPlayer:(p)=>askPlayerProfile(p),             // v1.9.42 点其他玩家 → 查看档案
+  onOnlineList:()=>showOnlinePlayers(),          // v1.9.42 大地图 → 在线玩家列表
   onHomeItem:(h)=>openHomeFunc(h),               // v1.9.31 家园功能点（仓库/挂机修炼/换装镜）
   onHint:(msg)=>{ const el=$('worldHintText'); if(el){ el.textContent=msg; clearTimeout(el._t); el._t=setTimeout(()=>{el.textContent='WASD/方向键移动 · 点怪交战 · 点宝箱开启 · 点⇄传送';},2200);} },
   onTile:(k)=>{ /* 记录探索格子 */ }
@@ -443,7 +445,7 @@ function updateInteractHint(){
   const ch=worldMap.nearestChest(h.x,h.y,80);
   let key='',html='';
   if(mon){key='m'+mon.nodeId;html=ICON.sword(15,'#f0d590')+'<span>点击「'+mon.name+'」交战</span>';}
-  else if(ch){key='c'+ch.nodeId;html=ICON.chest(15,'#f0d590')+'<span>点击宝箱开启（'+({wood:'木',silver:'银',gold:'金'}[ch.tier])+'）</span>';}
+  else if(ch){key='c'+ch.nodeId;html=ICON.chest(15,'#f0d590')+'<span>点击宝箱开启（'+({wood:'木',silver:'银',gold:'金',diamond:'钻石',crystal:'水晶'}[ch.tier])+'）</span>';}
   if(!key){el.classList.add('hidden');_hintKey='';return;}
   if(key!==_hintKey){_hintKey=key;el.innerHTML=html;}
   el.classList.remove('hidden');
@@ -886,23 +888,23 @@ function recentLogs(){
   }).join('');
   return `<div class="sec-title">最近动态</div><div class="log-list">${rows}</div>`;
 }
-const QUALITY=['普通','精良','稀有','史诗','传说'];
+const QUALITY=['普通','精良','稀有','史诗','传说','彩虹','暗影','混沌'];
 // v1.9.27 中文名显示：装备=品质+部位，消耗品走 ITEM_CN 映射（杜绝内部 ID 乱码上屏）
 const SLOT_CN={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
 const ITEM_CN={potion_s:'回血药水',potion_l:'大瓶回血药水',药水:'回血药水',回血药水:'回血药水'};
 // v1.9.38 武器分系：两套武器命名（按品质），穿戴/掉落/背包全链路一致
-const WEAPON_NAMES={warrior:['木剑','铁剑','精钢战刃','骑士重剑','屠龙战刃'],mage:['学徒法杖','橡木法杖','符文法杖','贤者宝杖','龙魂法杖']};
+const WEAPON_NAMES={warrior:['木剑','铁剑','精钢战刃','骑士重剑','屠龙战刃','耀光圣剑','噬影魔刃','混沌·诸天剑'],mage:['学徒法杖','橡木法杖','符文法杖','贤者宝杖','龙魂法杖','星辉法杖','暗影权杖','混沌·万象杖']};
 const WC_CN={warrior:'战士',mage:'法师'};
 function wcTag(e){ if(!e||e.slot!=='weapon'||!e.classId)return''; const m=e.classId==='mage'?'✨':'⚔';
   return `<span class="wc-tag ${e.classId==='mage'?'m':'w'}">${m}${WC_CN[e.classId]}系</span>`; }
-function eqCN(e){ if(!e)return'装备'; const q=Math.max(0,Math.min(4,e.quality||0));
+function eqCN(e){ if(!e)return'装备'; const q=Math.max(0,Math.min(7,e.quality||0));
   if(e.slot==='weapon'&&e.classId){ const nm=(WEAPON_NAMES[e.classId]||[])[q]; if(nm)return WC_CN[e.classId]+'系·'+nm; }
   return QUALITY[q]+(SLOT_CN[e.slot]||e.slot||'装备'); }
 function itemCN(id){ return ITEM_CN[id]||id; }
 // v1.9.28 查单件装备战力（来源：服务端 /api/stats/calc 的 equipPowers）
 function pwOf(e){ if(!e||!heroStats||!heroStats.equipPowers)return null; const x=heroStats.equipPowers.find(p=>p.id===e.id); return x?Math.round(x.power):null; }
 function pwBadge(e){ const pw=pwOf(e); return pw!=null?`<span class="eq-pw">战力 +${pw}</span>`:''; }
-const QCOLOR=['#9aa7bd','#5fd38a','#5aa8e0','#b98cf0','#e8a33c'];
+const QCOLOR=['#9aa7bd','#5fd38a','#5aa8e0','#b98cf0','#e8a33c','#5fe3c0','#8a5cf6','#ff5c8a'];
 
 /* ============================================================
    面板渲染（单入口单出口，面板内 tab 不跨面板）
@@ -1711,6 +1713,7 @@ function renderWarehouse(){
         <div class="wgi" style="background:#b8862f">${slotIco[e.slot]||ICON.sword(24,'#2a1c08')}</div>${eqCN(e)}${e.enhance?(' +'+e.enhance):''}<div class="wq">x1</div>
         ${pwBadge(it.equip)||''}
         <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金+${MAT[qi]||10}材</span>
+        ${qi<7?`<span class="wg-detail qup" data-qup="${it.id}" title="升品（品质+1）">⬆ ${QUALITY[qi]}→${QUALITY[qi+1]||'MAX'}</span>`:''}
       </div>`;}).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
     <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · 点击选择数量取出）</span></div>
     <div class="wg-grid">${whGoods.map(it=>`
@@ -1729,6 +1732,33 @@ function renderWarehouse(){
       flash((action==='deposit'||action==='wh_equip_in'?'已存入 ':'已取出 ')+(name||itemCN(itemId))+(qty>1?' ×'+qty:''));
     }catch(e){window.SFX&&SFX.fail();flash('操作失败：'+e.message);}
   };
+  // v1.9.42 装备升品：品质+1（最高混沌），属性按品质乘数比例重算
+  body.querySelectorAll('.wg-detail.qup').forEach(el=>{
+    el.onclick=(ev)=>{
+      ev.stopPropagation();
+      const id=el.dataset.qup;
+      const it=(state.warehouse||[]).find(x=>x.id===id&&x.kind==='equip');
+      const e=it&&it.equip||{};
+      const qi=Math.max(0,Math.min(7,e.quality||0));
+      const DEC=[40,120,300,800,2000,4200,8000,15000], MAT=[10,30,80,200,500,1200,2600,6000];
+      const nq=qi+1;
+      const goldC=Math.round((DEC[Math.min(nq,7)]||40)*1.2), matC=Math.round((MAT[Math.min(nq,7)]||10)*0.6);
+      showModal(`<h2>装备升品</h2><div class="msub">将 <b style="color:${QCOLOR[qi]}">${QUALITY[qi]}</b>「${eqCN(e)}${e.enhance?(' +'+e.enhance):''}」提升为 <b style="color:${QCOLOR[Math.min(nq,7)]}">${QUALITY[Math.min(nq,7)]}</b>？<br>属性按品质乘数重算提升 · 消耗 <b style="color:#ffd76b">${fmt(goldC)} 金币</b> + <b style="color:#9ad6ff">${matC} 材料</b></div>
+        <div class="divider"></div>
+        <div class="enc-btns"><button class="big-btn goldbtn" id="doQup">确认升品</button><button class="btn-gray" id="cancelQup">再想想</button></div>`);
+      $('cancelQup').onclick=hideModal;
+      $('doQup').onclick=async()=>{
+        try{
+          const r=await api('/api/player/action',{userId:uid(),action:'quality_up',itemId:id});
+          hideModal();
+          if(r.state){state=r.state;syncHud();await refreshStats();}
+          window.SFX&&SFX.buy&&SFX.buy();
+          toastModal('升品成功',eqCN(e)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||goldC)+' 金币 / '+(r.cost&&r.cost.material||matC)+' 材料）');
+          renderPanel();
+        }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('升品失败',err.message); }
+      };
+    };
+  });
   // 可堆叠物品数量确认条：显示物品名/最大量，输入或点「全部」，确定才真正存取
   let confirmOp=null; // {id, max, action, name}
   const openConfirm=(id,max,action,name)=>{
@@ -1959,6 +1989,70 @@ function toastModal(title,sub){
 }
 // 点击地图上的怪物 → 交战确认（单出口：交战进战斗 / 绕行回地图）
 // v1.9.36 群怪模版：弹窗按点位组合渲染敌方阵容贴图（与服务端结算同源，所见即所战）
+/* ---- v1.9.42 玩家档案 / 在线玩家列表 ---- */
+async function askPlayerProfile(p){
+  if(view!=='world')return;
+  worldMap.active=false;
+  showModal(`<h2>玩家档案</h2><div class="msub">正在查询 <b style="color:#f0d590">${p.name||'玩家'}</b> …</div>`);
+  try{
+    const uid2=p.userId||p.uid;
+    if(!uid2){ hideModal(); toastModal('玩家档案','该玩家信息暂不可见（未登录游客）'); worldMap.active=true; return; }
+    const d=await api('/api/player/profile?userId='+encodeURIComponent(uid2));
+    const cls=(CFG&&CFG.classes.classes.find(x=>x.id===d.classId)||{}).name||d.classId;
+    const eqRows=(d.equips||[]).map(e=>{
+      const q=Math.max(0,Math.min(7,e.quality||0));
+      return `<tr><td style="color:${QCOLOR[q]}">${QUALITY[q]}</td><td>${SLOT_CN[e.slot]||e.slot}</td><td>${e.enhance?('+'+e.enhance):'—'}</td></tr>`;
+    }).join('')||'<tr><td colspan="3">未穿戴装备</td></tr>';
+    const gr={president:'会长',officer:'副会长',member:'成员'}[d.guildRole]||d.guildRole;
+    showModal(`<h2>玩家档案</h2>
+      <div class="guild-hero" style="margin:10px 0">
+        <div class="gh-emblem">${ICON.card?ICON.card(40):ICON.shield(40,'#5a6b80')}</div>
+        <div class="gh-meta">
+          <div class="gh-name">${d.name} ${d.online?'<em style="color:#7fe0a0;font-style:normal">● 在线</em>':'<em style="color:#8a93a6;font-style:normal">● 离线</em>'}</div>
+          <div class="gh-sub">${cls} · Lv.${d.level} · 战力 ${fmt(d.power)}${d.guild?(' · 公会 '+d.guild+(gr?('（'+gr+'）'):'')):' · 未加入公会'}</div>
+        </div>
+      </div>
+      <div class="sec-title">穿戴装备</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="color:#8a93a6"><th style="text-align:left;padding:4px">品质</th><th style="text-align:left;padding:4px">部位</th><th style="text-align:left;padding:4px">强化</th></tr></thead>
+        <tbody>${eqRows}</tbody>
+      </table>
+      <div class="enc-btns"><button class="btn-gray" id="pfClose">关闭</button></div>`);
+    $('pfClose').onclick=()=>{ hideModal(); worldMap.active=true; };
+  }catch(e){
+    hideModal(); worldMap.active=true;
+    toastModal('玩家档案','查询失败：'+e.message);
+  }
+}
+async function showOnlinePlayers(){
+  worldMap.active=false;
+  showModal(`<h2>在线玩家</h2><div class="msub">正在获取当前在线名单…</div>`);
+  try{
+    const r=await api('/api/players/online');
+    const ps=r.players||[];
+    const rows=ps.map((p,i)=>{
+      const cls=(CFG&&CFG.classes.classes.find(x=>x.id===p.classId)||{}).name||p.classId;
+      const wn={W1:'青草平原',W2:'迷雾森林',W3:'赤焰峡谷',W4:'冰霜高原',W5:'流沙遗迹',W6:'星陨之巅',HOME:'家园'}[p.worldId]||p.worldId;
+      return `<div class="gr-row">
+        <div class="gr-emb">${ICON.card?ICON.card(22,'#f0d590'):ICON.shield(22,'#f0d590')}</div>
+        <div class="gr-main"><div class="gr-name">${p.name} <em>${cls}</em></div>
+          <div class="gr-sub">${wn} · ${p.channel+1} 线</div></div>
+        <button class="btn-gray gr-view" data-uid="${p.userId||''}" data-name="${p.name}" ${p.userId?'':'disabled style="opacity:.45"'}>档案</button>
+      </div>`;
+    }).join('')||'<div class="sec-sub">当前没有其他玩家在线</div>';
+    showModal(`<h2>在线玩家（${ps.length}）</h2><div style="max-height:340px;overflow:auto">${rows}</div>
+      <div class="enc-btns"><button class="btn-gray" id="olClose">关闭</button></div>`);
+    $('olClose').onclick=()=>{ hideModal(); worldMap.active=true; };
+    document.querySelectorAll('.gr-view').forEach(b=>b.onclick=async()=>{
+      hideModal();
+      await askPlayerProfile({userId:b.dataset.uid,name:b.dataset.name});
+    });
+  }catch(e){
+    hideModal(); worldMap.active=true;
+    toastModal('在线玩家','获取失败：'+e.message);
+  }
+}
+
 function askEncounter(mon){
   if(view!=='world'||panel||battlePlaying)return;
   worldMap.active=false;
@@ -2051,7 +2145,7 @@ async function onChestOpened(chest){
   }catch(e){ reward=null; chestErr=e.message||''; }
   if(reward&&window.Quest)Quest.progress('chest',1);
   if(window.SFX){ if(reward)SFX.chest(); else SFX.deny(); }
-  const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱'}[chest.tier]||'宝箱';
+  const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱',diamond:'钻石宝箱',crystal:'水晶宝箱'}[chest.tier]||'宝箱';
   setTimeout(()=>{
     const rw=reward||{exp:0,gold:0,gem:0,items:[]};
     // v1.9.35 开箱结算重构：顶部经验/金币/钻石，下方可拖动格子区展示额外物品（材料/药水/装备）

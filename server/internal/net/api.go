@@ -31,6 +31,62 @@ func FlushSaves() error {
 	return disk.FlushAll()
 }
 
+// decomposeTables 从 economy.drop.decompose 读品质基准表（单件分解与升品共用）。
+func decomposeTables() (goldBase, matBase []int) {
+	gb := []int{40, 120, 300, 800, 2000, 4200, 8000, 15000}
+	mb := []int{10, 30, 80, 200, 500, 1200, 2600, 6000}
+	if cfg, ok := game.C().Economy.Drop["decompose"].(map[string]any); ok {
+		if b, ok := cfg["goldBase"].([]any); ok && len(b) > 0 {
+			gb = make([]int, len(b))
+			for i, v := range b { gb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
+		}
+		if b, ok := cfg["matBase"].([]any); ok && len(b) > 0 {
+			mb = make([]int, len(b))
+			for i, v := range b { mb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
+		}
+	}
+	return gb, mb
+}
+
+// playersOnline 在线玩家列表（v1.9.42）：ws Hub 权威在线连接（15s 心跳窗口）。
+func playersOnline(w http.ResponseWriter, r *http.Request) {
+	jsonOut(w, map[string]any{"players": OnlinePlayers(), "ts": time.Now().UnixMilli()})
+}
+
+// playerProfile 玩家公开档案（v1.9.42）：点其他玩家查看。只暴露公开信息，不含仓库/资源。
+func playerProfile(w http.ResponseWriter, r *http.Request) {
+	uid := r.URL.Query().Get("userId")
+	if uid == "" {
+		http.Error(w, "userId 不能为空", 400); return
+	}
+	p, err := disk.Load(uid)
+	if err != nil || p == nil {
+		http.Error(w, "玩家不存在或尚未创建角色", 404); return
+	}
+	equips := []map[string]any{}
+	for _, e := range p.Equip {
+		if !e.Equipped { continue }
+		equips = append(equips, map[string]any{
+			"id": e.ID, "slot": e.Slot, "quality": e.Quality, "enhance": e.Enhance,
+			"stats": e.Stats, "classId": e.ClassID,
+		})
+	}
+	gname, grole := "", ""
+	if g, role := store.Guilds().GuildByUser(uid); g != nil {
+		gname, grole = g.Name, role
+	}
+	online := false
+	for _, op := range OnlinePlayers() {
+		if op["userId"] == uid { online = true; break }
+	}
+	jsonOut(w, map[string]any{
+		"userId": uid, "name": p.Core.Name, "level": p.Core.Level,
+		"classId": p.Core.ClassID, "power": p.Core.BattlePower,
+		"guild": gname, "guildRole": grole, "online": online,
+		"equips": equips,
+	})
+}
+
 func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 	webFile = webFileArg
 	webResDir = resDir
@@ -80,6 +136,8 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 	mux.HandleFunc("/api/world/travel", worldTravel)
 
 	// 实时多人（同端口 WebSocket）
+	mux.HandleFunc("/api/players/online", playersOnline)  // v1.9.42 在线玩家列表
+	mux.HandleFunc("/api/player/profile", playerProfile)  // v1.9.42 他人玩家档案
 	mux.HandleFunc("/ws", wsHandler)
 
 	mux.HandleFunc("/api/stats/calc", calcStats)
@@ -552,6 +610,41 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		if e != nil { http.Error(w, e.Error(), 400); return }
 		extra["enhanceLevel"] = lvl
 		extra["enhanceCost"] = map[string]int{"gold": goldCost, "material": matCost}
+	case "quality_up": // v1.9.42 装备升品：品质+1（最高混沌），按新档分解基准折算消耗
+		mults := []float64{}
+		for _, qd := range game.C().Equipment.Quality {
+			mults = append(mults, qd.Mult)
+		}
+		cfg, _ := game.C().Economy.Drop["qualityUp"].(map[string]any)
+		goldMult, matMult := 1.2, 0.6
+		if cfg != nil {
+			if v, ok := cfg["goldMult"].(float64); ok { goldMult = v }
+			if v, ok := cfg["matMult"].(float64); ok { matMult = v }
+		}
+		gb, mb := decomposeTables()
+		// 目标新品质档（当前+1）的基准值决定消耗
+		curQ := -1
+		for i := range p.Equip {
+			if p.Equip[i].ID == q.ItemID { curQ = p.Equip[i].Quality; break }
+		}
+		if curQ < 0 {
+			for i := range p.Warehouse {
+				if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == q.ItemID && p.Warehouse[i].Equip != nil {
+					curQ = p.Warehouse[i].Equip.Quality; break
+				}
+			}
+		}
+		if curQ < 0 { http.Error(w, "未找到装备："+q.ItemID, 400); return }
+		newQ := curQ + 1
+		if newQ >= len(gb) { http.Error(w, "已达最高品质（混沌），无法继续升品", 409); return }
+		goldCost := int(float64(gb[newQ]) * goldMult)
+		matCost := int(float64(mb[newQ]) * matMult)
+		newQ2, _, e := p.QualityUp(q.ItemID, goldCost, matCost, mults)
+		if e != nil { http.Error(w, e.Error(), 400); return }
+		extra["quality"] = newQ2
+		extra["cost"] = map[string]int{"gold": goldCost, "material": matCost}
+		extra["gold"] = p.Core.Gold
+		extra["material"] = p.Core.Material
 	case "use_potion":
 		// v1.9.27 使用回血药水：服务端权威校验持有/满血，回血量按配置百分比
 		potCfg, _ := game.C().Economy.Drop["potion"].(map[string]any)
@@ -573,20 +666,15 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 	case "wh_equip_out": // 仓库装备 → 背包（点击仓库装备取出）
 		if err = p.WarehouseEquipOut(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
 	case "storage_decompose": // v1.9.40 分解仓库装备 / v1.9.41 加材料返还 + 批量分解
-		cfg, _ := game.C().Economy.Drop["decompose"].(map[string]any)
-		base := []any{40.0, 120.0, 300.0, 800.0, 2000.0}
-		matBase := []any{10.0, 30.0, 80.0, 200.0, 500.0}
 		enhMult := 0.15
-		if cfg != nil {
-			if b, ok := cfg["goldBase"].([]any); ok && len(b) > 0 { base = b }
-			if b, ok := cfg["matBase"].([]any); ok && len(b) > 0 { matBase = b }
+		if cfg, ok := game.C().Economy.Drop["decompose"].(map[string]any); ok {
 			if v, ok := cfg["enhanceMult"].(float64); ok { enhMult = v }
 		}
-		// 把配置同步给 store 包（批量分解同源公式）
-		gb := make([]int, len(base))
-		for i, v := range base { gb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
-		mb := make([]int, len(matBase))
-		for i, v := range matBase { mb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
+		base := []any{}   // 兼容下方 target 品质取值逻辑
+		matBase := []any{}
+		gb, mb := decomposeTables()
+		for _, v := range gb { base = append(base, float64(v)) }
+		for _, v := range mb { matBase = append(matBase, float64(v)) }
 		store.SetDecomposeConfig(gb, mb, enhMult)
 		if q.All { // 批量：分解仓库全部装备
 			n, gold, mat := p.WarehouseDecomposeAll()
