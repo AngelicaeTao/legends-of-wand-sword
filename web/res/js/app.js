@@ -256,7 +256,8 @@ function buildBattleBg(g,key){
       g.beginPath();g.ellipse(cx,y+k*5,w*(0.6+((k*37)%40)/100),h,0,0,7);g.fill();
     }
   }
-  if(canBlur)g.filter='none';  // 4) 三层山脊 + 谷雾
+  if(canBlur)g.filter='none';
+  // 4) 三层山脊 + 谷雾
   const ridge=(yBase,amp,color,seed,step)=>{
     g.fillStyle=color;g.beginPath();g.moveTo(0,yBase+80);
     for(let x=0;x<=1280;x+=step){
