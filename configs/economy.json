@@ -75,7 +75,18 @@
       "armor": 0.2,
       "trinket": 0.2
     },
-    "_note": "v1.9.30 slotWeights 武器加权：武器占掉落 40%（原四槽均等 25%）"
+    "_note": "v1.9.30 slotWeights 武器加权：武器占掉落 40%（原四槽均等 25%）",
+    "decompose": {
+      "goldBase": [
+        40,
+        120,
+        300,
+        800,
+        2000
+      ],
+      "enhanceMult": 0.15,
+      "_note": "分解仓库装备返还金币：goldBase[品质] × (1+强化等级×enhanceMult)"
+    }
   },
   "worldMap": {
     "worldSize": {

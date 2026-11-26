@@ -216,6 +216,7 @@ func (p *PlayerState) WarehouseEquipIn(itemID string) error {
 				Equip: &Equip{
 					ID: p.Equip[i].ID, Slot: p.Equip[i].Slot, Quality: p.Equip[i].Quality,
 					Enhance: p.Equip[i].Enhance, Stats: p.Equip[i].Stats,
+					ClassID: p.Equip[i].ClassID, // v1.9.40 修复：武器系标随行，取出后分系校验不失效
 				},
 			})
 			p.Equip = append(p.Equip[:i], p.Equip[i+1:]...)
@@ -224,6 +225,25 @@ func (p *PlayerState) WarehouseEquipIn(itemID string) error {
 		}
 	}
 	return fmt.Errorf("背包中没有该装备：%s", itemID)
+}
+
+// WarehouseDecompose 分解仓库中的装备（v1.9.40）：按品质+强化等级返还金币（金额由 net 层按
+// economy.drop.decompose 配置算好传入，服务端权威校验与入账）。返回实际入账金币。
+func (p *PlayerState) WarehouseDecompose(itemID string, goldGain int) (int, error) {
+	if goldGain < 0 { return 0, fmt.Errorf("分解金额配置无效") }
+	for i := range p.Warehouse {
+		if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == itemID {
+			e := p.Warehouse[i].Equip
+			name := itemID
+			if e != nil { name = e.ID }
+			gain := goldGain
+			p.Core.Gold += gain
+			p.Warehouse = append(p.Warehouse[:i], p.Warehouse[i+1:]...)
+			p.appendLogs([]string{fmt.Sprintf("分解仓库装备：%s（金币 +%d）", name, gain)})
+			return gain, nil
+		}
+	}
+	return 0, fmt.Errorf("仓库中没有该装备：%s", itemID)
 }
 
 // WarehouseEquipOut 仓库装备 → 背包（取出一件，未穿戴状态）。

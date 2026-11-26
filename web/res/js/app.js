@@ -1694,12 +1694,15 @@ function renderWarehouse(){
     <div class="sec-title">背包 · 材料与消耗品 <span class="sec-sub" style="display:inline">（点击选择数量存入）</span></div>
     <div class="wg-grid">${bagGoods.map(([id,n])=>`
       <div class="wg-cell" data-gin="${id}" data-n="${n|0}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
-    <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · 点击装备直接取出）</span><button class="wh-batch" id="batchOut">⇩ 批量取出（装备+材料）</button></div>
-    <div class="wg-grid">${whEq.map(it=>`
-      <div class="wg-cell equip" data-out="${it.id}">
-        <div class="wgi" style="background:#b8862f">${slotIco[(it.equip&&it.equip.slot)]||ICON.sword(24,'#2a1c08')}</div>${eqCN(it.equip||{})}${it.equip&&it.equip.enhance?(' +'+it.equip.enhance):''}<div class="wq">x1</div>
+    <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · 点击装备取出 · 点 ♻ 分解换金币）</span><button class="wh-batch" id="batchOut">⇩ 批量取出（装备+材料）</button></div>
+    <div class="wg-grid">${whEq.map(it=>{
+      const e=it.equip||{};
+      const DEC=[40,120,300,800,2000], qi=Math.max(0,Math.min(4,e.quality||0));
+      return `<div class="wg-cell equip" data-out="${it.id}">
+        <div class="wgi" style="background:#b8862f">${slotIco[e.slot]||ICON.sword(24,'#2a1c08')}</div>${eqCN(e)}${e.enhance?(' +'+e.enhance):''}<div class="wq">x1</div>
         ${pwBadge(it.equip)||''}
-      </div>`).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
+        <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金</span>
+      </div>`;}).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
     <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · 点击选择数量取出）</span></div>
     <div class="wg-grid">${whGoods.map(it=>`
       <div class="wg-cell" data-gout="${it.id}" data-n="${it.qty}"><div class="wgi" style="background:${it.kind==='consume'?'#5fd38a':'#8892a4'}">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(it.id)}<div class="wq">x${it.qty}</div></div>`).join('')||'<div class="sec-sub">空</div>'}</div>
@@ -1735,6 +1738,31 @@ function renderWarehouse(){
     await doWh(op.action,op.id,q,op.name);
   };
   $('whQtyInput').onkeydown=(e)=>{ if(e.key==='Enter')$('whYes').click(); };
+  // v1.9.40 分解仓库装备：确认弹窗 → 服务端权威结算 → 金币入账
+  body.querySelectorAll('.wg-detail.dec').forEach(el=>{
+    el.onclick=(ev)=>{
+      ev.stopPropagation();  // 不触发外层"取出"
+      const id=el.dataset.dec;
+      const it=(state.warehouse||[]).find(x=>x.id===id&&!x.hidden&&x.kind==='equip');
+      const e=it&&it.equip||{};
+      const DEC=[40,120,300,800,2000], qi=Math.max(0,Math.min(4,e.quality||0));
+      const est=Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15));
+      showModal(`<h2>分解装备</h2><div class="msub">将 <b style="color:#f0d590">${eqCN(e)}${e.enhance?(' +'+e.enhance):''}</b> 分解为金币？<br>预计返还 <b style="color:#ffd76b">${fmt(est)} 金币</b>（分解后装备消失，无法找回）</div>
+        <div class="divider"></div>
+        <div class="enc-btns"><button class="btn-red" id="doDec">确认分解</button><button class="btn-gray" id="cancelDec">再想想</button></div>`);
+      $('cancelDec').onclick=hideModal;
+      $('doDec').onclick=async()=>{
+        try{
+          const r=await api('/api/player/action',{userId:uid(),action:'storage_decompose',itemId:id});
+          hideModal();
+          if(r.state){state=r.state;syncHud();}
+          window.SFX&&SFX.coin&&SFX.coin();
+          toastModal('分解成功',eqCN(e)+(e.enhance?(' +'+e.enhance):'')+' → 金币 +'+fmt(r.goldGain||est));
+          renderPanel();
+        }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('分解失败',err.message); }
+      };
+    };
+  });
   const openForgeBtn=$('openForge');
   if(openForgeBtn)openForgeBtn.onclick=()=>{forgeSub=true;forgeSel=null;window.SFX&&SFX.tab();renderWarehouse();};
   // 背包装备 → 点击直接存入；仓库装备 → 点击直接取出（不可堆叠，无需数量确认，不弹窗）
@@ -2168,6 +2196,12 @@ async function playBattle(rep,mon,bd){
     const roundNo=Math.min(r.n,30);
     $('roundVal').textContent=`${roundNo} / 30`;
     if(r.actor==='hero'){
+      // v1.9.40 持续回血跳数行：绿色浮字 + 恢复日志，不播攻击动画
+      if(r.action==='hot'){
+        window.SFX&&SFX.heal();
+        spawnFx('+'+Math.round(r.heal||0),420,430,'#7fe0a0');
+        logLine('hero',`R${r.n} ${r.skillName} → 持续恢复 +${Math.round(r.heal||0)}`);
+      }else{
       const sk=skills.find(x=>x.id===r.action)||{};
       const kind=sk.kind||'physical';
       const ti=Math.max(0,(r.monIdx||0)|0);
@@ -2192,7 +2226,8 @@ async function playBattle(rep,mon,bd){
       }else{
         if(kind==='buff'||kind==='debuff') window.SFX&&SFX.buff();
         else if(kind==='shield') window.SFX&&SFX.shield();
-        logLine('hero',`R${r.n} ${r.skillName}（${kind==='shield'?'护盾':kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
+        logLine('hero',`R${r.n} ${r.skillName}（${kind==='shield'?'持续减伤':kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
+      }
       }
     }else{
       const mi=Math.max(0,(r.monIdx||0)|0);
@@ -2202,7 +2237,8 @@ async function playBattle(rep,mon,bd){
       setBAnim('hero','hit',300);
       spawnFx('-'+Math.round(r.damage),420,430,'#ff6b6b');
       window.SFX&&SFX.hurt();
-      logLine('mon',`R${r.n} ${r.skillName} → 英雄 -${Math.round(r.damage)}`);
+      // v1.9.40 格挡姿态：显示减伤比例
+      logLine('mon',`R${r.n} ${r.skillName} → 英雄 -${Math.round(r.damage)}${r.dr>0?`（格挡减伤 ${Math.round(r.dr*100)}%）`:''}`);
     }
     bHp.hero=r.heroHp;bHp.mon=r.monHp;updateHp();
     await sleep(270);

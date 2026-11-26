@@ -62,6 +62,13 @@ type SkillDef struct {
 	ClassID string  `json:"classId"` // 归属职业（all=通用）
 	Tier    string  `json:"tier"`    // basic/initial/advanced
 	Desc    string  `json:"desc"`
+	// v1.9.40 持续效果：HotRounds>0 的 heal 为持续回血（施放立即回 hotPer×最大血量，
+	// 之后 HotRounds-1 回合每回合再回）；DRRounds>0 的 shield 为持续减伤（DRRounds
+	// 回合内受到伤害降低 DRPct，替代一次性护盾值）。
+	HotRounds int     `json:"hotRounds,omitempty"`
+	HotPer    float64 `json:"hotPer,omitempty"`
+	DRRounds  int     `json:"drRounds,omitempty"`
+	DRPct     float64 `json:"drPct,omitempty"`
 }
 
 // SkillPool 是一个职业的 BD 可选池：初始技能 + 进阶技能。

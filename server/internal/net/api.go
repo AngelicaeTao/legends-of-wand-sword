@@ -565,6 +565,33 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		if err = p.WarehouseEquipIn(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
 	case "wh_equip_out": // 仓库装备 → 背包（点击仓库装备取出）
 		if err = p.WarehouseEquipOut(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
+	case "storage_decompose": // v1.9.40 分解仓库装备：按品质+强化等级返还金币（服务端权威）
+		cfg, _ := game.C().Economy.Drop["decompose"].(map[string]any)
+		base := []any{40.0, 120.0, 300.0, 800.0, 2000.0}
+		enhMult := 0.15
+		if cfg != nil {
+			if b, ok := cfg["goldBase"].([]any); ok && len(b) > 0 { base = b }
+			if v, ok := cfg["enhanceMult"].(float64); ok { enhMult = v }
+		}
+		gain := 40
+		var target *store.Equip
+		for i := range p.Warehouse {
+			it := p.Warehouse[i]
+			if it.Kind == "equip" && it.ID == q.ItemID {
+				target = it.Equip
+				break
+			}
+		}
+		if target != nil {
+			qi := target.Quality
+			if qi < 0 || qi >= len(base) { qi = 0 }
+			g, _ := base[qi].(float64)
+			gain = int(g * (1 + float64(target.Enhance)*enhMult))
+		}
+		goldGain, e := p.WarehouseDecompose(q.ItemID, gain)
+		if e != nil { http.Error(w, e.Error(), 400); return }
+		extra["goldGain"] = goldGain
+		extra["gold"] = p.Core.Gold
 	case "dungeon_enter":
 		perDay := 0
 		var mon string; var elite bool; var lvReq int

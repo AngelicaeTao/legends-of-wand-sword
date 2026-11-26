@@ -28,6 +28,7 @@ type BattleRound struct {
 	FX        string  `json:"fx"`
 	Damage    float64 `json:"damage"`
 	Heal      float64 `json:"heal"`
+	DR        float64 `json:"dr,omitempty"`   // v1.9.40 本回合怪物伤害被持续减伤降低的比例（0=无）
 	HeroHP    float64 `json:"heroHp"`
 	MonHP     float64 `json:"monHp"`
 	MonIdx    int     `json:"monIdx,omitempty"` // v1.9.36 群怪：本回合怪物出手者/英雄攻击目标的组合索引
@@ -132,6 +133,12 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	heroAtkBuff := 0.0
 	monAtkDebuff := 0.0
 	shield := 0.0
+	// v1.9.40 持续效果状态：HoT（法师治疗术持续回血）与 DR（战士格挡持续减伤）
+	hotLeft := 0
+	hotPer := 0.0
+	hotName := ""
+	drLeft := 0
+	drPct := 0.0
 
 	// 按速度决定先后手（服务端确定性）
 	heroFirst := hero.Spd >= 10
@@ -153,6 +160,20 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	for t := 0; t < maxTicks && heroHP > 0 && totalMonHP() > 0; t++ {
 		for _, first := range []bool{heroFirst, !heroFirst} {
 			if first {
+				// v1.9.40 HoT 跳数结算：英雄行动前先回一口（独立战报行，前端绿色浮字）
+				if hotLeft > 0 && heroHP > 0 {
+					hotLeft--
+					jump := hotPer
+					healed := hero.HP - heroHP
+					if jump > healed { jump = healed }
+					if jump > 0 { heroHP += jump }
+					n++
+					rep.Rounds = append(rep.Rounds, BattleRound{
+						N: n, Actor: "hero", Action: "hot", SkillName: hotName + "（持续）",
+						FX: "fx_heal", Heal: round2(jump),
+						HeroHP: round2(heroHP), MonHP: round2(math.Max(0, totalMonHP())),
+					})
+				}
 				// 选一个可用技能（优先级：伤害 > 治疗/护盾，cd 就绪）
 				sort.SliceStable(queue, func(i, j int) bool { return queue[i].remain > queue[j].remain })
 				chosen := -1
@@ -179,11 +200,29 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				r.MonIdx = ti
 				switch act.Kind {
 				case "heal":
-					heal := hero.HP * power
-					heroHP = math.Min(hero.HP, heroHP+heal)
-					r.Heal = round2(heal)
+					if act.HotRounds > 0 {
+						// v1.9.40 持续回血：施放立即回第一跳，剩余 HotRounds-1 跳逐回合结算
+						hotPer = hero.HP * act.HotPer
+						hotLeft = act.HotRounds - 1
+						hotName = act.Name
+						heal := hotPer
+						healed := hero.HP - heroHP
+						if heal > healed { heal = healed }
+						if heal > 0 { heroHP += heal }
+						r.Heal = round2(heal)
+					} else {
+						heal := hero.HP * power
+						heroHP = math.Min(hero.HP, heroHP+heal)
+						r.Heal = round2(heal)
+					}
 				case "shield":
-					shield += hero.ATK * power
+					if act.DRRounds > 0 {
+						// v1.9.40 持续减伤：不再叠加护盾值，改为 DRRounds 回合内按比例减伤
+						drLeft = act.DRRounds
+						drPct = act.DRPct
+					} else {
+						shield += hero.ATK * power
+					}
 				case "buff":
 					heroAtkBuff = power
 				case "debuff":
@@ -212,6 +251,7 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				atkUnit := &mems[mi]
 				turnIdx = (mi + 1) % len(mems) // 下回合轮到下一只
 				dmg := atkUnit.atk * (1 - monAtkDebuff) * (1 - hero.DEF/(hero.DEF+100))
+				if drLeft > 0 { dmg *= 1 - drPct } // v1.9.40 格挡姿态持续减伤
 				dmg *= 0.9 + rng.Float64()*0.2
 				actual := dmg
 				if shield > 0 {
@@ -221,11 +261,14 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				}
 				heroHP -= actual
 				n++
-				rep.Rounds = append(rep.Rounds, BattleRound{
+				mr := BattleRound{
 					N: n, Actor: "monster", Action: "attack", SkillName: atkUnit.def.Name,
 					FX: "fx_dmg_normal", Damage: round2(actual), MonIdx: mi,
 					HeroHP: round2(math.Max(0, heroHP)), MonHP: round2(math.Max(0, totalMonHP())),
-				})
+				}
+				if drLeft > 0 { mr.DR = drPct } // 前端据此显示"格挡减伤"
+				rep.Rounds = append(rep.Rounds, mr)
+				if drLeft > 0 { drLeft-- } // 每次怪物攻击消耗一回合减伤
 			}
 			if heroHP <= 0 || totalMonHP() <= 0 {
 				break
