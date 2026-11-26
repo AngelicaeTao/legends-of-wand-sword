@@ -951,7 +951,7 @@ WMap.prototype.update=function(dt){
   // 掉落物理
   for(const d of this.drops){
     d.vy+=1400*dt;d.y+=d.vy*dt;
-    if(d.y>=d.groundY){d.y=d.groundY;if(Math.abs(d.vy)>60)d.vy*=-0.42;else{this.chests.push({x:d.x,y:d.y,nodeId:'drop_'+Date.now(),tier:d.tier,state:'closed',actor:d.actor||this.makeFreshActor('item_chest_'+d.tier,'closed'),phase:0,dropped:true});d.done=true;}}
+    if(d.y>=d.groundY){d.y=d.groundY;if(Math.abs(d.vy)>60)d.vy*=-0.42;else{this.chests.push({x:d.x,y:d.y,nodeId:d.nodeId||('drop_'+Date.now()),tier:d.tier,state:'closed',actor:d.actor||this.makeFreshActor('item_chest_'+d.tier,'closed'),phase:0,dropped:true});d.done=true;}}
   }
   this.drops=this.drops.filter(d=>!d.done);
   // 开启动画
@@ -992,17 +992,13 @@ WMap.prototype.openChest=function(c){
   if(c.actor)c.actor.playOnce('open',()=>{c.state='opened';});
   this.opts.onChest&&this.opts.onChest(c);
 };
-WMap.prototype.dropChestFrom=function(mon){
-  mon.state='dead';
-  if(mon.actor)mon.actor.playOnce('die');
-  // v1.9.42：BOSS 掉落可出钻石/水晶箱；普通怪掉落金箱概率小幅上调
-  let tier='wood';
-  const roll=Math.random();
-  if(mon.type==='boss_beetle'){ tier=roll<0.2?'crystal':roll<0.5?'diamond':'gold'; }
-  else if(roll<0.08){ tier='diamond'; }
-  else if(roll<0.16){ tier='gold'; }
-  else if(roll<0.5){ tier='silver'; }
-  this.drops.push({x:mon.x,y:mon.y-90,groundY:mon.y,tier,actor:this.makeFreshActor('item_chest_'+tier,'closed'),vy:-120});
+// v1.9.47：箱档位与 nodeId 由 app.js 向服务端登记后传入，本层只做落地表现。
+// 这里不再直接调 api()——api/uid 定义在 app.js 的 IIFE 内，本文件（全局脚本）取不到，
+// 之前在此判断 typeof api==='function' 恒为 false，导致打怪后不落箱。
+WMap.prototype.spawnChestDrop=function(mon,tier,nodeId){
+  if(!tier) return false;
+  this.drops.push({x:mon.x,y:mon.y-90,groundY:mon.y,tier,nodeId:nodeId||('drop_'+Date.now()),
+    actor:this.makeFreshActor('item_chest_'+tier,'closed'),vy:-120});
   return true;
 };
 WMap.prototype.heroDefeated=function(){};
@@ -1349,8 +1345,8 @@ WMap.prototype.openMapModal=function(){
   if(this.mapModalOpen)return;
   this.mapModalOpen=true;
   this.keys={}; this.hero.moving=false; // 打开瞬间停走
-  const titleEl=document.getElementById('worldTitle');
-  const title=(titleEl&&titleEl.textContent)||this.worldId+' · 大世界';
+  // v1.9.46 顶部横幅已移除，标题优先取全局世界名（loadWorld 维护），最后回落到 worldId
+  const title=window.__worldLabel||(this.worldId+' · 大世界');
   const layer=document.createElement('div');
   layer.id='wmapLayer';
   layer.innerHTML=`<div class="wmap-box">
@@ -1368,7 +1364,10 @@ WMap.prototype.openMapModal=function(){
       <span><i class="lgdot lgdot-potion"></i>草药</span>
     </div>
   </div>`;
-  document.body.appendChild(layer);
+  // v1.9.47 挂到 #stage 内而非 body：#stage 带 transform 缩放，形成独立层叠上下文，
+  // 挂在 body 上的地图层会永远压住 stage 内的所有弹窗（弹窗 z-index 再高也没用）。
+  // 放进 stage 后与弹窗同一坐标系，层级大小关系才真正生效，同时也跟随舞台缩放。
+  (document.getElementById('stage')||document.body).appendChild(layer);
   const self=this;
   layer.querySelector('#wmapClose').onclick=()=>self.closeMapModal();
   layer.querySelector('#wmapOnline').onclick=()=>{ self.opts.onOnlineList&&self.opts.onOnlineList(); };

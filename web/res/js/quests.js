@@ -32,16 +32,19 @@ function activeIdx(){ for(let i=0;i<QDEFS.length;i++) if(!st.claimed[QDEFS[i].id
 function done(q){ return (st.progress[q.kind]||0) >= q.goal; }
 
 function render(){
-  const box=$('questTracker');
-  if(!box) return;
+  // v1.9.45 收起/展开：内容写进 #qtBody，外层 #questTracker 只保留表头与折叠按钮，
+  // 这样切页签/重渲染都不会把折叠状态或按钮冲掉。
+  const outer=$('questTracker');
+  const box=$('qtBody')||outer;
+  if(!outer||!box) return;
   const ai=activeIdx();
   if(ai<0){
     box.innerHTML=`<div class="qt-head"><span>主线 · 第一章</span><em>${QDEFS.length}/${QDEFS.length}</em></div>
       <div class="qt-all">本章主线已全部完成 · 去更远的世界探索吧</div>`;
-    box.classList.add('qt-all-done');
+    outer.classList.add('qt-all-done');
     return;
   }
-  box.classList.remove('qt-all-done');
+  outer.classList.remove('qt-all-done');
   const list=QDEFS.slice(ai,ai+2);
   let html=`<div class="qt-head"><span>主线 · 第一章</span><em>${claimedCount()}/${QDEFS.length}</em></div>`;
   list.forEach((q,i)=>{
