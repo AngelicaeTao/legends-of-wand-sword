@@ -2398,7 +2398,13 @@ function showBattleResult(rep,mon){
   const win=rep.result==='win';
   if(win&&window.Quest)Quest.progress('kill',1);
   const slotCN={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
-  const drops=(rep.drops||[]).map(d=>`<div class="reward-row"><span class="rk">${ICON.bag(14,'#c9a4e8')}<em>装备掉落</em></span><span class="rv g">${slotCN[d.slot]||d.slot}${d.quality!=null?' · '+['普通','精良','稀有','史诗','传说','彩虹','暗影','混沌'][Math.min(7,d.quality)]:''}</span></div>`).join('');
+  // v1.9.53 装备掉落改为小格子（原每件一行，10 件以上会把结算弹窗撑出屏幕、领取按钮点不到）
+  const QUALCN=['普通','精良','稀有','史诗','传说','彩虹','暗影','混沌'];
+  const dl=rep.drops||[];
+  const drops=dl.length?`<div class="drop-wrap"><div class="loot-title">装备掉落 · ${dl.length} 件</div><div class="loot-grid drop-grid">${dl.map(d=>{
+    const q=Math.min(7,d.quality==null?0:d.quality), qc=QCOLOR[q], qn=QUALCN[q], sn=slotCN[d.slot]||d.slot;
+    return `<div class="loot-cell loot-eq" style="border-color:${qc}" title="${sn} · ${qn}${d.enhance?' +'+d.enhance:''}"><div class="loot-ico" style="background:${qc}">${ICON.bag(18,'#2a1c08')}</div><div class="loot-nm">${sn}</div><div class="loot-q" style="color:${qc}">${qn}</div></div>`;
+  }).join('')}</div></div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'（不自动回满 · 用回血药水/采草药恢复）</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
