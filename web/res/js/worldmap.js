@@ -1550,7 +1550,7 @@ WMap.prototype.drawMapModal=function(cv,g){
   if(pin){
     const pp=P(pin.x,pin.y);
     if(pin.track){
-      g.save(); g.strokeStyle='rgba(255,214,90,.42)'; g.lineWidth=2; g.setLineDash([7,7]);
+      g.save(); g.strokeStyle='rgba(255,214,90,.62)'; g.lineWidth=2.6; g.setLineDash([8,6]);
       g.beginPath(); g.moveTo(hp.x,hp.y); g.lineTo(pp.x,pp.y); g.stroke(); g.restore();
     }
     // 落点光晕（脉动）：小旗在满屏地形里容易被忽略，用一圈呼吸光勾出来
