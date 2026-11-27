@@ -2,7 +2,7 @@
 
 服务端权威的 Web 放置手游（Playable 原型）：Go 单二进制权威服务 + 原生 Canvas 部件动画前端，单端口同源部署，支持多端接入。
 
-当前最新代码归档版本：**v1.9.49**（`code/v1.9.49-integrated`，含六职业 192 帧程序动画 + HUD 修复 + 服务端权威掷箱；美术最新为 assets/v1.9.44；历史归档分支保留，按需拉取）。
+当前最新代码归档版本：**v1.9.50**（`code/v1.9.50`，仓库批量勾选模式 + 工坊显示身上装备；含此前六职业 192 帧程序动画 + HUD 修复 + 服务端权威掷箱；美术最新为 assets/v1.9.44；历史归档分支保留，按需拉取）。
 
 ## 分支说明
 
@@ -10,7 +10,8 @@
 
 | 分支 | 内容 | 状态 | 体积 |
 |---|---|---|---:|
-| `code/v1.9.49-integrated` | **最新代码**：整合 v1.9.48 HUD 修复 + v1.9.45 服务端权威掷箱（含 merge 整合提交），Go 服务端、Web 前端、配置、脚本、交付文档 | ✅ 有效·最新 | 约 13 MB |
+| `code/v1.9.50` | **最新代码**：仓库批量存入/取出/分解改勾选模式（贴图打勾、再点取消、严格检测退出）+ 工坊显示身上装备（可强化/升品），Go 服务端、Web 前端、配置、脚本、交付文档 | ✅ 有效·最新 | 约 13 MB |
+| `code/v1.9.49-integrated` | 上一版：整合 v1.9.48 HUD 修复 + v1.9.45 服务端权威掷箱（含 merge 整合提交），六职业 192 帧程序动画 | 📦 历史归档 | — |
 | `assets/v1.9.44` | **最新美术**：按用途分类（地图 / 精灵 / 背景 / 卡面 / 图标 / 特效 / 旧版素材），含 v1.9.37 三怪部件包 + v1.9.42 钻石/水晶箱部件包 | ✅ 有效·最新 | 约 7.8 MB |
 | `code/v1.9.45` | v1.9.45 服务端权威掷箱主分支 | 📦 历史归档 | — |
 | `code/v1.7.5`…`code/v1.9.44` | 历史代码归档（含 code/v1.9.40 ~ code/v1.9.44 增量版本；v1.9.44 为 Part A 配置实测基准，tip 提交信息误写为 v1.9.45，内容无误） | 📦 历史归档 | — |
@@ -23,7 +24,7 @@
 
 ```bash
 # 代码
-git clone -b code/v1.9.49-integrated https://github.com/AngelicaeTao/legends-of-wand-sword.git
+git clone -b code/v1.9.50 https://github.com/AngelicaeTao/legends-of-wand-sword.git
 
 # 资源（放入同一工作目录，按 assets 分支 README 的回填映射还原）
 git clone -b assets/v1.9.44 https://github.com/AngelicaeTao/legends-of-wand-sword.git assets
@@ -50,7 +51,8 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 | 版本 | 内容 |
 |---|---|
-| v1.9.49 | 六职业程序动画帧接入：192 帧（8 动作×4）替换立绘 root 变换，StandeeActor 扩展帧播放，anim_manifest 配置（当前最新，`code/v1.9.49-integrated`） |
+| v1.9.50 | 仓库批量存入/取出/分解改为勾选模式（点击贴图打勾、再点取消、顶部工具条、严格检测退出）+ 强化工坊按「身上装备/背包/仓库」分组显示且身上装备可直接强化升品（当前最新，`code/v1.9.50`） |
+| v1.9.49 | 六职业程序动画帧接入：192 帧（8 动作×4）替换立绘 root 变换，StandeeActor 扩展帧播放，anim_manifest 配置（`code/v1.9.49-integrated`） |
 | v1.9.48 | UI 整合：HUD 精简、任务栏折叠、按钮统一、弹窗层级修复；merge 保留服务端权威掷箱（当前最新，`code/v1.9.48-integrated`） |
 | v1.9.45 | 怪物掉落箱改服务端权威掷档（新增 POST /api/chest/drop 登记）：普通/精英怪钻石+水晶掉率 8%→15%，掉落箱一次性、防伪造刷箱 |
 | v1.9.44 | 装备升品质入口移入强化工坊（升品栏+品质进阶+消耗展示），仓库 ⬆ 角标移除 |
