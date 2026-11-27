@@ -1345,8 +1345,8 @@ WMap.prototype.openMapModal=function(){
   if(this.mapModalOpen)return;
   this.mapModalOpen=true;
   this.keys={}; this.hero.moving=false; // 打开瞬间停走
-  const titleEl=document.getElementById('worldTitle');
-  const title=(titleEl&&titleEl.textContent)||this.worldId+' · 大世界';
+  // v1.9.46 顶部横幅已移除，标题优先取全局世界名（loadWorld 维护），最后回落到 worldId
+  const title=window.__worldLabel||(this.worldId+' · 大世界');
   const layer=document.createElement('div');
   layer.id='wmapLayer';
   layer.innerHTML=`<div class="wmap-box">
@@ -1364,7 +1364,10 @@ WMap.prototype.openMapModal=function(){
       <span><i class="lgdot lgdot-potion"></i>草药</span>
     </div>
   </div>`;
-  document.body.appendChild(layer);
+  // v1.9.47 挂到 #stage 内而非 body：#stage 带 transform 缩放，形成独立层叠上下文，
+  // 挂在 body 上的地图层会永远压住 stage 内的所有弹窗（弹窗 z-index 再高也没用）。
+  // 放进 stage 后与弹窗同一坐标系，层级大小关系才真正生效，同时也跟随舞台缩放。
+  (document.getElementById('stage')||document.body).appendChild(layer);
   const self=this;
   layer.querySelector('#wmapClose').onclick=()=>self.closeMapModal();
   layer.querySelector('#wmapOnline').onclick=()=>{ self.opts.onOnlineList&&self.opts.onOnlineList(); };

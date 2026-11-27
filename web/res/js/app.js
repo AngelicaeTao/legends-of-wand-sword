@@ -200,7 +200,6 @@ function drawMiniMap(){
   g.beginPath();g.arc(C,C,R-4,0,Math.PI*2);g.stroke();
   g.strokeStyle='#d9b45b';g.lineWidth=3;
   g.beginPath();g.arc(C,C,R,0,Math.PI*2);g.stroke();
-  $('mmProgress').textContent=(worldMap.progress||0)+'/20';
 }
 
 let bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
@@ -591,18 +590,33 @@ async function finishEnter(){
     $('sfxBtn')&&$('sfxBtn').classList.remove('hidden');
     window.SFX&&SFX.login();
     connectWS();
-    // 主线任务：绑定当前账号，注入服务端领取与状态回调
-    // v1.9.29 大地图快捷键：M 开/关，Esc 关（输入框聚焦与游戏弹窗打开时不触发）
+    // v1.9.45 任务栏收起/展开：Q 键与右上角箭头共用同一状态
+    window.toggleQuestTracker=(force)=>{
+      const box=document.getElementById('questTracker');
+      const btn=document.getElementById('qtToggle');
+      if(!box)return;
+      const collapsed=(typeof force==='boolean')?box.classList.toggle('collapsed',force):box.classList.toggle('collapsed');
+      if(btn)btn.setAttribute('aria-expanded',String(!collapsed));
+      window.SFX&&SFX.tab&&SFX.tab();
+    };
+    const _qtBtn=document.getElementById('qtToggle');
+    if(_qtBtn)_qtBtn.onclick=(e)=>{ e.stopPropagation(); window.toggleQuestTracker(); };
+    // v1.9.29 大地图快捷键：M 开/关，Esc 关，Q 收/展任务栏（输入框聚焦与游戏弹窗打开时不触发）
     addEventListener('keydown',e=>{
       if(!worldMap)return;
       const tag=(e.target&&e.target.tagName)||'';
       if(tag==='INPUT'||tag==='TEXTAREA'||e.target.isContentEditable)return;
       const k=e.key.toLowerCase();
       const gameModal=!document.getElementById('modalLayer').classList.contains('hidden');
+      // v1.9.47 弹窗（结算 / 在线玩家 / 玩家档案）现在浮在大地图之上（z-index 130 > 120），
+      // 弹窗开着时按 M / Esc 不能再关掉被它盖住的地图，否则关掉弹窗会发现地图莫名消失。
+      if(gameModal)return;
       if(k==='m'&&worldMap.mapModalOpen){ e.preventDefault(); worldMap.closeMapModal(); }
       else if(k==='m'&&worldMap.active&&!gameModal){ e.preventDefault(); worldMap.openMapModal(); }
       else if(k==='escape'&&worldMap.mapModalOpen){ worldMap.closeMapModal(); }
+      else if(k==='q'&&worldMap.active&&!gameModal&&!document.body.classList.contains('panel-open')){ e.preventDefault(); window.toggleQuestTracker(); }
     });
+    // 主线任务：绑定当前账号，注入服务端领取与状态回调
     if(window.Quest) Quest.init(uid(),{
       claim:(qid)=>api('/api/player/action',{userId:uid(),action:'quest_claim',questId:qid}),
       getState:()=>state,
@@ -628,14 +642,12 @@ async function loadWorld(worldId, heroX, heroY){
   const spots=await api('/api/spawn?worldId='+encodeURIComponent(worldId)+'&userId='+encodeURIComponent(uid()));
   await worldMap.switchWorld(worldId, spots.spots, heroX, heroY);
   const wd=(CFG.worlds.worlds||[]).find(w=>w.id===worldId);
-  // v1.9.31 家园场景命名
-  if(worldId==='HOME'){
-    $('worldTitle').textContent='HOME · 我的家园';
-    $('worldSceneName').textContent='我的家园 · 安全区';
-  } else {
-    $('worldTitle').textContent=worldId+' · '+(wd?wd.name:'大世界');
-    $('worldSceneName').textContent=(wd?wd.name:'大世界')+' · 大世界';
-  }
+  // v1.9.46 顶部世界横幅与左侧场景名条已移除：世界名只在小地图下方显示一处，
+  // 同时写进 window.__worldLabel 供传送提示 / 大地图弹窗标题复用（原来读 #worldTitle）。
+  const worldLabel=(worldId==='HOME')?((wd&&wd.name)||'我的家园'):(worldId+' · '+(wd?wd.name:'大世界'));
+  window.__worldLabel=worldLabel;
+  const mmw=$('mmWorld');
+  if(mmw) mmw.textContent=worldLabel;
   syncHud();
 }
 // v1.9.31 家园功能点：仓库/挂机修炼/换装镜（复用原家园面板，二级页直达）
@@ -767,7 +779,7 @@ async function travelTo(gate){
     window.SFX&&SFX.gate();
     setTimeout(()=>{window.SFX&&SFX.arrive();},420);
     $('loading').classList.add('hidden');
-    toastModal('传送成功','已抵达 '+$('worldTitle').textContent);
+    toastModal('传送成功','已抵达 '+(window.__worldLabel||gate.to));
     worldMap.active=true;
     if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'match_join',worldId:gate.to,name:loggedUser,classId:(state&&state.core&&state.core.classId)||''}));
   }catch(e){

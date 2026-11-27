@@ -6,3 +6,4 @@ data/zjcs-server
 *.tmp
 node_modules/
 data/guilds.json
+data/*.pid

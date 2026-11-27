@@ -67,8 +67,7 @@ input{font-family:inherit}
 .mini-profile img{width:46px;height:46px;border-radius:9px;object-fit:cover;image-rendering:pixelated;background:#1e2637;border:1px solid #d9b45b}
 .mp-name{font-size:15px;font-weight:800;color:#f0d590}
 .mp-lv{font-size:11px;color:#c8d4e6;margin-top:2px}
-.world-scene-name{padding:8px 16px;border-radius:11px;background:rgba(9,14,24,.86);border:1px solid rgba(217,180,91,.5);font-size:14px;color:#f0d590;box-shadow:0 4px 14px rgba(0,0,0,.4)}
-.world-scene-name em{font-size:11px;color:#9fb0c8;font-style:normal;margin-left:10px}
+/* v1.9.46 左侧「世界名 · 探索中」场景条已移除（世界名统一在小地图下方显示） */
 .world-hud-right{position:absolute;right:24px;top:22px;display:flex;gap:9px;z-index:5}
 .world-btn{min-width:78px;height:60px;padding:8px 10px;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-weight:800;font-size:13px;letter-spacing:1px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.2),0 5px 14px rgba(0,0,0,.5);transition:transform .08s,filter .12s}
 .world-btn:hover{filter:brightness(1.14)}
@@ -89,16 +88,19 @@ input{font-family:inherit}
 .mm-s{left:50%;bottom:2px;transform:translateX(-50%)}
 .mm-w{left:4px;top:50%;transform:translateY(-50%)}
 .mm-e{right:4px;top:50%;transform:translateY(-50%)}
-.mm-progress{position:absolute;left:50%;bottom:-12px;transform:translateX(-50%);padding:3px 12px;border-radius:12px;background:rgba(9,14,24,.92);border:1px solid #d9b45b;color:#f0d590;font-size:12px;font-weight:800;white-space:nowrap}
+/* 小地图信息行：当前所在世界 + 探索进度（并排，居中小地图下方） */
+.mm-info{position:absolute;left:50%;bottom:-30px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.mm-world{padding:3px 11px;border-radius:12px;background:rgba(9,14,24,.92);border:1px solid #d9b45b;color:#f0d590;font-size:11.5px;font-weight:800;letter-spacing:.4px;line-height:16px}
+.mm-world{max-width:132px;overflow:hidden;text-overflow:ellipsis}
 /* 交互提示条 */
 .interact-hint{position:absolute;left:0;top:0;transform:translate(-50%,-100%);display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:18px;background:linear-gradient(150deg,rgba(20,29,46,.96),rgba(9,14,24,.97));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.55);font-size:13.5px;color:#f0d590;font-weight:700;z-index:7;white-space:nowrap;pointer-events:none;animation:hintIn .18s ease}
 @keyframes hintIn{from{opacity:0}to{opacity:1}}
 .interact-hint::after{content:"";position:absolute;left:50%;bottom:-6px;width:9px;height:9px;transform:translateX(-50%) rotate(45deg);background:rgba(9,14,24,.97);border-right:1.5px solid #d9b45b;border-bottom:1.5px solid #d9b45b}
 .interact-hint svg{flex:0 0 auto}
 /* 世界横幅 + 在线人数 */
-.world-banner{position:absolute;left:50%;top:22px;transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 20px;border-radius:22px;background:linear-gradient(150deg,rgba(20,29,46,.92),rgba(9,14,24,.94));border:1.5px solid #d9b45b;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:5;pointer-events:none}
-.world-banner #worldTitle{font-size:15px;color:#f0d590;font-weight:800;letter-spacing:1px}
-.online-badge{font-size:11px;color:#7fe0a0;font-weight:700;padding:3px 10px;border-radius:12px;background:rgba(127,224,160,.12);border:1px solid rgba(127,224,160,.4)}
+/* v1.9.46 顶部世界横幅已移除；在线人数并入小地图下方信息行 */
+.online-badge{font-size:10.5px;color:#7fe0a0;font-weight:800;padding:2px 8px;border-radius:12px;line-height:16px;
+  background:rgba(127,224,160,.12);border:1px solid rgba(127,224,160,.4);white-space:nowrap}
 /* 6 世界地图项 */
 .world-map-item{transition:transform .15s,border-color .15s}
 .world-map-item:hover{transform:translateX(3px);border-color:#f0d590}
@@ -213,7 +215,13 @@ input{font-family:inherit}
 /* ============================================================
    ⑤ 弹窗（结算 / 收益 / 提示）
    ============================================================ */
-#modalLayer{position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center}
+/* z-index 层级约定（同一 root 层叠上下文中，数值大的在上）：
+     弹窗 130 > 大地图 120 > 加载 99 > 创建角色 70 > 全局按钮 60
+     > 面板 30 > 各种 HUD 4~16
+   v1.9.47 修复：原 z-index:40 低于 #wmapLayer(120)，从大地图点「在线玩家」时
+   列表被地图盖住、必须关掉地图才看得见。弹窗是全局最高优先级，改为 130。
+   用 fixed 而非 absolute：弹窗属于全局层，不该被某个 view 的几何尺寸牵制。 */
+#modalLayer{position:absolute;inset:0;z-index:130;display:flex;align-items:center;justify-content:center}
 .modal-shade{position:absolute;inset:0;background:rgba(3,6,12,.72);backdrop-filter:blur(2px)}
 .modal-box{position:relative;width:520px;padding:26px 32px 30px;border-radius:18px;text-align:center;background:linear-gradient(150deg,rgba(20,29,46,.98),rgba(9,14,24,.99));border:2px solid #d9b45b;box-shadow:0 16px 60px rgba(0,0,0,.75),inset 0 0 40px rgba(217,180,91,.06);animation:popIn .3s ease}
 .modal-box h2{font-size:30px;font-weight:900;color:#f0d590;letter-spacing:3px;text-shadow:0 2px 12px rgba(240,213,144,.4)}
@@ -232,8 +240,18 @@ input{font-family:inherit}
 /* ============================================================
    ⑥ 全局退出登录（唯一出口，右下角）
    ============================================================ */
-.logout-btn{position:absolute;right:20px;bottom:18px;z-index:60;padding:8px 16px;border-radius:9px;background:rgba(9,14,24,.86);border:1.5px solid rgba(217,180,91,.55);color:#d9b45b;font-size:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.5)}
-.logout-btn:hover{background:rgba(217,180,91,.18)}
+/* v1.9.45 右下角两个全局按钮（音效 / 退出登录）统一尺寸与基线 */
+.logout-btn,.sfx-btn{position:absolute;bottom:16px;z-index:60;box-sizing:border-box;
+  display:inline-flex;align-items:center;justify-content:center;
+  height:34px;width:88px;padding:0 6px;border-radius:9px;
+  font-family:inherit;font-size:12px;font-weight:800;letter-spacing:1px;line-height:1;
+  color:#f0d590;background:rgba(9,14,24,.86);
+  border:1.5px solid rgba(217,180,91,.55);box-shadow:0 4px 14px rgba(0,0,0,.5);
+  cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.logout-btn{right:20px}
+.sfx-btn{right:116px}
+.logout-btn:hover,.sfx-btn:hover{background:rgba(217,180,91,.18)}
+.sfx-btn.off{color:#8fa0b8;border-color:rgba(143,160,184,.4)}
 
 /* ---------- 动画 / 特效 ---------- */
 @keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
@@ -247,7 +265,8 @@ input{font-family:inherit}
 @keyframes toastPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
 
 /* 加载遮罩 */
-#loading{position:absolute;inset:0;z-index:99;background:#05070c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+/* v1.9.47 加载遮罩提到最高：弹窗层已升到 130，遮罩必须始终压在所有内容之上 */
+#loading{position:absolute;inset:0;z-index:200;background:#05070c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
 #loading .lt{font-size:22px;color:#f0d590;letter-spacing:6px;font-weight:800}
 #loading .lbar{width:260px;height:8px;background:#1e2637;border-radius:5px;overflow:hidden}
 #loading .lbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#d9b45b,#f0d590);transition:width .2s}
@@ -350,6 +369,21 @@ input{font-family:inherit}
   color:#2a1c08;background:linear-gradient(180deg,#ffe6a3,#e0b455);box-shadow:0 2px 0 #8a641f;
   animation:qtPulse 1.8s ease-in-out infinite}
 @keyframes qtPulse{0%,100%{box-shadow:0 2px 0 #8a641f,0 0 0 rgba(255,220,140,0)}50%{box-shadow:0 2px 0 #8a641f,0 0 14px rgba(255,220,140,.75)}}
+
+/* ---------- v1.9.45 任务栏收起 / 展开（Q 键或右上角箭头） ---------- */
+.qt-toggle{position:absolute;right:7px;top:7px;width:20px;height:20px;padding:0;display:flex;align-items:center;justify-content:center;
+  border-radius:6px;color:#e8c877;background:rgba(240,213,144,.08);border:1px solid rgba(240,213,144,.28);
+  cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.qt-toggle:hover{background:rgba(240,213,144,.2);border-color:rgba(240,213,144,.6);color:#f4ead0}
+.qt-toggle svg{transition:transform .18s ease}
+/* 表头右侧给箭头留位，避免与进度数字重叠 */
+.qt-head{padding-right:24px}
+.quest-tracker.collapsed{width:auto;padding:8px 8px 8px 12px}
+/* 收起只隐藏任务条目，表头（章节名 + 进度）保留，避免用户不知道这是什么 */
+.quest-tracker.collapsed .qt-item,
+.quest-tracker.collapsed .qt-all{display:none}
+.quest-tracker.collapsed .qt-head{border-bottom:0;padding:0 24px 0 0;gap:10px;white-space:nowrap}
+.quest-tracker.collapsed .qt-toggle svg{transform:rotate(180deg)}
 
 /* ---------- v1.9 战斗界面重排 ---------- */
 .bt-bar{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;
@@ -470,10 +504,7 @@ input{font-family:inherit}
 .log-row .lr-e{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* ---------- v1.9.1 音效开关 ---------- */
-.sfx-btn{position:absolute;right:112px;bottom:16px;z-index:20;padding:7px 13px;border-radius:9px;
-  font-size:11.5px;font-weight:800;letter-spacing:1px;color:#f0d590;
-  background:rgba(10,16,26,.86);border:1px solid rgba(217,180,91,.5);box-shadow:0 4px 14px rgba(0,0,0,.4)}
-.sfx-btn.off{color:#8fa0b8;border-color:rgba(143,160,184,.4)}
+/* 音效按钮样式已并入 v1.9.45「右下角统一按钮」规则（见文件上部 .logout-btn,.sfx-btn） */
 
 /* ---------- v1.9.1 副本 / 世界地图卡片 ---------- */
 .dungeon-item{background-size:cover;background-position:center 62%;border-radius:12px;position:relative;overflow:hidden;
@@ -546,7 +577,6 @@ input{font-family:inherit}
 #worldView.panel-open .minimap,
 #worldView.panel-open .world-hud-left,
 #worldView.panel-open .quest-tracker,
-#worldView.panel-open .world-banner,
 #worldView.panel-open .hint-bar,
 #worldView.panel-open .interact-hint{opacity:.2;transition:opacity .18s;pointer-events:none}
 /* v1.9.3：面板打开时，右下角全局按钮让位（避免压在面板上） */
@@ -854,11 +884,14 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .wg-cell .eq-pw{margin:3px 0 0}
 
 /* ===== v1.9.29 大地图弹窗 ===== */
-#wmapLayer{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;
+#wmapLayer{position:absolute;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;
   background:rgba(4,8,14,.74);backdrop-filter:blur(2px);animation:wmFadeIn .18s ease}
 @keyframes wmFadeIn{from{opacity:0}to{opacity:1}}
-.wmap-box{width:min(86vw,1000px);border-radius:14px;overflow:hidden;background:#0d1522;
-  border:1.5px solid rgba(217,180,91,.5);box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.wmap-box{width:min(86%,1000px);max-width:calc(100% - 40px);border-radius:14px;overflow:hidden;background:#0d1522;
+  border:1.5px solid rgba(217,180,91,.5);box-shadow:0 18px 60px rgba(0,0,0,.6);
+  /* v1.9.47 地图层进入 #stage 后可用高度变小，小窗口下加高度上限防止被裁 */
+  max-height:calc(100% - 24px);display:flex;flex-direction:column}
+.wmap-head,.wmap-legend{flex:0 0 auto}
 .wmap-head{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(217,180,91,.08);
   border-bottom:1px solid rgba(217,180,91,.25)}
 .wmap-head b{font-size:15px;color:#f0d590;letter-spacing:1px}
@@ -866,7 +899,7 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 #wmapClose{width:30px;height:30px;border-radius:8px;border:1px solid rgba(224,120,110,.5);
   background:rgba(224,90,74,.16);color:#ffb4a8;font-size:14px;font-weight:800;cursor:pointer}
 #wmapClose:hover{background:rgba(224,90,74,.32)}
-#wmapCv{display:block;width:100%;height:auto;background:#101826}
+#wmapCv{display:block;width:100%;height:auto;min-height:0;flex:0 1 auto;object-fit:contain;background:#101826}
 .wmap-legend{display:flex;flex-wrap:wrap;gap:14px;padding:9px 14px;font-size:11.5px;color:#c8d4e4;
   border-top:1px solid rgba(217,180,91,.2);background:rgba(255,255,255,.02)}
 .wmap-legend span{display:inline-flex;align-items:center;gap:5px}
