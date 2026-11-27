@@ -527,9 +527,9 @@ WMap.prototype.setHeroBundle=function(bundle){
   a.init().then(()=>a.play('idle'));
   this.heroActor=a;
 };
-/* v1.9.27 设置美术默认朝向；v1.9.56 默认改为"朝左"（当前六职业立绘全部朝左） */
+/* v1.9.27 设置美术默认朝向；v1.9.57 默认"朝右"（当前六职业立绘全部朝右） */
 WMap.prototype.setHeroFacing=function(facesRight){
-  this.heroFacesRight=facesRight===true;
+  this.heroFacesRight=facesRight!==false;
 };
 
 /* ---------- 切换世界 + 接入服务端点位 ---------- */
@@ -1172,7 +1172,7 @@ WMap.prototype.drawHero=function(g,sx,sy,t){
   // 立绘逻辑画布 64×96：scale=1 即屏幕 64×96，与原主角显示尺寸/比例锚点一致
   // v1.9.27：行走方向按美术默认朝向修正——美术朝右者向左翻转，美术朝左者向右翻转
   if(this.heroActor){
-    const f=this.heroFacesRight===true;   // v1.9.56 未设置时按"立绘朝左"处理，避免默认翻转
+    const f=this.heroFacesRight!==false;   // v1.9.57 默认"立绘朝右"
     const flip=this.hero.dir==='left'?(f?-1:1):(f?1:-1);
     this.heroActor.render(g,sx,sy,1,{dir:flip});
   }

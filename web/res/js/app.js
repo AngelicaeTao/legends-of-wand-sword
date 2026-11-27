@@ -612,11 +612,11 @@ function switchAccount(){ setSession(null); $('authUser').value=''; $('authPwd')
 const CLASS_BUNDLES={warrior:'char_warrior',mage:'char_mage',knight:'char_knight',fighter:'char_fighter',sage:'char_sage',warlock:'char_warlock'};
 // v1.9.27 立绘美术默认朝向（对照 standee 素材逐个确认）：战士/拳师/术士面向右，
 // 法师/骑士/祭祀面向左。渲染时按"移动方向 ⊕ 美术朝向"决定翻转，行走不再反向。
-// v1.9.56 六个职业的立绘/程序帧（v1.9.49 重绘）实测**全部朝左**：武器/法杖都在左侧、
-// 脸朝左。原表把 warrior/fighter/warlock 标成朝右，这三个职业走路就是反的；
-// 且未知职业默认 true 也会反。这里统一按"朝左"为默认，将来某职业改朝右再标 true。
-const ART_FACES_RIGHT={warrior:false,mage:false,knight:false,fighter:false,sage:false,warlock:false};
-function artFacesRight(classId){ return ART_FACES_RIGHT[classId]===true; }
+// v1.9.57 更正：v1.9.49 重绘后的六个职业立绘**全部朝右**（法杖/武器在后方手、光球/盾牌在朝前手），
+// 原表把 mage/knight/sage 标成朝左——这三个职业走路反向（法师首当其冲）。
+// 未知职业同样按朝右处理；将来某职业改朝左，在此单独标 false。
+const ART_FACES_RIGHT={warrior:true,mage:true,knight:true,fighter:true,sage:true,warlock:true};
+function artFacesRight(classId){ return ART_FACES_RIGHT[classId]!==false; }
 function heroBundleOf(classId){ return CLASS_BUNDLES[classId]||'char_warrior'; }
 function applyHeroLook(){
   if(!state||!state.core)return;
