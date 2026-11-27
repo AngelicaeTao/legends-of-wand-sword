@@ -8,7 +8,7 @@ import (
 
 // v1.9.42 装备升品：品质+1、属性按 mult 比例重算、混沌上限拒绝
 func TestQualityUp(t *testing.T) {
-	if err := game.Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := game.Init("../../../configs"); err != nil { t.Fatal(err) }
 	mults := []float64{1.0, 1.25, 1.6, 2.1, 2.8, 3.6, 4.6, 6.0}
 	p := NewPlayer("t_qup", "升品师", "warrior")
 	p.Equip = append(p.Equip, Equip{ID: "w_up", Slot: "weapon", Quality: 4, Enhance: 2,

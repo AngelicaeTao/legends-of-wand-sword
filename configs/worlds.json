@@ -15,6 +15,16 @@
           "y": 2176
         },
         {
+          "id": "W1_BOSS",
+          "type": "BOSS",
+          "tier": 1,
+          "x": 3840,
+          "y": 1400,
+          "bossMonster": "map_boss",
+          "randomPos": true,
+          "_note": "v1.9.46 每图常驻首领：客户端在可行走区域随机落点，180s 冷却；属性约为同图精英的 1.5 倍"
+        },
+        {
           "id": "W1_E01",
           "type": "MOB",
           "tier": 2,
@@ -161,7 +171,8 @@
           "y": 1152,
           "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
-      ]
+      ],
+      "rewardMult": 1.0
     },
     {
       "id": "W2",
@@ -175,6 +186,16 @@
           "type": "ANCHOR",
           "x": 4192,
           "y": 2160
+        },
+        {
+          "id": "W2_BOSS",
+          "type": "BOSS",
+          "tier": 1,
+          "x": 3840,
+          "y": 1400,
+          "bossMonster": "map_boss",
+          "randomPos": true,
+          "_note": "v1.9.46 每图常驻首领：客户端在可行走区域随机落点，180s 冷却；属性约为同图精英的 1.5 倍"
         },
         {
           "id": "W2_G_W1",
@@ -338,7 +359,8 @@
           "y": 1152,
           "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
-      ]
+      ],
+      "rewardMult": 1.2
     },
     {
       "id": "W3",
@@ -352,6 +374,16 @@
           "type": "ANCHOR",
           "x": 4192,
           "y": 2160
+        },
+        {
+          "id": "W3_BOSS",
+          "type": "BOSS",
+          "tier": 1,
+          "x": 3840,
+          "y": 1400,
+          "bossMonster": "map_boss",
+          "randomPos": true,
+          "_note": "v1.9.46 每图常驻首领：客户端在可行走区域随机落点，180s 冷却；属性约为同图精英的 1.5 倍"
         },
         {
           "id": "W3_G_W2",
@@ -506,7 +538,8 @@
           "y": 1344,
           "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
-      ]
+      ],
+      "rewardMult": 1.44
     },
     {
       "id": "W4",
@@ -520,6 +553,16 @@
           "type": "ANCHOR",
           "x": 3450,
           "y": 707
+        },
+        {
+          "id": "W4_BOSS",
+          "type": "BOSS",
+          "tier": 1,
+          "x": 3840,
+          "y": 1400,
+          "bossMonster": "map_boss",
+          "randomPos": true,
+          "_note": "v1.9.46 每图常驻首领：客户端在可行走区域随机落点，180s 冷却；属性约为同图精英的 1.5 倍"
         },
         {
           "id": "W4_G_W3",
@@ -674,7 +717,8 @@
           "y": 1056,
           "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
-      ]
+      ],
+      "rewardMult": 1.728
     },
     {
       "id": "W5",
@@ -688,6 +732,16 @@
           "type": "ANCHOR",
           "x": 4192,
           "y": 2160
+        },
+        {
+          "id": "W5_BOSS",
+          "type": "BOSS",
+          "tier": 1,
+          "x": 3840,
+          "y": 1400,
+          "bossMonster": "map_boss",
+          "randomPos": true,
+          "_note": "v1.9.46 每图常驻首领：客户端在可行走区域随机落点，180s 冷却；属性约为同图精英的 1.5 倍"
         },
         {
           "id": "W5_G_W4",
@@ -842,7 +896,8 @@
           "y": 768,
           "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
-      ]
+      ],
+      "rewardMult": 2.0736
     },
     {
       "id": "W6",
@@ -856,6 +911,16 @@
           "type": "ANCHOR",
           "x": 2896,
           "y": 2400
+        },
+        {
+          "id": "W6_BOSS",
+          "type": "BOSS",
+          "tier": 1,
+          "x": 3840,
+          "y": 1400,
+          "bossMonster": "map_boss",
+          "randomPos": true,
+          "_note": "v1.9.46 每图常驻首领：客户端在可行走区域随机落点，180s 冷却；属性约为同图精英的 1.5 倍"
         },
         {
           "id": "W6_G_W5",
@@ -1002,7 +1067,8 @@
           "y": 672,
           "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
         }
-      ]
+      ],
+      "rewardMult": 2.48832
     },
     {
       "id": "HOME",

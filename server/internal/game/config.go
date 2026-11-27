@@ -166,6 +166,9 @@ type WorldDef struct {
 	Theme  string     `json:"theme"`
 	BG     string     `json:"bg"`
 	Spawns []SpawnDef `json:"spawns"`
+	// v1.9.46 地图产出系数：宝箱经验/金币/钻石/材料/药水按此放大。
+	// 配置为 1.0 / 1.2 / 1.44 …（每张图比上一张多 20%，累积），未配置时按 1.0 处理。
+	RewardMult float64 `json:"rewardMult"`
 }
 type SpawnDef struct {
 	ID           string `json:"id"`
@@ -177,6 +180,9 @@ type SpawnDef struct {
 	RequireLevel int    `json:"requireLevel"`
 	BossMonster  string `json:"bossMonster"`
 	Content      string `json:"content"` // FUNC 点位的功能标识（v1.9.31 家园：warehouse/idle/dress/gate）
+	// v1.9.46 BOSS 点位随机落点：坐标只是兜底，客户端在可行走区域随机取点后渲染。
+	// 服务端只按 nodeId 判胜负与冷却，不校验坐标，故随机不影响结算权威性。
+	RandomPos bool `json:"randomPos"`
 }
 
 var (

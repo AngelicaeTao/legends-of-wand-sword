@@ -25,7 +25,9 @@ type SpotState struct {
 	RollCount  int    `json:"rollCount"`  // 连续未出稀有的次数（保底用）
 	To         string `json:"to,omitempty"`
 	ReqLevel   int    `json:"requireLevel,omitempty"`
-	Group      []string `json:"group,omitempty"` // v1.9.36 群怪模版：点位怪物组合（monster id，可重复），战斗/贴图以此为准
+	// v1.9.46：该点位坐标是否只是兜底值（首领点位由客户端在可走区域随机落点）
+	RandomPos bool     `json:"randomPos,omitempty"`
+	Group     []string `json:"group,omitempty"` // v1.9.36 群怪模版：点位怪物组合（monster id，可重复），战斗/贴图以此为准
 }
 
 // SpawnManager 全部世界点位的运行时状态，线程安全。
@@ -59,6 +61,7 @@ func InitSpawns() {
 				spawnMgr.spots[key] = &SpotState{
 					NodeID: s.ID, Type: s.Type, Tier: s.Tier, X: s.X, Y: s.Y,
 					To: s.To, ReqLevel: s.RequireLevel, BossMonster: s.BossMonster,
+					RandomPos: s.RandomPos,
 					Active: true, ReadyAt: now, ContentID: content,
 				}
 				// v1.9.36 初始即 roll 群怪组合（BOSS 单首领 / ELITE 主怪+小怪 / MOB 随机 1-3）
@@ -193,14 +196,16 @@ func (m *SpawnManager) ActiveSpots(worldID, userID string) []SpotState {
 		}
 		if s.Active {
 			out = append(out, *s)
-			if s.Type == "MOB" || s.Type == "ELITE" || s.Type == "BOSS" { active++ }
+			// v1.9.46：首领不占密度额度——每图必须稳定出现一个首领，
+			// 否则 8 点上限会在 12+ 怪物点位里随机剔除，导致首领时有时无。
+			if s.Type == "MOB" || s.Type == "ELITE" { active++ }
 		}
 	}
-	// 密度上限：超出则把多余的怪点临时转为冷却（不删除点位）
+	// 密度上限：超出则把多余的怪点临时转为冷却（不删除点位）；首领不参与淘汰
 	if active > capN {
 		extra := active - capN
 		for i := len(out)-1; i >= 0 && extra > 0; i-- {
-			if out[i].Type == "MOB" || out[i].Type == "ELITE" || out[i].Type == "BOSS" {
+			if out[i].Type == "MOB" || out[i].Type == "ELITE" {
 				if k, ok := m.spots[worldID+"/"+out[i].NodeID]; ok {
 					k.Active = false
 					k.ReadyAt = now + m.cooldownFor(k.Type)
@@ -313,7 +318,8 @@ func (m *SpawnManager) OpenChest(userID, worldID, nodeID string) (SpotState, boo
 // RegisterDropChest 怪物掉落宝箱登记（v1.9.45）。
 // 服务端按 economy.drop.monsterChest 权重权威掷档位并建实例，客户端不再参与概率；
 // 同一 nodeId 只允许登记一次（防重复 roll 赌档），同玩家未开启的掉落箱上限 12 个（防批量刷箱）。
-func (m *SpawnManager) RegisterDropChest(userID, worldID, nodeID string, boss bool) (SpotState, bool) {
+// v1.9.46：kind 区分 normal/elite/boss 三档怪物，档次越高高品质箱概率越高。
+func (m *SpawnManager) RegisterDropChest(userID, worldID, nodeID, kind string) (SpotState, bool) {
 	m.mu.Lock(); defer m.mu.Unlock()
 	key := userID + "/" + worldID + "/" + nodeID
 	if _, exists := m.chests[key]; exists { return SpotState{}, false }
@@ -322,19 +328,31 @@ func (m *SpawnManager) RegisterDropChest(userID, worldID, nodeID string, boss bo
 		if strings.HasPrefix(k, userID+"/") && st.Active && strings.HasPrefix(st.NodeID, "drop_") { n++ }
 		if n >= 12 { return SpotState{}, false }
 	}
-	s := &SpotState{NodeID: nodeID, Type: "CHEST", Tier: m.rollDropTier(boss), Active: true,
+	s := &SpotState{NodeID: nodeID, Type: "CHEST", Tier: m.rollDropTier(kind), Active: true,
 		ReadyAt: ServerNow(), ContentID: "chest"}
 	m.chests[key] = s
 	return *s, true
 }
 
+// DropKindOf 归一化怪物档次（v1.9.46）：只认 elite/boss，其余一律 normal。
+func DropKindOf(kind string) string {
+	switch kind {
+	case "elite", "boss":
+		return kind
+	}
+	return "normal"
+}
+
 // rollDropTier 按 monsterChest 权重掷档位（1木 2银 3金 4钻石 5水晶）。
 // 保底（rollContent 的 8 次计数）对掉落箱不适用：每次掉落都是独立的一次抽取。
-func (m *SpawnManager) rollDropTier(boss bool) int {
-	prof := "normal"
-	if boss { prof = "boss" }
+// v1.9.46：三档权重来自配置，每档内部递减且不设 0；缺配置时按 normal 兜底。
+func (m *SpawnManager) rollDropTier(kind string) int {
+	prof := DropKindOf(kind)
 	raw, _ := C().Economy.Drop["monsterChest"].(map[string]any)
 	w, _ := raw[prof].(map[string]any)
+	if w == nil { // 老配置只有 normal/boss：elite 回退到 normal
+		w, _ = raw["normal"].(map[string]any)
+	}
 	names := []string{"wood", "silver", "gold", "diamond", "crystal"}
 	vals := make([]float64, len(names))
 	total := 0.0
@@ -342,8 +360,8 @@ func (m *SpawnManager) rollDropTier(boss bool) int {
 		vals[i] = numOf(w, n, 0)
 		total += vals[i]
 	}
-	if total <= 0 { // 配置缺失兜底：普通怪木箱、BOSS 金箱
-		if boss { return 3 }
+	if total <= 0 { // 配置缺失兜底：普通怪木箱、首领金箱
+		if prof == "boss" { return 3 }
 		return 1
 	}
 	r := m.rand.Float64() * total
@@ -351,6 +369,17 @@ func (m *SpawnManager) rollDropTier(boss bool) int {
 	for i, v := range vals {
 		acc += v
 		if r < acc { return i + 1 }
+	}
+	return 1
+}
+
+// WorldRewardMult 地图产出系数（v1.9.46）：宝箱经验/金币/钻石/材料/药水按此放大。
+// 配置为 1.0 / 1.2 / 1.44 …（每张图比上一张多 20%）；未配置或非法值按 1.0。
+func WorldRewardMult(worldID string) float64 {
+	for _, w := range C().Worlds.Worlds {
+		if w.ID != worldID { continue }
+		if w.RewardMult > 0 { return w.RewardMult }
+		return 1
 	}
 	return 1
 }

@@ -4,7 +4,7 @@ import "testing"
 
 // v1.9.36 群怪模版：混编组合战斗结算验证
 func TestGroupBattle(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := Init("../../../configs"); err != nil { t.Fatal(err) }
 	req := BattleRequest{
 		MonsterID: "skeleton", MonsterLv: 3,
 		Group:  []string{"slime", "skeleton", "bat"},

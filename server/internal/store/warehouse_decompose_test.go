@@ -8,7 +8,7 @@ import (
 
 // v1.9.40 仓库分解：装备 → 金币，条目移除；存入/取出保留武器系标（顺带修复 v1.9.38 遗漏）
 func TestWarehouseDecompose(t *testing.T) {
-	if err := game.Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := game.Init("../../../configs"); err != nil { t.Fatal(err) }
 	p := NewPlayer("t_dec", "分解侠", "warrior")
 	p.Warehouse = append(p.Warehouse, Item{
 		ID: "eq_a", Qty: 1, Kind: "equip",
@@ -34,7 +34,7 @@ func TestWarehouseDecompose(t *testing.T) {
 
 // v1.9.41 批量分解：只吃装备条目，材料/药水原样保留；收益按品质基准表累加
 func TestWarehouseDecomposeAll(t *testing.T) {
-	if err := game.Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := game.Init("../../../configs"); err != nil { t.Fatal(err) }
 	SetDecomposeConfig([]int{40, 120, 300, 800, 2000}, []int{10, 30, 80, 200, 500}, 0.15)
 	p := NewPlayer("t_all", "分解狂", "mage")
 	gold0, mat0 := p.Core.Gold, p.Core.Material // NewPlayer 自带初始金币/材料
@@ -64,7 +64,7 @@ func TestWarehouseDecomposeAll(t *testing.T) {
 
 // 存入仓库再取出：武器 ClassID 必须随行（v1.9.40 修复 v1.9.38 存入丢系标）
 func TestWarehouseEquipClassIdRoundTrip(t *testing.T) {
-	if err := game.Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := game.Init("../../../configs"); err != nil { t.Fatal(err) }
 	p := NewPlayer("t_rt", "搬运工", "warrior")
 	p.Equip = append(p.Equip, Equip{ID: "w_blade", Slot: "weapon", Quality: 1,
 		Stats: map[string]float64{"atk": 11}, ClassID: "warrior"})
