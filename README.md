@@ -2,25 +2,28 @@
 
 服务端权威的 Web 放置手游（Playable 原型）：Go 单二进制权威服务 + 原生 Canvas 部件动画前端，单端口同源部署，支持多端接入。
 
-当前最新代码归档版本：**v1.9.45**（美术最新为 assets/v1.9.44；历史归档分支保留，按需拉取）。
+当前最新代码归档版本：**v1.9.48**（`code/v1.9.48-integrated`，含 HUD 修复 + 服务端权威掷箱整合；美术最新为 assets/v1.9.44；历史归档分支保留，按需拉取）。
 
 ## 分支说明
 
 本仓库按「代码 / 资源」分离存放，克隆时按需拉取对应分支：
 
-| 分支 | 内容 | 体积 |
-|---|---|---:|
-| `code/v1.9.45` | **最新代码**：Go 服务端、Web 前端（10 个 JS/CSS/HTML）、配置文件、脚本、客户端骨架、交付文档（含 v1.9.x 验证截图） | 约 13 MB |
-| `assets/v1.9.44` | **最新美术**：按用途分类（地图 / 精灵 / 背景 / 卡面 / 图标 / 特效 / 旧版素材），含 v1.9.37 三怪部件包 + v1.9.42 钻石/水晶箱部件包 | 约 7.8 MB |
-| `code/v1.7.5`…`code/v1.9.44` | 历史代码归档（含 code/v1.9.40 ~ code/v1.9.44 增量版本；最新为 code/v1.9.45） | — |
-| `assets/v1.7.5`…`assets/v1.9.39` | 历史美术归档 | — |
-| `main` | 仓库说明与分支导航（本页） | — |
+| 分支 | 内容 | 状态 | 体积 |
+|---|---|---|---:|
+| `code/v1.9.48-integrated` | **最新代码**：整合 v1.9.48 HUD 修复 + v1.9.45 服务端权威掷箱（含 merge 整合提交），Go 服务端、Web 前端、配置、脚本、交付文档 | ✅ 有效·最新 | 约 13 MB |
+| `assets/v1.9.44` | **最新美术**：按用途分类（地图 / 精灵 / 背景 / 卡面 / 图标 / 特效 / 旧版素材），含 v1.9.37 三怪部件包 + v1.9.42 钻石/水晶箱部件包 | ✅ 有效·最新 | 约 7.8 MB |
+| `code/v1.9.45` | v1.9.45 服务端权威掷箱主分支 | 📦 历史归档 | — |
+| `code/v1.7.5`…`code/v1.9.44` | 历史代码归档（含 code/v1.9.40 ~ code/v1.9.44 增量版本；v1.9.44 为 Part A 配置实测基准，tip 提交信息误写为 v1.9.45，内容无误） | 📦 历史归档 | — |
+| `assets/v1.7.5`…`assets/v1.9.39` | 历史美术归档 | 📦 历史归档 | — |
+| `main` | 仓库说明与分支导航（本页） | ✅ 有效 | — |
+
+> **已清理的冗余分支**：`feat/v1.9.45-monster-chest-...`（与 `code/v1.9.45` 同一提交 7d05c62）、`code/v1.9.48-hud-and-layer-fixes`（代码已被 integrated 完整包含，仅差文档提交）已删除。历史归档分支有意保留，不做删除。
 
 ### 拉取方式
 
 ```bash
 # 代码
-git clone -b code/v1.9.45 https://github.com/AngelicaeTao/legends-of-wand-sword.git
+git clone -b code/v1.9.48-integrated https://github.com/AngelicaeTao/legends-of-wand-sword.git
 
 # 资源（放入同一工作目录，按 assets 分支 README 的回填映射还原）
 git clone -b assets/v1.9.44 https://github.com/AngelicaeTao/legends-of-wand-sword.git assets
@@ -47,8 +50,8 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 | 版本 | 内容 |
 |---|---|
+| v1.9.48 | UI 整合：HUD 精简、任务栏折叠、按钮统一、弹窗层级修复；merge 保留服务端权威掷箱（当前最新，`code/v1.9.48-integrated`） |
 | v1.9.45 | 怪物掉落箱改服务端权威掷档（新增 POST /api/chest/drop 登记）：普通/精英怪钻石+水晶掉率 8%→15%，掉落箱一次性、防伪造刷箱 |
-| v1.9.45 | 怪物掉落箱服务端权威掷档：普通/精英钻+水 8%→15%，掉落箱一次性 + 防刷箱上限 |
 | v1.9.44 | 装备升品质入口移入强化工坊（升品栏+品质进阶+消耗展示），仓库 ⬆ 角标移除 |
 | v1.9.43 | 高等级怪物削峰（成长公式指数改线性）、Boss 双重强化修复、Boss 掉落死循环护栏修复 |
 | v1.9.42 | 怪物参照角色基准再削 30%、装备爆率 0.45/0.85、钻石箱水晶箱、品质 8 档（彩虹/暗影/混沌）+ 升品、点玩家查档案 + 在线玩家列表 |
@@ -579,7 +582,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 **多人 Match（Nakama opCode，match.go 实测）**：1=`move` {x,y,ts,action} C→S；2=`snapshot` {players[],tick} S→C（10Hz）；3=`join` S→C；4=`leave` S→C。RPC `join_world`{worldId}→{matchId,worldId}。防作弊：位移 >600 单位/秒丢弃，单线上限 40。
 
-### A10. 版本演进（v1.6 → v1.9.45）
+### A10. 版本演进（v1.6 → v1.9.48）
 
 | 版本 | 关键内容 |
 |---|---|
@@ -619,6 +622,8 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | v1.9.42 | 怪物再削 30% + 装备爆率 0.45/0.85 + 钻石箱/水晶箱 + 品质 8 档(彩虹/暗影/混沌)+升品 + 玩家档案/在线列表 |
 | v1.9.43 | 高等级怪物削峰（指数改线性）+ Boss 双重强化修复 + 掉落死循环护栏 |
 | v1.9.44 | 装备升品质入口移入强化工坊 |
+| v1.9.45 | 怪物掉落箱服务端权威掷档（POST /api/chest/drop，钻+水 8%→15%，防刷箱） |
+| v1.9.48 | HUD 精简 / 任务栏折叠 / 按钮统一 / 弹窗层级修复 + 整合服务端（code/v1.9.48-integrated，当前最新） |
 
 ---
 
