@@ -2489,7 +2489,12 @@ function showBattleResult(rep,mon){
     const ic=(SLOTICON[d.slot]||ICON.bag)(24,qc);
     return `<div class="loot-cell loot-eq" style="border-color:${qc}" title="${sn} · ${qn}${d.enhance?' +'+d.enhance:''}"><div class="loot-ico" style="border-color:${qc}">${ic}</div><div class="loot-nm">${sn}</div><div class="loot-q" style="color:${qc}">${qn}</div></div>`;
   }).join('')}</div></div>`:'';
-  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备）</i></span><em>金币 +${fmt(rep.decomposedGold||0)} · 材料 +${fmt(rep.decomposedMat||0)}</em></div>`:'';
+  // v1.9.59 自动分解要写清"每件分解出了什么"，不只是总数：逐件列出 品质·部位 → 金币/材料
+  const decompRows=(rep.decomposed||[]).map(d=>{
+    const q=Math.min(7,d.quality==null?0:d.quality), qc=QCOLOR[q], qn=QUALCN[q], sn=slotCN[d.slot]||d.slot;
+    return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 材料 +${fmt(d.mat||0)}</span></div>`;
+  }).join('');
+  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row" title="不自动回满 · 用回血药水或采草药恢复"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>

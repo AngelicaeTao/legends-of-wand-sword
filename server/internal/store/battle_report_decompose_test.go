@@ -31,6 +31,20 @@ func TestApplyBattleReportFiltersDecomposed(t *testing.T) {
 	if rep.DecomposedGold <= 0 || rep.DecomposedMat <= 0 {
 		t.Fatalf("应回写分解收益，实际 金币 %d 材料 %d", rep.DecomposedGold, rep.DecomposedMat)
 	}
+	// v1.9.59 逐件明细：结算界面要能写清"这件装备分解出了什么"
+	if len(rep.Decomposed) != 1 {
+		t.Fatalf("应回写 1 条分解明细，实际 %d 条", len(rep.Decomposed))
+	}
+	d := rep.Decomposed[0]
+	if d.Slot != "weapon" || d.Quality != 0 {
+		t.Fatalf("明细部位/品质不对：%+v", d)
+	}
+	if d.Gold <= 0 || d.Mat <= 0 {
+		t.Fatalf("明细收益应 >0：%+v", d)
+	}
+	if d.Gold != rep.DecomposedGold || d.Mat != rep.DecomposedMat {
+		t.Fatalf("明细合计应与汇总一致：明细(%d,%d) 汇总(%d,%d)", d.Gold, d.Mat, rep.DecomposedGold, rep.DecomposedMat)
+	}
 	if p.Core.Gold < 5+rep.DecomposedGold {
 		t.Fatalf("金币应入账：期望 ≥ %d，实际 %d", 5+rep.DecomposedGold, p.Core.Gold)
 	}

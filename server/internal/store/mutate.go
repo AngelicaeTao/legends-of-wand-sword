@@ -33,13 +33,14 @@ func (p *PlayerState) wornInSlot(slot, classID string) *Equip {
 // autoDecomposeWorse 新装备入包前过滤（v1.9.46）：
 // 同部位已穿戴装备战力 ≥ 新装备战力时，直接把新装备分解为金币+材料，不进背包。
 // 跨系武器（角色永远穿不上）同样直接分解。
-// 返回 (保留的装备, 分解金币, 分解材料, 分解件数, 明细日志)。
-func (p *PlayerState) autoDecomposeWorse(equips []game.EquipItem) (kept []game.EquipItem, gold, mat, n int, logs []string) {
+// 返回 (保留的装备, 分解金币, 分解材料, 分解件数, 逐件明细, 明细日志)。
+func (p *PlayerState) autoDecomposeWorse(equips []game.EquipItem) (kept []game.EquipItem, gold, mat, n int, items []game.DecompItem, logs []string) {
 	for _, d := range equips {
 		base := &Equip{Quality: d.Quality, Enhance: d.Enhance}
 		if d.Slot == "weapon" && d.ClassID != "" && d.ClassID != game.WeaponClassFor(p.Core.ClassID) {
 			g, m := decomposeGoldOf(base), decomposeMatOf(base)
 			gold, mat, n = gold+g, mat+m, n+1
+			items = append(items, game.DecompItem{Slot: d.Slot, Quality: d.Quality, ClassID: d.ClassID, Gold: g, Mat: m})
 			logs = append(logs, fmt.Sprintf("自动分解：%s（异系武器无法装备，金币 +%d 材料 +%d）",
 				equipCN(d.Quality, d.Slot, d.ClassID), g, m))
 			continue
@@ -57,6 +58,7 @@ func (p *PlayerState) autoDecomposeWorse(equips []game.EquipItem) (kept []game.E
 		}
 		g, m := decomposeGoldOf(base), decomposeMatOf(base)
 		gold, mat, n = gold+g, mat+m, n+1
+		items = append(items, game.DecompItem{Slot: d.Slot, Quality: d.Quality, ClassID: d.ClassID, Gold: g, Mat: m})
 		logs = append(logs, fmt.Sprintf("自动分解：%s（战力 %d ≤ 穿戴中 %d，金币 +%d 材料 +%d）",
 			equipCN(d.Quality, d.Slot, d.ClassID), int(newPw), int(wornPw), g, m))
 	}
@@ -81,12 +83,13 @@ func ApplyBattleReport(p *PlayerState, rep *game.BattleReport) []string {
 
 	// v1.9.46：低于同部位穿戴中战力的装备直接分解成金币+材料，不占背包
 	// v1.9.54：分解结果回写进战报——被分解的不再出现在结算列表里，改由汇总行展示
-	drops, dGold, dMat, dN, dLogs := p.autoDecomposeWorse(rep.Drops)
+	drops, dGold, dMat, dN, dItems, dLogs := p.autoDecomposeWorse(rep.Drops)
 	rep.Drops = drops
 	if dN > 0 {
 		rep.DecomposedCount = dN
 		rep.DecomposedGold = dGold
 		rep.DecomposedMat = dMat
+		rep.Decomposed = dItems // v1.9.59 逐件明细，前端列清每件分解出什么
 	}
 	p.Core.Gold += dGold
 	p.Core.Material += dMat
@@ -286,13 +289,13 @@ func ApplyChestReward(p *PlayerState, exp, gold, gem, material, potions int, equ
 		items = append(items, map[string]any{"kind": "potion", "id": "potion_s", "name": "回血药水", "qty": potions})
 	}
 	// v1.9.46：低于同部位穿戴中战力的装备直接分解，收益计入本次开箱明细
-	keep, dGold, dMat, dN, dLogs := p.autoDecomposeWorse(equips)
+	keep, dGold, dMat, dN, dItems, dLogs := p.autoDecomposeWorse(equips)
 	p.Core.Gold += dGold
 	p.Core.Material += dMat
 	logs = append(logs, dLogs...)
 	if dN > 0 {
 		logs = append(logs, fmt.Sprintf("开箱：%d 件低战力装备已自动分解（金币 +%d 材料 +%d）", dN, dGold, dMat))
-		items = append(items, map[string]any{"kind": "decompose", "name": "低战力装备分解", "qty": dN, "gold": dGold, "material": dMat})
+		items = append(items, map[string]any{"kind": "decompose", "name": "低战力装备分解", "qty": dN, "gold": dGold, "material": dMat, "detail": dItems})
 	}
 	for _, d := range keep {
 		p.Equip = append(p.Equip, Equip{

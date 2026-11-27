@@ -46,6 +46,15 @@ type MonInfo struct {
 	IsBoss bool   `json:"isBoss"`
 }
 
+// DecompItem 是"自动分解"的逐件明细（v1.9.59）：结算界面据此列出每件装备换到了什么。
+type DecompItem struct {
+	Slot    string `json:"slot"`
+	Quality int    `json:"quality"`
+	ClassID string `json:"classId,omitempty"`
+	Gold    int    `json:"gold"`
+	Mat     int    `json:"mat"`
+}
+
 // BattleReport 服务端下发的权威战报。客户端只做表现，不参与结算。
 type BattleReport struct {
 	Seed       int64         `json:"seed"`
@@ -61,6 +70,8 @@ type BattleReport struct {
 	DecomposedCount int `json:"decomposedCount,omitempty"`
 	DecomposedGold  int `json:"decomposedGold,omitempty"`
 	DecomposedMat   int `json:"decomposedMat,omitempty"`
+	// v1.9.59 分解逐件明细：结算界面要能写清"每件分解出了什么"，而不只是总数
+	Decomposed []DecompItem `json:"decomposed,omitempty"`
 	Seconds    float64       `json:"seconds"`
 	Log        string        `json:"log"`
 	HeroHPStart float64      `json:"heroHpStart"` // v1.9.27 战斗开局血量（全局血量不回满）
