@@ -39,7 +39,7 @@ let currentMonster=null, currentReport=null;
 const MON_NAMES={slime:'史莱姆',skeleton:'骷髅兵',bat:'蝙蝠',boss_beetle:'甲虫将军',
   slime_toxic:'毒液史莱姆',skeleton_archer:'骷髅弓手',bat_crimson:'血蝙蝠',map_boss:'图域首领'}; // v1.9.37 新增衍生怪
 let battlePlaying=false, paused=false;
-let heroStats=null;        // 服务端权威属性（/api/stats/calc），前端不自行推算
+let heroStats=null, pendingStats=null;   // v1.9.60 登录时服务端随存档一起下发的属性，供 finishEnter 复用        // 服务端权威属性（/api/stats/calc），前端不自行推算
 let ws=null, clientId=null, onlineCount=1;
 let wsChannel=0, wsRetry=0, wsTimers=[];   // 分线号 + 断线退避重连（1/2/4/8s）
 
@@ -130,6 +130,35 @@ window.__bt=()=>{const a=battleHeroActor;return {b:bAnim.hero,state:a?a.state:nu
   modalTxt:document.getElementById('modalLayer').innerText.replace(/\n/g,'|').slice(0,40)};};
 const miniCtx=$('miniMapCv').getContext('2d');
 
+// v1.9.64 点小地图直接打开大地图（原来只能按 M 或点底部「地图」入口）
+const miniCvEl=$('miniMapCv');
+miniCvEl.title='点击打开大地图';
+miniCvEl.addEventListener('click',(e)=>{
+  // 只响应圆盘内：canvas 是 180×180 方形，四角在圆外，点到角落不该开图
+  const r=miniCvEl.getBoundingClientRect(); if(!r.width)return;
+  const cx=(e.clientX-r.left)*(MM_S/r.width), cy=(e.clientY-r.top)*(MM_S/r.height);
+  if(Math.hypot(cx-MM_S/2,cy-MM_S/2)>MM_S/2-2)return;
+  // 与 M 键同一守卫：仅大世界态（战斗中/面板打开时 active=false）
+  if(worldMap&&worldMap.active)worldMap.openMapModal();
+});
+
+// v1.9.64 小地图下方旗标条：跟踪状态 + 距离，点一下清除标记
+const mmPinEl=$('mmPin'), mmPinTxt=$('mmPinTxt');
+let _mmPinText='';
+function refreshMmPin(){
+  if(!mmPinEl||!mmPinTxt)return;
+  const p=(worldMap&&worldMap.curPin)?worldMap.curPin():null;
+  if(!p){
+    if(!mmPinEl.classList.contains('hidden'))mmPinEl.classList.add('hidden');
+    _mmPinText=''; return;
+  }
+  mmPinEl.classList.remove('hidden');
+  mmPinEl.classList.toggle('off',!p.track);
+  const s=(p.track?'跟踪 ':'标记 ')+worldMap.pinDist()+' 格';
+  if(s!==_mmPinText){ mmPinTxt.textContent=s; _mmPinText=s; }
+}
+if(mmPinEl)mmPinEl.addEventListener('click',()=>{ if(worldMap)worldMap.clearPin(); refreshMmPin(); });
+
 // 小地图：真实雷达（以角色为中心，与通行掩码同源，北向上）
 // 旧版是写死的装饰底图（假水域/假十字路），与实际路网无关 → 位置"对不上"
 const MM_S=180, MM_RANGE=2048;              // 显示直径 2048 世界单位（约 1.6 屏）
@@ -203,6 +232,26 @@ function drawMiniMap(){
   g.beginPath();g.arc(C,C,R-4,0,Math.PI*2);g.stroke();
   g.strokeStyle='#d9b45b';g.lineWidth=3;
   g.beginPath();g.arc(C,C,R,0,Math.PI*2);g.stroke();
+  // ---- v1.9.64 地图旗标：雷达范围内画小旗；范围外且开启跟踪时沿圆边画指向箭头 ----
+  const pin=(worldMap.curPin?worldMap.curPin():null);
+  if(pin){
+    const px=mx(pin.x), py=my(pin.y), ddx=px-C, ddy=py-C, dd=Math.hypot(ddx,ddy);
+    if(dd<=R-7){
+      g.save();
+      g.strokeStyle='#6b4c00';g.lineWidth=1.8;
+      g.beginPath();g.moveTo(px,py);g.lineTo(px,py-11);g.stroke();
+      g.fillStyle='#ffd65a';g.strokeStyle='#6b4c00';g.lineWidth=1.1;
+      g.beginPath();g.moveTo(px+1,py-11);g.lineTo(px+10,py-7.6);g.lineTo(px+1,py-4.2);g.closePath();
+      g.fill();g.stroke();g.restore();
+    } else if(pin.track){
+      const a=Math.atan2(ddy,ddx), ex=C+Math.cos(a)*(R-9), ey=C+Math.sin(a)*(R-9);
+      g.save();g.translate(ex,ey);g.rotate(a);
+      g.fillStyle='#ffd65a';g.strokeStyle='rgba(26,16,0,.9)';g.lineWidth=1.3;
+      g.beginPath();g.moveTo(9,0);g.lineTo(-4.5,-6);g.lineTo(-1.8,0);g.lineTo(-4.5,6);g.closePath();
+      g.fill();g.stroke();g.restore();
+    }
+  }
+  refreshMmPin();
 }
 
 let bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
@@ -506,7 +555,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.57';
+const BUILD_VER='v1.9.67';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -609,10 +658,17 @@ async function doDeviceLogin(){
 function switchAccount(){ setSession(null); $('authUser').value=''; $('authPwd').value=''; state=null; closeWS(); refreshLoginView(); }
 
 // 职业 → 整体立绘 bundle（探索/战斗同一套职业装备装，交付包 §4.2）
-const CLASS_BUNDLES={warrior:'char_warrior',mage:'char_mage',knight:'char_knight',fighter:'char_fighter',sage:'char_sage',warlock:'char_warlock'};
+// v1.9.65 战士/骑士立绘素材互换了：parts.json 里 char_warrior 写的是"钢甲红披"、
+// char_knight 写的是"银白重甲蓝羽"，但两个文件夹里的图正好相反（warrior 里是灰钢甲、
+// knight 里是红甲）。游戏里表现为"战士显示成骑士、骑士显示成战士"，这里把映射对调。
+const CLASS_BUNDLES={warrior:'char_knight',mage:'char_mage',knight:'char_warrior',fighter:'char_fighter',sage:'char_sage',warlock:'char_warlock'};
+window.CLASS_BUNDLES=CLASS_BUNDLES;   // 供 creator.js / worldmap.js 共用同一张表
 // v1.9.27 立绘美术默认朝向（对照 standee 素材逐个确认）：战士/拳师/术士面向右，
 // 法师/骑士/祭祀面向左。渲染时按"移动方向 ⊕ 美术朝向"决定翻转，行走不再反向。
-const ART_FACES_RIGHT={warrior:true,mage:false,knight:false,fighter:true,sage:false,warlock:true};
+// v1.9.57 更正：v1.9.49 重绘后的六个职业立绘**全部朝右**（法杖/武器在后方手、光球/盾牌在朝前手），
+// 原表把 mage/knight/sage 标成朝左——这三个职业走路反向（法师首当其冲）。
+// 未知职业同样按朝右处理；将来某职业改朝左，在此单独标 false。
+const ART_FACES_RIGHT={warrior:false,mage:true,knight:false,fighter:true,sage:true,warlock:true};
 function artFacesRight(classId){ return ART_FACES_RIGHT[classId]!==false; }
 function heroBundleOf(classId){ return CLASS_BUNDLES[classId]||'char_warrior'; }
 function applyHeroLook(){
@@ -636,7 +692,7 @@ async function enterGame(){
   try{
     $('loadTxt').textContent='正在读取存档…';
     const r=await api('/api/state/load',{userId:uid()});
-    if(r.exists){ state=r.state; }
+    if(r.exists){ state=r.state; if(r.stats) pendingStats=r.stats; }
     else { $('loadTxt').textContent='正在创建角色档案…'; state=await api('/api/character/new',{userId:uid(),name:loggedUser,classId:'warrior'}); }
     // v1.9.18：appearance.created=false → 强制进创建界面（交付包 §4.1，重连不会重复创建）
     if(!state.appearance||!state.appearance.created){
@@ -660,8 +716,9 @@ async function finishEnter(){
     try{
       // v1.9.28：发送全量装备（带 equipped 标记，含仓库装备）——
       // 服务端只把已穿戴的计入总属性（修复 v1.9.27 记录的虚增血量问题），同时逐件返回战力
-      const whEqAll=(state.warehouse||[]).filter(it=>it.kind==='equip'&&it.equip).map(it=>Object.assign({},it.equip,{equipped:false}));
-      heroStats=await api('/api/stats/calc',{level:state.core.level,classId:state.core.classId,equip:(state.equip||[]).concat(whEqAll)});
+      if(pendingStats&&pendingStats.atk!=null){ heroStats=pendingStats; pendingStats=null; }  // v1.9.60 省一次往返
+      else{ const whEqAll=(state.warehouse||[]).filter(it=>it.kind==='equip'&&it.equip).map(it=>Object.assign({},it.equip,{equipped:false}));
+        heroStats=await api('/api/stats/calc',{level:state.core.level,classId:state.core.classId,equip:(state.equip||[]).concat(whEqAll)}); }
     }catch(e){ heroStats=null; }
     syncHud();
     applyHeroLook();
@@ -821,7 +878,8 @@ function connectWS(){
         $('wsHint').textContent='多人已连接'+(wsChannel>0?'·'+wsChannel+'线':'');
       }else if(d.type==='state_snapshot'){
         worldMap.applySnapshot(d.players||[],clientId); // 视野裁剪在 worldmap 内做
-        onlineCount=(d.players||[]).length;
+        // v1.9.63 徽标只统计"本图其他玩家"：原来把自己也算进去，徽标与在线列表永远差 1
+        onlineCount=(d.players||[]).filter(p=>p&&p.id!==clientId).length;
         $('onlineBadge').textContent='● 在线 '+onlineCount;
       }
     };
@@ -966,6 +1024,12 @@ function syncHud(){
   // v1.9.41 满血检测修复：血条满时 HUD 快用按钮置灰，视觉上直接明确"不需要喝"
   const pb=$('usePotionBtn');
   if(pb){ const full=maxHp>0&&curHp>=maxHp; pb.classList.toggle('hp-full',full); pb.title=full?'血量已满':'使用回血药水'; }
+}
+// v1.9.60 交互延迟优化：服务端已把属性随操作响应一起返回（r.stats），
+// 直接采用即可，不再紧跟一次 /api/stats/calc——公网下单次往返 0.6~1.4 秒。
+async function applyStats(s){
+  if(s && s.atk!=null){ heroStats=s; syncHud(); return; }
+  await refreshStats(); syncHud();
 }
 async function refreshStats(){
   if(!state||!state.core)return;
@@ -1170,8 +1234,7 @@ async function shopBuy(it, inp){
     const r=await api('/api/player/action',{userId:uid(),action:'shop_exchange',shopItem:it.key,payWith:it.pay,qty});
     if(r.state) state=r.state;
     window.SFX&&SFX.coin();
-    syncHud();
-    await refreshStats();
+    await applyStats(r.stats);
     renderShop();
     toastModal('兑换成功',`消耗 ${fmt(r.cost)} ${it.pay==='gold'?'金币':'钻石'} → ${it.key==='material'?'强化材料':'经验'} +${fmt(r.got)}`);
   }catch(e){
@@ -1323,7 +1386,7 @@ function renderBag(){
     }
     try{
       const r=await api('/api/player/action',{userId:uid(),action:'equip',itemId:id});
-      if(r.state){state=r.state;await refreshStats();syncHud();}
+      if(r.state){state=r.state;await applyStats(r.stats);}
       window.SFX&&SFX.equip(); renderPanel();
       flash('已穿戴 '+(eqCN((state.equip||[]).find(x=>x.id===id))||id));
     }catch(e){window.SFX&&SFX.fail();flash('穿戴失败：'+e.message);}
@@ -1450,7 +1513,8 @@ async function renderGuild(){
           <span class="gm-name">${m.name}${me?'（你）':''}</span>
           <span class="gm-power">⚔ ${fmt(m.power||0)}</span>
           <span class="gm-role ${m.role==='president'?'r-p':m.role==='officer'?'r-o':''}">${GUILD_ROLE_TXT[m.role]||m.role}</span>
-          <span class="gm-lv">Lv.${m.level}</span></div>`;
+          <span class="gm-lv">Lv.${m.level}</span>
+          <button class="gm-pf" data-uid="${m.userId}" data-name="${m.name}" title="查看该成员档案">档案</button></div>`;
       }).join('')}
     </div>
     <div style="margin-top:12px;display:flex;gap:10px">
@@ -1458,10 +1522,13 @@ async function renderGuild(){
       <span class="sec-sub" style="flex:1;text-align:right;align-self:center">捐献与商店为服务端权威计数 · 每日 0 点重置</span>
     </div>`;
   $('panelSub').textContent=`${gv.name} · Lv.${lv} 公会`;
-  $('guildDonate').onclick=async()=>{
+  // v1.9.61 公会成员行加"档案"按钮：点开看该成员的完整档案
+  body.querySelectorAll('.gm-pf').forEach(b=>{
+    b.onclick=(ev)=>{ ev.stopPropagation(); askPlayerProfile({userId:b.dataset.uid,name:b.dataset.name}); };
+  });  $('guildDonate').onclick=async()=>{
     try{
       const r=await api('/api/player/action',{userId:uid(),action:'guild_donate'});
-      if(r.state){state=r.state;await refreshStats();syncHud();}
+      if(r.state){state=r.state;await applyStats(r.stats);}
       window.SFX&&SFX.donate();
       toastModal('捐献成功','公会币 +500 · 经验 +600 · 公会进度 +50');
       renderGuild();
@@ -1472,7 +1539,7 @@ async function renderGuild(){
     b.onclick=async()=>{
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'guild_buy',itemId:b.dataset.item});
-        if(r.state){state=r.state;await refreshStats();syncHud();}
+        if(r.state){state=r.state;await applyStats(r.stats);}
         window.SFX&&SFX.buy();
         toastModal('兑换成功',GUILD_SHOP.find(x=>x.id===b.dataset.item).name);
         renderGuild();
@@ -1566,7 +1633,7 @@ async function renderGuildJoin(preloaded){
     if(!name){ toastModal('提示','请输入公会名（2~12 字符）'); return; }
     try{
       const r=await api('/api/guild/create',{userId:uid(),name});
-      if(r.state){state=r.state;await refreshStats();syncHud();}
+      if(r.state){state=r.state;await applyStats(r.stats);}
       window.SFX&&SFX.transfer();
       toastModal('公会创建成功','「'+name+'」的成员们等你发号施令！');
       renderGuild();
@@ -1769,7 +1836,7 @@ function renderRole(){
     if(sb)sb.onclick=async()=>{
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'submit_bd',slots:window._bdDraft});
-        if(r.state){state=r.state;await refreshStats();syncHud();}
+        if(r.state){state=r.state;await applyStats(r.stats);}
         window._bdDraft=null;
         window.SFX&&SFX.config();
         toastModal('BD 已保存',(r.slots||[]).length+' 个技能已生效');
@@ -1796,7 +1863,7 @@ function renderRole(){
       const act=e&&e.equipped?'unequip':'equip';
       try{
         const r=await api('/api/player/action',{userId:uid(),action:act,itemId:b.dataset.eqid});
-        if(r.state){state=r.state;await refreshStats();syncHud();}
+        if(r.state){state=r.state;await applyStats(r.stats);}
         window.SFX&&(act==='equip'?SFX.equip():SFX.unequip());
         toastModal(act==='equip'?'已穿戴':'已卸下',eqCN(e));
         if(window.Quest&&state.equip)Quest.set('equip',state.equip.filter(x=>x.equipped).length);
@@ -1818,7 +1885,7 @@ function renderRole(){
       if(tgt&&tgt.dataset.lock==='1'){ window.SFX&&SFX.deny(); toastModal('条件不足','进阶需 Lv.44 且开启第 2 世界（当前 Lv.'+c.level+' · '+((state.world&&state.world.unlocked)||[]).length+' 个世界）'); return; }
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'class_advance',to:pick});
-        if(r.state){state=r.state;await refreshStats();syncHud();}
+        if(r.state){state=r.state;await applyStats(r.stats);}
         applyHeroLook();                       // 探索/战斗立绘随职业切换
         if(window.Quest&&state.equip)Quest.set('equip',state.equip.filter(x=>x.equipped).length);
         window.SFX&&SFX.transfer();
@@ -1957,7 +2024,7 @@ function renderWarehouse(){
     if(doBtn)doBtn.onclick=async()=>{
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'enhance',itemId:sel.id});
-        if(r.state){state=r.state;await refreshStats();syncHud();}
+        if(r.state){state=r.state;await applyStats(r.stats);}
         window.SFX&&SFX.forge();
         const cost=r.enhanceCost||{};
         toastModal('强化成功',eqCN(sel)+' 强化至 +'+(r.enhanceLevel||'?')+
@@ -1984,7 +2051,7 @@ function renderWarehouse(){
         try{
           const r=await api('/api/player/action',{userId:uid(),action:'quality_up',itemId:sel.id});
           hideModal();
-          if(r.state){state=r.state;syncHud();await refreshStats();}
+          if(r.state){state=r.state;await applyStats(r.stats);}
           window.SFX&&SFX.buy&&SFX.buy();
           toastModal('升品成功',eqCN(sel)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||qGold)+' 金币 / '+(r.cost&&r.cost.material||qMat)+' 材料）');
           forgeSel=null;
@@ -2022,7 +2089,7 @@ function renderWarehouse(){
       $('edToggle').onclick=async()=>{
         try{
           const r=await api('/api/player/action',{userId:uid(),action:isEquipped?'unequip':'equip',itemId:eObj.id});
-          if(r.state){state=r.state;await refreshStats();syncHud();}
+          if(r.state){state=r.state;await applyStats(r.stats);}
           window.SFX&&(isEquipped?SFX.unequip():SFX.equip());
           toastModal(isEquipped?'已卸下':'已穿戴',eqCN(eObj));renderWarehouse();
         }catch(err){window.SFX&&SFX.fail();toastModal('操作失败',err.message);}
@@ -2347,7 +2414,7 @@ function renderIdle(){
   $('settleIdle').onclick=async()=>{
     try{
       const r=await api('/api/idle/finalize',{userId:uid()});
-      if(r.state){state=r.state;await refreshStats();syncHud();}
+      if(r.state){state=r.state;await applyStats(r.stats);}
       closePanel(); window.SFX&&SFX.settle(); showIdleReward(r.result);
     }catch(e){window.SFX&&SFX.fail();toastModal('结算失败',e.message);}
   };
@@ -2365,35 +2432,45 @@ function toastModal(title,sub){
 /* ---- v1.9.42 玩家档案 / 在线玩家列表 ---- */
 async function askPlayerProfile(p){
   if(view!=='world')return;
+  const hadPanel=!!panel;   // v1.9.61 从公会面板点进来时，关闭后回到面板而不是恢复地图
   worldMap.active=false;
   showModal(`<h2>玩家档案</h2><div class="msub">正在查询 <b style="color:#f0d590">${p.name||'玩家'}</b> …</div>`);
   try{
     const uid2=p.userId||p.uid;
-    if(!uid2){ hideModal(); toastModal('玩家档案','该玩家信息暂不可见（未登录游客）'); worldMap.active=true; return; }
+    if(!uid2){ hideModal(); toastModal('玩家档案','该玩家信息暂不可见（未登录游客）'); if(!hadPanel)worldMap.active=true; return; }
     const d=await api('/api/player/profile?userId='+encodeURIComponent(uid2));
     const cls=(CFG&&CFG.classes.classes.find(x=>x.id===d.classId)||{}).name||d.classId;
+    const wn={W1:'青草平原',W2:'迷雾森林',W3:'赤焰峡谷',W4:'冰霜高原',W5:'流沙遗迹',W6:'星陨之巅',HOME:'家园'}[d.worldId]||d.worldId||'—';
+    // v1.9.61 装备表补战力列
     const eqRows=(d.equips||[]).map(e=>{
       const q=Math.max(0,Math.min(7,e.quality||0));
-      return `<tr><td style="color:${QCOLOR[q]}">${QUALITY[q]}</td><td>${SLOT_CN[e.slot]||e.slot}</td><td>${e.enhance?('+'+e.enhance):'—'}</td></tr>`;
-    }).join('')||'<tr><td colspan="3">未穿戴装备</td></tr>';
+      return `<tr><td style="color:${QCOLOR[q]};font-weight:700">${QUALITY[q]}</td><td>${SLOT_CN[e.slot]||e.slot}</td><td>${e.enhance?('+'+e.enhance):'—'}</td><td style="color:#7fe0a0">${fmt(e.power||0)}</td></tr>`;
+    }).join('')||'<tr><td colspan="4">未穿戴装备</td></tr>';
     const gr={president:'会长',officer:'副会长',member:'成员'}[d.guildRole]||d.guildRole;
     showModal(`<h2>玩家档案</h2>
       <div class="guild-hero" style="margin:10px 0">
         <div class="gh-emblem">${ICON.card?ICON.card(40):ICON.shield(40,'#5a6b80')}</div>
         <div class="gh-meta">
           <div class="gh-name">${d.name} ${d.online?'<em style="color:#7fe0a0;font-style:normal">● 在线</em>':'<em style="color:#8a93a6;font-style:normal">● 离线</em>'}</div>
-          <div class="gh-sub">${cls} · Lv.${d.level} · 战力 ${fmt(d.power)}${d.guild?(' · 公会 '+d.guild+(gr?('（'+gr+'）'):'')):' · 未加入公会'}</div>
+          <div class="gh-sub">${cls} · Lv.${d.level} · 战力 ${fmt(d.power)}</div>
+          <div class="gh-sub">${d.guild?('公会 '+d.guild+(gr?('（'+gr+'）'):'')):'未加入公会'} · 所在地图 ${wn}</div>
         </div>
       </div>
-      <div class="sec-title">穿戴装备</div>
+      <div class="pf-attr">
+        <div><span>生命</span><b>${Math.round(d.hp||0)}</b></div>
+        <div><span>攻击</span><b>${Number(d.atk||0).toFixed(1)}</b></div>
+        <div><span>防御</span><b>${Number(d.def||0).toFixed(1)}</b></div>
+        <div><span>暴击</span><b>${(Number(d.crit||0)*100).toFixed(0)}%</b></div>
+      </div>
+      <div class="sec-title">穿戴装备（${(d.equips||[]).length}/4）</div>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="color:#8a93a6"><th style="text-align:left;padding:4px">品质</th><th style="text-align:left;padding:4px">部位</th><th style="text-align:left;padding:4px">强化</th></tr></thead>
+        <thead><tr style="color:#8a93a6"><th style="text-align:left;padding:4px">品质</th><th style="text-align:left;padding:4px">部位</th><th style="text-align:left;padding:4px">强化</th><th style="text-align:left;padding:4px">战力</th></tr></thead>
         <tbody>${eqRows}</tbody>
       </table>
       <div class="enc-btns"><button class="btn-gray" id="pfClose">关闭</button></div>`);
-    $('pfClose').onclick=()=>{ hideModal(); worldMap.active=true; };
+    $('pfClose').onclick=()=>{ hideModal(); if(!hadPanel)worldMap.active=true; };
   }catch(e){
-    hideModal(); worldMap.active=true;
+    hideModal(); if(!hadPanel)worldMap.active=true;
     toastModal('玩家档案','查询失败：'+e.message);
   }
 }
@@ -2402,14 +2479,16 @@ async function showOnlinePlayers(){
   showModal(`<h2>在线玩家</h2><div class="msub">正在获取当前在线名单…</div>`);
   try{
     const r=await api('/api/players/online');
-    const ps=r.players||[];
+    // v1.9.63 在线列表排除自己与游客（原来把自己也列进去，人数多算 1，还出现无法查看档案的空条目）
+    const me=uid();
+    const ps=(r.players||[]).filter(p=>p&&p.userId&&p.userId!==me);
     const rows=ps.map((p,i)=>{
       const cls=(CFG&&CFG.classes.classes.find(x=>x.id===p.classId)||{}).name||p.classId;
       const wn={W1:'青草平原',W2:'迷雾森林',W3:'赤焰峡谷',W4:'冰霜高原',W5:'流沙遗迹',W6:'星陨之巅',HOME:'家园'}[p.worldId]||p.worldId;
       return `<div class="gr-row">
         <div class="gr-emb">${ICON.card?ICON.card(22,'#f0d590'):ICON.shield(22,'#f0d590')}</div>
         <div class="gr-main"><div class="gr-name">${p.name} <em>${cls}</em></div>
-          <div class="gr-sub">${wn} · ${p.channel+1} 线</div></div>
+          <div class="gr-sub">${wn} · ${(p.channel||0)+1} 线</div></div>
         <button class="btn-gray gr-view" data-uid="${p.userId||''}" data-name="${p.name}" ${p.userId?'':'disabled style="opacity:.45"'}>档案</button>
       </div>`;
     }).join('')||'<div class="sec-sub">当前没有其他玩家在线</div>';
@@ -2490,7 +2569,7 @@ async function onPotionPicked(p){
   try{
     const r=await api('/api/potion/pick',{userId:uid(),worldId:worldMap.worldId,nodeId:p.nodeId});
     reward=r.reward;
-    if(r.state){state=r.state;await refreshStats();syncHud();}
+    if(r.state){state=r.state;await applyStats(r.stats);}
   }catch(e){ pickErr=e.message||''; }
   window.SFX&&(reward?SFX.heal():SFX.deny());
   if(reward){
@@ -2515,7 +2594,7 @@ async function onChestOpened(chest){
   try{
     const r=await api('/api/chest/open',{userId:uid(),worldId:worldMap.worldId,nodeId:chest.nodeId,tier:chest.tier});
     reward=r.reward;
-    if(r.state){state=r.state;await refreshStats();syncHud();}
+    if(r.state){state=r.state;await applyStats(r.stats);}
   }catch(e){ reward=null; chestErr=e.message||''; }
   if(reward&&window.Quest)Quest.progress('chest',1);
   if(window.SFX){ if(reward)SFX.chest(); else SFX.deny(); }
@@ -2587,7 +2666,12 @@ function showBattleResult(rep,mon){
     const ic=(SLOTICON[d.slot]||ICON.bag)(24,qc);
     return `<div class="loot-cell loot-eq" style="border-color:${qc}" title="${sn} · ${qn}${d.enhance?' +'+d.enhance:''}"><div class="loot-ico" style="border-color:${qc}">${ic}</div><div class="loot-nm">${sn}</div><div class="loot-q" style="color:${qc}">${qn}</div></div>`;
   }).join('')}</div></div>`:'';
-  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备）</i></span><em>金币 +${fmt(rep.decomposedGold||0)} · 材料 +${fmt(rep.decomposedMat||0)}</em></div>`:'';
+  // v1.9.59 自动分解要写清"每件分解出了什么"，不只是总数：逐件列出 品质·部位 → 金币/材料
+  const decompRows=(rep.decomposed||[]).map(d=>{
+    const q=Math.min(7,d.quality==null?0:d.quality), qc=QCOLOR[q], qn=QUALCN[q], sn=slotCN[d.slot]||d.slot;
+    return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 材料 +${fmt(d.mat||0)}</span></div>`;
+  }).join('');
+  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row" title="不自动回满 · 用回血药水或采草药恢复"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
@@ -2857,8 +2941,16 @@ async function doFight(mon){
     // v1.9.36 群怪：大世界点位战斗携带 worldId+nodeId，服务端按点位组合权威结算（与遭遇贴图同源）
     const bundle=await api('/api/battle/fight',{userId:uid(),bd,monsterId:mon.monId||mon.type,monsterLv:monLv,elite:(mon.kind==='boss'?'boss':((mon.kind==='elite'||mon.elite)?'elite':'')),
       worldId:worldMap.worldId,nodeId:mon.nodeId||''});
-    if(bundle.state){state=bundle.state;await refreshStats();syncHud();}
+    if(bundle.state){state=bundle.state;await applyStats(bundle.stats);}
     currentReport=bundle.report;
+    // v1.9.58 一击必杀：服务端判定怪物总血量低于普攻保底伤害时直接判胜，
+    // 前端跳过整段战斗演出与血条播放，直接弹结算（不切战斗视图）
+    if(bundle.report.oneShot){
+      battlePlaying=false; paused=false;
+      window.SFX&&SFX.coin();
+      showBattleResult(bundle.report,mon);
+      return;
+    }
     await playBattle(bundle.report,mon,bd);
   }catch(e){toastModal('交战失败',e.message);worldMap.active=true;}
 }

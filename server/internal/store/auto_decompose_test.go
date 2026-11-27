@@ -31,7 +31,7 @@ func TestAutoDecomposeWorseEquip(t *testing.T) {
 	strong := game.EquipItem{ID: "strong_w", Slot: "weapon", Quality: 3, ClassID: "warrior",
 		Stats: map[string]float64{"atk": 999}} // 远高于练习剑
 
-	kept, gold, mat, n, logs := p.autoDecomposeWorse([]game.EquipItem{weak, strong})
+	kept, gold, mat, n, _, logs := p.autoDecomposeWorse([]game.EquipItem{weak, strong})
 
 	if n != 1 {
 		t.Fatalf("应只分解 1 件（低战力那把），实际 %d 件", n)
@@ -60,7 +60,7 @@ func TestAutoDecomposeCrossClassWeapon(t *testing.T) {
 	mageWeapon := game.EquipItem{ID: "mage_w", Slot: "weapon", Quality: 5, ClassID: "mage",
 		Stats: map[string]float64{"atk": 5000}} // 战力极高但战士用不了
 
-	kept, gold, mat, n, _ := p.autoDecomposeWorse([]game.EquipItem{mageWeapon})
+	kept, gold, mat, n, _, _ := p.autoDecomposeWorse([]game.EquipItem{mageWeapon})
 	if n != 1 || len(kept) != 0 {
 		t.Fatalf("异系武器应全部分解，实际分解 %d 件、保留 %d 件", n, len(kept))
 	}
@@ -82,7 +82,7 @@ func TestAutoDecomposeKeepsWhenSlotEmpty(t *testing.T) {
 		{ID: "h1", Slot: "helmet", Quality: 0, Stats: map[string]float64{"hp": 10}},
 		{ID: "a1", Slot: "armor", Quality: 0, Stats: map[string]float64{"hp": 10}},
 	}
-	kept, gold, mat, n, _ := p.autoDecomposeWorse(items)
+	kept, gold, mat, n, _, _ := p.autoDecomposeWorse(items)
 	if n != 0 || len(kept) != 2 {
 		t.Fatalf("空部位应全部保留，实际分解 %d 件、保留 %d 件（金币 %d 材料 %d）", n, len(kept), gold, mat)
 	}

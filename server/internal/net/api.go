@@ -61,6 +61,7 @@ func playersOnline(w http.ResponseWriter, r *http.Request) {
 }
 
 // playerProfile 玩家公开档案（v1.9.42）：点其他玩家查看。只暴露公开信息，不含仓库/资源。
+// v1.9.61 补全：原先只回等级/战力/穿戴列表，档案页缺属性；现在给出完整属性与逐件战力。
 func playerProfile(w http.ResponseWriter, r *http.Request) {
 	uid := r.URL.Query().Get("userId")
 	if uid == "" {
@@ -73,15 +74,18 @@ func playerProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	equips := []map[string]any{}
+	worn := make([]game.EquipItem, 0, 4)
 	for _, e := range p.Equip {
-		if !e.Equipped {
-			continue
-		}
+		if !e.Equipped { continue }
+		gi := game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats, ClassID: e.ClassID}
+		worn = append(worn, gi)
 		equips = append(equips, map[string]any{
 			"id": e.ID, "slot": e.Slot, "quality": e.Quality, "enhance": e.Enhance,
 			"stats": e.Stats, "classId": e.ClassID,
+			"power": int(game.EquipContribution(p.Core.ClassID, gi)), // v1.9.61 单件战力
 		})
 	}
+	st := game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn})
 	gname, grole := "", ""
 	if g, role := store.Guilds().GuildByUser(uid); g != nil {
 		gname, grole = g.Name, role
@@ -95,9 +99,12 @@ func playerProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOut(w, map[string]any{
 		"userId": uid, "name": p.Core.Name, "level": p.Core.Level,
-		"classId": p.Core.ClassID, "power": p.Core.BattlePower,
+		"classId": p.Core.ClassID, "power": int(st.Power),
 		"guild": gname, "guildRole": grole, "online": online,
-		"equips": equips,
+		"worldId": p.World.WorldID,
+		// v1.9.61 档案页要能看全属性，不再只有等级和战力
+		"hp": st.HP, "atk": st.ATK, "def": st.DEF, "crit": st.Crit, "spd": st.Spd,
+		"bagCount": len(p.Equip), "equips": equips,
 	})
 }
 
@@ -164,11 +171,17 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 	mux.HandleFunc("/api/player/action", playerAction)   // BD/装备/仓库/副本/家园 权威操作 + 落库
 
 	if webResDir != "" {
-		// 静态资源统一协商缓存：no-cache = 每次向服务端校验（未变更返回 304，几乎零开销），
-		// 避免浏览器启发式缓存把旧版 JS 缓存住导致"更新不生效/依旧卡顿"。
+		// v1.9.60 交互/加载延迟优化：资源引用都带 ?v= 版本号（index.html 每次发版都提版本），
+		// 因此可以放心长缓存——公网隧道单次往返 0.6~1.4s，原来每个 JS/CSS 都要回源校验一次。
+		// index.html 仍是 no-store，保证版本号本身不会吃到旧值。
 		fs := http.StripPrefix("/res/", http.FileServer(http.Dir(webResDir)))
 		mux.Handle("/res/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Cache-Control", "no-cache")
+			if r.URL.Query().Get("v") != "" {
+				w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+			} else {
+				// 无版本号的直接访问（调试/老页面）仍然回源校验，避免拿到过期内容
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 			fs.ServeHTTP(w, r)
 		}))
 	}
@@ -270,7 +283,7 @@ func stateLoad(w http.ResponseWriter, r *http.Request) {
 	if migrated {
 		_ = disk.Save(q.UserID, p)
 	}
-	jsonOut(w, map[string]any{"exists": true, "state": p})
+	jsonOut(w, map[string]any{"exists": true, "state": p, "stats": playerStats(p)})
 }
 
 // createCharacter 角色创建（交付包 C→S create_character）：服务端权威校验后
@@ -336,6 +349,46 @@ type calcStatsResp struct {
 	EquipPowers []game.EquipPower `json:"equipPowers"`
 }
 
+// playerStats 用存档直接算属性，口径与 /api/stats/calc 一致。
+// v1.9.60 交互延迟优化：原先前端每次操作后都要再请求一次 /api/stats/calc 重算属性，
+// 公网单程 0.6~1.4 秒，等于每个操作都付两倍往返。现在把属性随操作响应一起返回。
+func playerStats(p *store.PlayerState) map[string]any {
+	worn := make([]game.EquipItem, 0, len(p.Equip))
+	powers := make([]game.EquipPower, 0, len(p.Equip)+len(p.Warehouse))
+	for _, e := range p.Equip {
+		gi := game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats, ClassID: e.ClassID}
+		if e.Equipped {
+			worn = append(worn, gi)
+		}
+		powers = append(powers, game.EquipPower{ID: e.ID, Power: game.EquipContribution(p.Core.ClassID, gi)})
+	}
+	// 仓库里的装备只参与"逐件战力"展示，不计入已穿戴总属性（与前端 refreshStats 同口径）
+	for _, it := range p.Warehouse {
+		if it.Kind != "equip" || it.Equip == nil {
+			continue
+		}
+		e := it.Equip
+		gi := game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats, ClassID: e.ClassID}
+		powers = append(powers, game.EquipPower{ID: e.ID, Power: game.EquipContribution(p.Core.ClassID, gi)})
+	}
+	st := game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn})
+	return map[string]any{
+		"hp": st.HP, "atk": st.ATK, "def": st.DEF, "crit": st.Crit, "spd": st.Spd, "power": st.Power,
+		"equipPowers": powers,
+	}
+}
+
+// livePower 用当前等级+装备实时算战力。存档里的 Core.BattlePower 是"上次操作时"的快照，
+// 老号/长期不操作的号会停在 0 或旧值，公会面板与档案一律以实时值为准（v1.9.61）。
+func livePower(p *store.PlayerState) int {
+	if p == nil {
+		return 0
+	}
+	if v, ok := playerStats(p)["power"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
 func calcStats(w http.ResponseWriter, r *http.Request) {
 	// v1.9.20 兼容两种请求格式：
 	//   新格式（正确）：{level, classId, equip:[...]}           → 直接解码
@@ -491,7 +544,7 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	jsonOut(w, map[string]any{"report": rep, "logs": logs, "state": p})
+	jsonOut(w, map[string]any{"report": rep, "logs": logs, "state": p, "stats": playerStats(p)})
 }
 
 func idleFinalize(w http.ResponseWriter, r *http.Request) {
@@ -512,7 +565,7 @@ func idleFinalize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	jsonOut(w, map[string]any{"result": res, "state": p})
+	jsonOut(w, map[string]any{"result": res, "state": p, "stats": playerStats(p)})
 }
 
 func transferClass(w http.ResponseWriter, r *http.Request) {
@@ -545,7 +598,7 @@ func transferClass(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	jsonOut(w, map[string]any{"classId": q.To, "message": "转职成功，装备属性已按新职业系数换算", "state": p})
+	jsonOut(w, map[string]any{"classId": q.To, "message": "转职成功，装备属性已按新职业系数换算", "state": p, "stats": playerStats(p)})
 }
 
 // playerAction：玩家操作的单一权威入口（BD/装备/仓库/副本/家园）。
@@ -1055,6 +1108,7 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 	}
 	extra["logs"] = logs
 	extra["state"] = p
+	extra["stats"] = playerStats(p) // v1.9.60 省掉前端紧跟的 /api/stats/calc 往返
 	jsonOut(w, extra)
 }
 
