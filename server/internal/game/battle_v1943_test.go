@@ -26,7 +26,7 @@ func maxMonHitRatio(t *testing.T, rep BattleReport, heroMaxHP float64) float64 {
 }
 
 func TestV1943HighLevelMonstersSane(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil {
+	if err := Init("../../../configs"); err != nil {
 		t.Fatal(err)
 	}
 	war := Avatar{Level: 20, ClassID: "warrior"}
@@ -76,7 +76,7 @@ func TestV1943HighLevelMonstersSane(t *testing.T) {
 
 // TestV1943LowLevelUnchanged 确保低等级（Lv1-5）体验基本不变：线性与指数在低等级差异小。
 func TestV1943LowLevelUnchanged(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil {
+	if err := Init("../../../configs"); err != nil {
 		t.Fatal(err)
 	}
 	// 公式对照：lvFactor 应等于 1+(growth-1)*(lv-1)

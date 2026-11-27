@@ -99,6 +99,22 @@
       "exp": 94,
       "gold": 66,
       "dropTier": 1
+    },
+    {
+      "id": "map_boss",
+      "name": "图域首领",
+      "sprite": "boss_beetle",
+      "isBoss": true,
+      "base": {
+        "hp": 130,
+        "atk": 12,
+        "def": 4
+      },
+      "growth": 1.16,
+      "exp": 45,
+      "gold": 60,
+      "dropTier": 4,
+      "_note": "v1.9.46 大地图每图一个首领：base 约为同图精英的 1.5 倍（精英=普通×1.8hp/1.4atk），不叠加精英倍率；growth 1.16 略高于普通怪，保证高等级图首领仍强于精英"
     }
   ],
   "spawnRule": {
