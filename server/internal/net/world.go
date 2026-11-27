@@ -29,11 +29,13 @@ func numAny(m map[string]any, k string, def float64) float64 {
 // chestDrop：怪物掉落宝箱登记（v1.9.45）。
 // 客户端只上报"在哪个点位打败了什么怪"，档位由服务端按配置权威 roll；
 // 返回登记后的 nodeId + tier，前端据此渲染对应贴图，开箱必然兑现同一档位。
+// v1.9.46：请求体用 kind 区分 normal/elite/boss（旧客户端仍可只传 boss 布尔）。
 func chestDrop(w http.ResponseWriter, r *http.Request) {
 	var q struct {
 		UserID  string `json:"userId"`
 		WorldID string `json:"worldId"`
 		NodeID  string `json:"nodeId"`
+		Kind    string `json:"kind"`
 		Boss    bool   `json:"boss"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&q)
@@ -44,7 +46,10 @@ func chestDrop(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nodeId 非法（必须以 drop_ 开头且 ≤64 字符）", 400)
 		return
 	}
-	s, ok := game.SM().RegisterDropChest(q.UserID, q.WorldID, q.NodeID, q.Boss)
+	kind := q.Kind
+	if kind == "" && q.Boss { kind = "boss" }
+	kind = game.DropKindOf(kind)
+	s, ok := game.SM().RegisterDropChest(q.UserID, q.WorldID, q.NodeID, kind)
 	if !ok { http.Error(w, "掉落登记失败（nodeId 重复或未开启掉落箱过多）", 409); return }
 	tierName := "wood"
 	switch s.Tier {
@@ -53,7 +58,7 @@ func chestDrop(w http.ResponseWriter, r *http.Request) {
 	case 3: tierName = "gold"
 	case 2: tierName = "silver"
 	}
-	jsonOut(w, map[string]any{"nodeId": s.NodeID, "tier": tierName})
+	jsonOut(w, map[string]any{"nodeId": s.NodeID, "tier": tierName, "kind": kind})
 }
 
 // chestOpen：服务端按 tier 权威 roll 奖励并入仓库/存档。
@@ -105,6 +110,13 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 		return 0
 	}
 	gold, gem := rg("gold"), rg("gem")
+	// v1.9.46 地图产出系数：每张图比上一张多 20%（W1=1.0 / W2=1.2 / W3=1.44 … W6≈2.49）。
+	// 金币/钻石/经验/材料/药水同步放大；装备仍按档位固定概率 roll（乘系数会把概率顶到 100%）。
+	wm := game.WorldRewardMult(q.WorldID)
+	if wm > 0 && wm != 1 {
+		gold = int(float64(gold)*wm + 0.5)
+		gem = int(float64(gem)*wm + 0.5)
+	}
 	// 经验/材料按 gold 派生（语义档位，外置比例，可改 economy 配置）
 	exp := int(float64(gold) * numAny(game.C().Economy.Drop, "chestExpRatio", 1.5))
 	mat := int(float64(gold) * numAny(game.C().Economy.Drop, "chestMatRatio", 0.1))
@@ -121,6 +133,10 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 		if rand.Intn(100) < 60 { potions = 1 + rand.Intn(2) }
 	default:
 		if rand.Intn(100) < 40 { potions = 1 }
+	}
+	// v1.9.46 药水同享地图系数（四舍五入，木箱 1 瓶在高图会变 2 瓶）
+	if wm > 1 && potions > 0 {
+		potions = int(float64(potions)*wm + 0.5)
 	}
 	var equips []game.EquipItem
 	if e, ok := game.RollChestEquip(p.Core.ClassID, q.Tier, rand.New(rand.NewSource(time.Now().UnixNano()))); ok {

@@ -37,7 +37,7 @@ let authUserId=null;       // 服务端 userId
 let deviceId=null;         // 本机设备号
 let currentMonster=null, currentReport=null;
 const MON_NAMES={slime:'史莱姆',skeleton:'骷髅兵',bat:'蝙蝠',boss_beetle:'甲虫将军',
-  slime_toxic:'毒液史莱姆',skeleton_archer:'骷髅弓手',bat_crimson:'血蝙蝠'}; // v1.9.37 新增衍生怪
+  slime_toxic:'毒液史莱姆',skeleton_archer:'骷髅弓手',bat_crimson:'血蝙蝠',map_boss:'图域首领'}; // v1.9.37 新增衍生怪
 let battlePlaying=false, paused=false;
 let heroStats=null;        // 服务端权威属性（/api/stats/calc），前端不自行推算
 let ws=null, clientId=null, onlineCount=1;
@@ -165,8 +165,8 @@ function drawMiniMap(){
   for(const gt of (worldMap.gates||[]))dot(gt.x,gt.y,'#6fc8ff',3.5);
   // 怪物（红）
   for(const m of worldMap.monsters)if(m.state==='idle')dot(m.x,m.y,'#ff5d5d',3);
-  // 宝箱（金）
-  for(const c of worldMap.chests)dot(c.x,c.y,'#f0d590',3);
+  // 宝箱（金）：v1.9.46 只画未开启的——开过的箱子要从雷达上消失（opening/opened 都跳过）
+  for(const c of worldMap.chests){ if(c.state!=='closed')continue; dot(c.x,c.y,'#f0d590',3); }
   // 其他玩家（青）
   for(const k2 in (worldMap.remote||{})){const r=worldMap.remote[k2];if(r)dot(r.x,r.y,'#8fd8ff',3.5);}
   // ---- 角色：连续角度指针（8 方向/斜向都能正确指示，不再退化成 3 个方向） ----
@@ -2262,9 +2262,10 @@ function askEncounter(mon){
   const power=heroStats&&heroStats.power?heroStats.power:((state&&state.core&&state.core.battlePower)||0);
   // 敌方阵容：点位 group 下发（无则单怪兜底）
   const group=(mon.group&&mon.group.length)?mon.group:[mon.monId||mon.type||'slime'];
-  const pre=mon.elite?'精英 ':'';
+  const isElite = mon.kind ? mon.kind!=='normal' : !!mon.elite;   // v1.9.46 三档：boss 也标 ★
+  const pre=mon.kind==='boss'?'首领 ':(isElite?'精英 ':'');
   const gangLabel=mon.gangName||mon.name;
-  const tiles=group.map((g,i)=>`<div class="enc-mon"><canvas id="encMon${i}" width="96" height="116"></canvas><b>${mon.elite&&i===0?'★':''}${MON_NAMES[g]||g}</b></div>`).join('');
+  const tiles=group.map((g,i)=>`<div class="enc-mon"><canvas id="encMon${i}" width="96" height="116"></canvas><b>${isElite&&i===0?'★':''}${MON_NAMES[g]||g}</b></div>`).join('');
   const cntTag=group.length>1?`<span class="enc-gang-tag">群怪 · ${group.length} 只</span>`:'';
   showModal(`<h2>遭遇 ${pre}${gangLabel}${cntTag}</h2>
     <div class="msub">怪物进入警戒范围 · 是否交战？<br>战胜后有概率掉落宝箱</div>
@@ -2347,12 +2348,13 @@ async function onChestOpened(chest){
     const topRows=`<div class="reward-row"><span class="rk">${ICON.book(14,'#8fb6e0')}<em>经验</em></span><span class="rv">+${fmt(rw.exp||0)}</span></div>
       <div class="reward-row"><span class="rk">${ICON.gold(14,'#f0c040')}<em>金币</em></span><span class="rv">+${fmt(rw.gold||0)}</span></div>
       <div class="reward-row"><span class="rk">${ICON.crystal(14,'#8fd0e8')}<em>钻石</em></span><span class="rv">+${fmt(rw.gem||0)}</span></div>`;
-    const qColor=['#9aa7bd','#5fd38a','#6ea8ff','#c9a4e8','#f0d590'];
+    const qColor=QCOLOR;   // v1.9.52：复用全局 8 档品质色（原局部 5 色数组配合 min(7) 索引会取到 undefined）
     const items=rw.items||[];
     const cells=items.map(it=>{
+      if(it.kind==='decompose')return `<div class="loot-cell"><div class="loot-ico" style="background:#6a5a3a">${ICON.crystal(22,'#f0d590')}</div><div class="loot-nm">${it.name||'低战力装备分解'}</div><div class="loot-qty">x${it.qty||1}</div></div>`;
       if(it.kind==='material')return `<div class="loot-cell"><div class="loot-ico" style="background:#8892a4">${ICON.crystal(22,'#2a1c08')}</div><div class="loot-nm">${it.name||'材料'}</div><div class="loot-qty">x${it.qty}</div></div>`;
       if(it.kind==='potion')return `<div class="loot-cell"><div class="loot-ico" style="background:#2e5c3f">${ICON.crystal(22,'#5fd38a')}</div><div class="loot-nm">${it.name||'回血药水'}</div><div class="loot-qty">x${it.qty}</div></div>`;
-      const qc=qColor[Math.min(4,it.quality||0)];
+      const qc=qColor[Math.min(7,it.quality||0)];   // v1.9.46 品质 8 档，原先截断到 5 档
       return `<div class="loot-cell loot-eq" style="border-color:${qc}"><div class="loot-ico" style="background:${qc}">${ICON.bag(22,'#2a1c08')}</div><div class="loot-nm">${it.name||(it.slot||'装备')}</div><div class="loot-qty">x${it.qty||1}</div></div>`;
     }).join('');
     const gridPart=items.length
@@ -2375,15 +2377,16 @@ async function onChestOpened(chest){
     $('chestOk').onclick=()=>{ hideModal(); worldMap.active=true; window.SFX&&SFX.coin(); if(panel)renderPanel(); };
   },520); // 等开箱动画播完
 }
-/* ---------- 怪物掉落宝箱（v1.9.47） ----------
+/* ---------- 怪物掉落宝箱（v1.9.45 起服务端权威掷档，v1.9.46 扩为三档） ----------
    档位由服务端 /api/chest/drop 权威掷出（economy.drop.monsterChest），
-   本函数只负责发起登记 + 通知表现层落箱；api/uid 在 IIFE 内，故只能在这里调。 */
+   本函数只负责发起登记 + 通知表现层落箱；api/uid 在 IIFE 内，故只能在这里调。
+   v1.9.46：按怪物档位（normal/elite/boss）上报，档次越高高品质箱概率越高。 */
 async function dropChestFor(mon){
   if(!mon) return;
-  const boss = mon.type==='boss_beetle';
+  const kind = mon.kind || (mon.type==='boss_beetle'?'boss':(mon.elite?'elite':'normal'));
   const nodeId = 'drop_'+Date.now()+'_'+Math.floor(Math.random()*10000);
   try{
-    const r = await api('/api/chest/drop',{userId:uid(),worldId:worldMap.worldId,nodeId,boss});
+    const r = await api('/api/chest/drop',{userId:uid(),worldId:worldMap.worldId,nodeId,kind});
     if(r&&r.tier) worldMap.spawnChestDrop(mon, r.tier, r.nodeId||nodeId);
   }catch(e){
     console.warn('[chest] 掉落登记失败，本次不掉箱：',(e&&e.message)||e);
@@ -2650,7 +2653,9 @@ $('panelShade').onclick=closePanel;
    直接是 Lv.5 —— 玩家 85 血、怪 213 血，4 秒必败且事前毫无预警。改 +2 / +5。 */
 function monsterLevel(mon){
   const wl=(CFG.worlds.worlds.find(w=>w.id===worldMap.worldId)||{}).level||1;
-  const add=mon.type==='boss_beetle'?5:(mon.elite?2:0);
+  // v1.9.46 三档怪物：精英/首领 +2 级；首领自身 base/growth 更高，属性自然高于精英
+  const kind=mon.kind||(mon.type==='boss_beetle'?'boss':(mon.elite?'elite':'normal'));
+  const add=kind==='normal'?0:2;
   return Math.max(1,Math.min(60,wl+add));
 }
 // 交战：服务端权威结算 → 战斗演出（由 askEncounter 的"交战"按钮触发）
@@ -2660,7 +2665,7 @@ async function doFight(mon){
     const bd=(state&&state.skills&&state.skills.slots)||['w_slash','w_guard'];
     const monLv=monsterLevel(mon);
     // v1.9.36 群怪：大世界点位战斗携带 worldId+nodeId，服务端按点位组合权威结算（与遭遇贴图同源）
-    const bundle=await api('/api/battle/fight',{userId:uid(),bd,monsterId:mon.monId||mon.type,monsterLv:monLv,elite:mon.elite?'elite':'',
+    const bundle=await api('/api/battle/fight',{userId:uid(),bd,monsterId:mon.monId||mon.type,monsterLv:monLv,elite:(mon.kind==='boss'?'boss':((mon.kind==='elite'||mon.elite)?'elite':'')),
       worldId:worldMap.worldId,nodeId:mon.nodeId||''});
     if(bundle.state){state=bundle.state;await refreshStats();syncHud();}
     currentReport=bundle.report;

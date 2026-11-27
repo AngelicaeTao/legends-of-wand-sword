@@ -8,7 +8,7 @@ import (
 
 // v1.9.38 武器分系：战士系/法师系武器互不通用
 func TestWeaponClassSplit(t *testing.T) {
-	if err := game.Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := game.Init("../../../configs"); err != nil { t.Fatal(err) }
 
 	// 1) 战士穿法师武器 → 拒绝
 	w := NewPlayer("t_w", "战士", "warrior")

@@ -4,7 +4,7 @@ import "testing"
 
 // v1.9.37：治疗术削弱上限校验（power 0.8→0.4，单次回复 ≤ 40% 最大血量）
 func TestHealNerf(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := Init("../../../configs"); err != nil { t.Fatal(err) }
 	found := false
 	for seed := int64(1); seed <= 30 && !found; seed++ {
 		rep := ResolveBattle(BattleRequest{
@@ -29,7 +29,7 @@ func TestHealNerf(t *testing.T) {
 
 // v1.9.37：新怪物可正常参战（衍生怪结算回归）
 func TestNewMonstersBattle(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := Init("../../../configs"); err != nil { t.Fatal(err) }
 	for _, id := range []string{"slime_toxic", "skeleton_archer", "bat_crimson"} {
 		rep := ResolveBattle(BattleRequest{
 			MonsterID: id, MonsterLv: 2,

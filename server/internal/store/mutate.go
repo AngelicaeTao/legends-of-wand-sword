@@ -8,6 +8,61 @@ import (
 	"zjcs/server/internal/game"
 )
 
+// ---------- v1.9.46 背包自动分解低战力装备 ----------
+
+// toGameEquip 存档装备 → game 层装备（战力计算用，保留武器系标记）。
+func toGameEquip(e Equip) game.EquipItem {
+	return game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats, ClassID: e.ClassID}
+}
+
+// wornInSlot 找该部位当前穿戴中的装备；武器需同系（跨系无法比较也不可用）。
+func (p *PlayerState) wornInSlot(slot, classID string) *Equip {
+	for i := range p.Equip {
+		e := &p.Equip[i]
+		if !e.Equipped || e.Slot != slot {
+			continue
+		}
+		if slot == "weapon" && classID != "" && e.ClassID != "" && e.ClassID != classID {
+			continue
+		}
+		return e
+	}
+	return nil
+}
+
+// autoDecomposeWorse 新装备入包前过滤（v1.9.46）：
+// 同部位已穿戴装备战力 ≥ 新装备战力时，直接把新装备分解为金币+材料，不进背包。
+// 跨系武器（角色永远穿不上）同样直接分解。
+// 返回 (保留的装备, 分解金币, 分解材料, 分解件数, 明细日志)。
+func (p *PlayerState) autoDecomposeWorse(equips []game.EquipItem) (kept []game.EquipItem, gold, mat, n int, logs []string) {
+	for _, d := range equips {
+		base := &Equip{Quality: d.Quality, Enhance: d.Enhance}
+		if d.Slot == "weapon" && d.ClassID != "" && d.ClassID != game.WeaponClassFor(p.Core.ClassID) {
+			g, m := decomposeGoldOf(base), decomposeMatOf(base)
+			gold, mat, n = gold+g, mat+m, n+1
+			logs = append(logs, fmt.Sprintf("自动分解：%s（异系武器无法装备，金币 +%d 材料 +%d）",
+				equipCN(d.Quality, d.Slot, d.ClassID), g, m))
+			continue
+		}
+		worn := p.wornInSlot(d.Slot, d.ClassID)
+		if worn == nil { // 该部位还没穿装备，直接留用
+			kept = append(kept, d)
+			continue
+		}
+		wornPw := game.EquipContribution(p.Core.ClassID, toGameEquip(*worn))
+		newPw := game.EquipContribution(p.Core.ClassID, d)
+		if newPw > wornPw { // 战力更高，留在背包待玩家自行替换
+			kept = append(kept, d)
+			continue
+		}
+		g, m := decomposeGoldOf(base), decomposeMatOf(base)
+		gold, mat, n = gold+g, mat+m, n+1
+		logs = append(logs, fmt.Sprintf("自动分解：%s（战力 %d ≤ 穿戴中 %d，金币 +%d 材料 +%d）",
+			equipCN(d.Quality, d.Slot, d.ClassID), int(newPw), int(wornPw), g, m))
+	}
+	return
+}
+
 // ApplyBattleReport 把权威战报的奖励并入存档，返回事件日志。
 // 战斗结果由服务端结算，客户端只上传意图，因此这里只做"入账"。
 func ApplyBattleReport(p *PlayerState, rep game.BattleReport) []string {
@@ -24,7 +79,12 @@ func ApplyBattleReport(p *PlayerState, rep game.BattleReport) []string {
 	p.Core.Gold += rep.Gold
 	logs = append(logs, fmt.Sprintf("战斗胜利：经验+%d 金币+%d（剩余血量 %.0f）", rep.Exp, rep.Gold, p.Core.HP))
 
-	for _, d := range rep.Drops {
+	// v1.9.46：低于同部位穿戴中战力的装备直接分解成金币+材料，不占背包
+	drops, dGold, dMat, _, dLogs := p.autoDecomposeWorse(rep.Drops)
+	p.Core.Gold += dGold
+	p.Core.Material += dMat
+	logs = append(logs, dLogs...)
+	for _, d := range drops {
 		p.Equip = append(p.Equip, Equip{
 			ID: d.ID, Slot: d.Slot, Quality: d.Quality, Enhance: d.Enhance,
 			Stats: d.Stats, Equipped: false, ClassID: d.ClassID,
@@ -218,7 +278,16 @@ func ApplyChestReward(p *PlayerState, exp, gold, gem, material, potions int, equ
 		logs = append(logs, fmt.Sprintf("获得：回血药水 x%d", potions))
 		items = append(items, map[string]any{"kind": "potion", "id": "potion_s", "name": "回血药水", "qty": potions})
 	}
-	for _, d := range equips {
+	// v1.9.46：低于同部位穿戴中战力的装备直接分解，收益计入本次开箱明细
+	keep, dGold, dMat, dN, dLogs := p.autoDecomposeWorse(equips)
+	p.Core.Gold += dGold
+	p.Core.Material += dMat
+	logs = append(logs, dLogs...)
+	if dN > 0 {
+		logs = append(logs, fmt.Sprintf("开箱：%d 件低战力装备已自动分解（金币 +%d 材料 +%d）", dN, dGold, dMat))
+		items = append(items, map[string]any{"kind": "decompose", "name": "低战力装备分解", "qty": dN, "gold": dGold, "material": dMat})
+	}
+	for _, d := range keep {
 		p.Equip = append(p.Equip, Equip{
 			ID: d.ID, Slot: d.Slot, Quality: d.Quality, Enhance: d.Enhance,
 			Stats: d.Stats, Equipped: false, ClassID: d.ClassID,

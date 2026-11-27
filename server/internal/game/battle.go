@@ -102,7 +102,8 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		mems = append(mems, u)
 		monInfos = append(monInfos, MonInfo{
 			ID: m.ID, Name: m.Name, Sprite: m.Sprite, Lv: req.MonsterLv,
-			Elite: gi == 0 && req.Elite != "", IsBoss: m.IsBoss,
+			// v1.9.46：boss 档不再被标成"精英"（首个成员且请求显式声明精英时才算精英）
+			Elite: gi == 0 && (req.Elite == "elite" || req.Elite == "rareElite"), IsBoss: m.IsBoss,
 		})
 	}
 	mon := mems[0].def // 主怪（兼容奖励/掉落逻辑）
@@ -297,7 +298,8 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		if req.Elite == "rareElite" {
 			mult = 3
 		}
-		if mon.IsBoss {
+		// v1.9.46 大地图首领：前端按怪物档位传 elite="boss"，与 isBoss 怪物同等奖励倍率
+		if req.Elite == "boss" || mon.IsBoss {
 			mult = 5
 		}
 		// 等级系数：Lv1 = 1.0 倍，之后每级 +20%（原公式 Lv1 只有 0.1 倍，前期收益几乎为零）

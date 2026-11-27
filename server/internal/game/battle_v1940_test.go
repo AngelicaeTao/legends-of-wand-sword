@@ -7,7 +7,7 @@ import (
 
 // v1.9.40 法师治疗术：一次性回血 → 持续回血（施放立即 1 跳 + 后续 hotRounds-1 跳）
 func TestHealHot(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := Init("../../../configs"); err != nil { t.Fatal(err) }
 	sk, ok := C().SkillByID("m_heal")
 	if !ok || sk.HotRounds != 3 || sk.HotPer != 0.15 {
 		t.Fatalf("m_heal 配置应为 hotRounds=3/hotPer=0.15，实际 %+v", sk)
@@ -52,7 +52,7 @@ func TestHealHot(t *testing.T) {
 
 // v1.9.40 战士格挡：一次性护盾 → 持续减伤（drRounds 回合内怪物伤害 × (1-drPct)）
 func TestGuardDamageReduction(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := Init("../../../configs"); err != nil { t.Fatal(err) }
 	sk, ok := C().SkillByID("w_guard")
 	if !ok || sk.DRRounds != 3 || sk.DRPct != 0.4 {
 		t.Fatalf("w_guard 配置应为 drRounds=3/drPct=0.4，实际 %+v", sk)
@@ -96,7 +96,7 @@ func monRowCount(rep BattleReport) int {
 }
 
 func TestMonsterNerf(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := Init("../../../configs"); err != nil { t.Fatal(err) }
 	old := map[string][3]float64{
 		"slime": {80, 10, 3}, "skeleton": {130, 16, 6}, "bat": {95, 20, 2},
 		"boss_beetle": {680, 42, 14}, "slime_toxic": {115, 15, 4},
