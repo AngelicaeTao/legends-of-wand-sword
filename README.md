@@ -1,8 +1,8 @@
-# 美术资源库 · 杖剑传说 v1.9.44
+# 美术资源库 · 杖剑传说 v1.9.48-integrated（清理版）
 
-本分支只存放美术资源，**不含任何代码**。代码见 `code/v1.9.44` 分支。
+本分支只存放美术资源，**不含任何代码**。代码见 `code/v1.9.48-integrated` 分支。
 
-- 总计：**286 个文件 / 约 7.8 MB**
+- 总计：**195 个文件**（清理后；原 286，删除 91 个旧逐帧资源）
 - 组织方式：按「用途」分类，每类一个顶层目录；部件化资源按资源包再分子目录。
 - 回填运行目录的对应关系见文末「回填映射」。
 
@@ -16,12 +16,9 @@
 | `sprites/items/` | 25 | 部件化宝箱包（5 档：木/银/金/钻石/水晶） |
 | `backgrounds/` | 6 | 战斗/探索背景（6 张） |
 | `portraits/cards/` | 6 | 职业卡面（战士/骑士/法师/贤者/术士/斗士） |
-| `icons/` | 10 | UI 图标（旧版 10） |
+| `icons/` | 10 | UI 图标（旧版 10，运行时用 icons/v3） |
 | `icons/v3/` | 10 | UI 图标（v3 版，运行时实际引用） |
 | `fx/` | 36 | 战斗特效帧（暴击/普攻/经验/金币/治疗/闪避） |
-| `frames/legacy/` | 20 | 旧版逐帧角色（idle/walk/attack/hit/die） |
-| `legacy/monsters/` | 56 | 旧版逐帧怪物（4 类 × 各动作） |
-| `legacy/items/` | 15 | 旧版逐帧宝箱（3 档 × 开箱动画） |
 
 ## 目录明细
 
@@ -54,9 +51,6 @@ backgrounds/                 战斗与 6 世界探索背景
 portraits/cards/             职业卡面
 icons/ + icons/v3/           UI 图标
 fx/                          特效序列帧
-frames/legacy/               旧版逐帧角色（兼容保留）
-legacy/monsters/             旧版逐帧怪物（兼容保留）
-legacy/items/                旧版逐帧宝箱（兼容保留）
 ```
 
 ## 资源包格式（部件化）
@@ -80,9 +74,6 @@ legacy/items/                旧版逐帧宝箱（兼容保留）
 | `icons/` | `web/res/icons/` |
 | `icons/v3/` | `web/res/v3/icons/` |
 | `fx/` | `web/res/fx/` |
-| `frames/legacy/` | `web/res/characters/` |
-| `legacy/monsters/` | `web/res/monsters/` |
-| `legacy/items/` | `web/res/items/` |
 
 ## 已知资源问题（待修）
 
@@ -98,3 +89,14 @@ legacy/items/                旧版逐帧宝箱（兼容保留）
 - `sprites/items/item_chest_diamond/`：钻石箱（金箱 PIL 调色·青蓝系，含 parts.json/actions.json/PNG 全套，PNG 随 bundle 重命名）
 - `sprites/items/item_chest_crystal/`：水晶箱（金箱 PIL 调色·紫粉系，同上）
 - 已在客户端 `animation_spec.json` 注册 bundles，预载列表同步
+
+
+## v1.9.48-integrated 清理说明（2026-11-27）
+
+从 `assets/v1.9.44` 切出整合分支，对照 `code/v1.9.48-integrated` 前端真实加载路径做引用审计后清理：
+
+- **删除 91 个旧逐帧资源**：`frames/legacy/`（20）、`legacy/monsters/`（56）、`legacy/items/`（15）。这些是被 v3 部件动画（PartActor）明确取代的旧实现，前端 `grep legacy|animation_spec` 零命中，运行时不再加载。
+- **保留**：`fx/`（36 特效帧，属美术资产，当前未接线但删了要重做）、`icons/` 旧版 10 张（体积极小，作为 v3 母版参考）。
+- **同步废弃**：代码分支的 `client/assets/resources/animation_spec.json` 注册表指向这些已删的 legacy 资源，但前端从不读取该表，属过期配置，接入时忽略。
+
+历史资源分支 `assets/v1.7.5` ~ `assets/v1.9.44` 有意保留，不做删除。
