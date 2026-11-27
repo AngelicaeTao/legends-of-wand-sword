@@ -130,6 +130,35 @@ window.__bt=()=>{const a=battleHeroActor;return {b:bAnim.hero,state:a?a.state:nu
   modalTxt:document.getElementById('modalLayer').innerText.replace(/\n/g,'|').slice(0,40)};};
 const miniCtx=$('miniMapCv').getContext('2d');
 
+// v1.9.64 点小地图直接打开大地图（原来只能按 M 或点底部「地图」入口）
+const miniCvEl=$('miniMapCv');
+miniCvEl.title='点击打开大地图';
+miniCvEl.addEventListener('click',(e)=>{
+  // 只响应圆盘内：canvas 是 180×180 方形，四角在圆外，点到角落不该开图
+  const r=miniCvEl.getBoundingClientRect(); if(!r.width)return;
+  const cx=(e.clientX-r.left)*(MM_S/r.width), cy=(e.clientY-r.top)*(MM_S/r.height);
+  if(Math.hypot(cx-MM_S/2,cy-MM_S/2)>MM_S/2-2)return;
+  // 与 M 键同一守卫：仅大世界态（战斗中/面板打开时 active=false）
+  if(worldMap&&worldMap.active)worldMap.openMapModal();
+});
+
+// v1.9.64 小地图下方旗标条：跟踪状态 + 距离，点一下清除标记
+const mmPinEl=$('mmPin'), mmPinTxt=$('mmPinTxt');
+let _mmPinText='';
+function refreshMmPin(){
+  if(!mmPinEl||!mmPinTxt)return;
+  const p=(worldMap&&worldMap.curPin)?worldMap.curPin():null;
+  if(!p){
+    if(!mmPinEl.classList.contains('hidden'))mmPinEl.classList.add('hidden');
+    _mmPinText=''; return;
+  }
+  mmPinEl.classList.remove('hidden');
+  mmPinEl.classList.toggle('off',!p.track);
+  const s=(p.track?'跟踪 ':'标记 ')+worldMap.pinDist()+' 格';
+  if(s!==_mmPinText){ mmPinTxt.textContent=s; _mmPinText=s; }
+}
+if(mmPinEl)mmPinEl.addEventListener('click',()=>{ if(worldMap)worldMap.clearPin(); refreshMmPin(); });
+
 // 小地图：真实雷达（以角色为中心，与通行掩码同源，北向上）
 // 旧版是写死的装饰底图（假水域/假十字路），与实际路网无关 → 位置"对不上"
 const MM_S=180, MM_RANGE=2048;              // 显示直径 2048 世界单位（约 1.6 屏）
@@ -203,6 +232,26 @@ function drawMiniMap(){
   g.beginPath();g.arc(C,C,R-4,0,Math.PI*2);g.stroke();
   g.strokeStyle='#d9b45b';g.lineWidth=3;
   g.beginPath();g.arc(C,C,R,0,Math.PI*2);g.stroke();
+  // ---- v1.9.64 地图旗标：雷达范围内画小旗；范围外且开启跟踪时沿圆边画指向箭头 ----
+  const pin=(worldMap.curPin?worldMap.curPin():null);
+  if(pin){
+    const px=mx(pin.x), py=my(pin.y), ddx=px-C, ddy=py-C, dd=Math.hypot(ddx,ddy);
+    if(dd<=R-7){
+      g.save();
+      g.strokeStyle='#6b4c00';g.lineWidth=1.8;
+      g.beginPath();g.moveTo(px,py);g.lineTo(px,py-11);g.stroke();
+      g.fillStyle='#ffd65a';g.strokeStyle='#6b4c00';g.lineWidth=1.1;
+      g.beginPath();g.moveTo(px+1,py-11);g.lineTo(px+10,py-7.6);g.lineTo(px+1,py-4.2);g.closePath();
+      g.fill();g.stroke();g.restore();
+    } else if(pin.track){
+      const a=Math.atan2(ddy,ddx), ex=C+Math.cos(a)*(R-9), ey=C+Math.sin(a)*(R-9);
+      g.save();g.translate(ex,ey);g.rotate(a);
+      g.fillStyle='#ffd65a';g.strokeStyle='rgba(26,16,0,.9)';g.lineWidth=1.3;
+      g.beginPath();g.moveTo(9,0);g.lineTo(-4.5,-6);g.lineTo(-1.8,0);g.lineTo(-4.5,6);g.closePath();
+      g.fill();g.stroke();g.restore();
+    }
+  }
+  refreshMmPin();
 }
 
 let bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
