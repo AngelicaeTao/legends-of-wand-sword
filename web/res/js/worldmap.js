@@ -949,8 +949,10 @@ WMap.prototype.update=function(dt){
     if(h.moving&&this.heroActor&&this.heroActor.state!=='walk')this.heroActor.play('walk');
     // 朝向：连续角度（小地图指针按此旋转，8 方向都不会被压成 4 档）
     if(dx||dy)h.ang=Math.atan2(dy,dx);
-    // v1.9.37：只有左右移动才改变角色朝向，上下移动保持原朝向（修复倒着走）
-    if(Math.abs(dx)>Math.abs(dy))h.dir=dx>0?'right':'left';
+    // v1.9.52：朝向只由"是否含水平分量"决定，纯上下移动保持原朝向。
+    // 原判据 |dx|>|dy| 在 45° 斜走（W+A / W+D / S+A / S+D）时恒为假，
+    // 于是斜向右上走仍沿用上一次的 'left'，表现为"往右走却朝左"，反向同理。
+    if(dx!==0)h.dir=dx>0?'right':'left';
     const nx=h.x+dx*spd,ny=h.y+dy*spd;
     // 掩码精度8px，角色碰撞半径取24（≈显示半宽，保证不穿墙）
     if(!this.blocked(nx,h.y,24))h.x=nx;
