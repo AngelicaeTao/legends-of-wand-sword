@@ -308,9 +308,16 @@ func containsStr(ss []string, s string) bool { for _, x := range ss { if x == s 
 func guildView(g *store.Guild) map[string]any {
 	ms := make([]map[string]any, 0, len(g.Members))
 	for _, m := range g.Members {
+		// v1.9.61 战力/等级改为实时读取：原来只存"入会/捐献那一刻"的快照，
+		// 成员升级换装后公会面板一直显示旧战力（没捐过献的甚至一直是入会时的值）。
+		level, power := m.Level, m.Power
+		if p, err := disk.Load(m.UserID); err == nil && p != nil {
+			level = p.Core.Level
+			power = livePower(p)
+		}
 		ms = append(ms, map[string]any{
-			"userId": m.UserID, "name": m.Name, "level": m.Level,
-			"power": m.Power, "role": m.Role, "donate": m.Donate, "joinedAt": m.JoinedAt,
+			"userId": m.UserID, "name": m.Name, "level": level,
+			"power": power, "role": m.Role, "donate": m.Donate, "joinedAt": m.JoinedAt,
 		})
 	}
 	return map[string]any{

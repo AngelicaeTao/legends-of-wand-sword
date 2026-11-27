@@ -55,6 +55,7 @@ func playersOnline(w http.ResponseWriter, r *http.Request) {
 }
 
 // playerProfile 玩家公开档案（v1.9.42）：点其他玩家查看。只暴露公开信息，不含仓库/资源。
+// v1.9.61 补全：原先只回等级/战力/穿戴列表，档案页缺属性；现在给出完整属性与逐件战力。
 func playerProfile(w http.ResponseWriter, r *http.Request) {
 	uid := r.URL.Query().Get("userId")
 	if uid == "" {
@@ -65,13 +66,18 @@ func playerProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "玩家不存在或尚未创建角色", 404); return
 	}
 	equips := []map[string]any{}
+	worn := make([]game.EquipItem, 0, 4)
 	for _, e := range p.Equip {
 		if !e.Equipped { continue }
+		gi := game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats, ClassID: e.ClassID}
+		worn = append(worn, gi)
 		equips = append(equips, map[string]any{
 			"id": e.ID, "slot": e.Slot, "quality": e.Quality, "enhance": e.Enhance,
 			"stats": e.Stats, "classId": e.ClassID,
+			"power": int(game.EquipContribution(p.Core.ClassID, gi)), // v1.9.61 单件战力
 		})
 	}
+	st := game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn})
 	gname, grole := "", ""
 	if g, role := store.Guilds().GuildByUser(uid); g != nil {
 		gname, grole = g.Name, role
@@ -82,9 +88,12 @@ func playerProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOut(w, map[string]any{
 		"userId": uid, "name": p.Core.Name, "level": p.Core.Level,
-		"classId": p.Core.ClassID, "power": p.Core.BattlePower,
+		"classId": p.Core.ClassID, "power": int(st.Power),
 		"guild": gname, "guildRole": grole, "online": online,
-		"equips": equips,
+		"worldId": p.World.WorldID,
+		// v1.9.61 档案页要能看全属性，不再只有等级和战力
+		"hp": st.HP, "atk": st.ATK, "def": st.DEF, "crit": st.Crit, "spd": st.Spd,
+		"bagCount": len(p.Equip), "equips": equips,
 	})
 }
 
@@ -358,6 +367,17 @@ func playerStats(p *store.PlayerState) map[string]any {
 	}
 }
 
+// livePower 用当前等级+装备实时算战力。存档里的 Core.BattlePower 是"上次操作时"的快照，
+// 老号/长期不操作的号会停在 0 或旧值，公会面板与档案一律以实时值为准（v1.9.61）。
+func livePower(p *store.PlayerState) int {
+	if p == nil {
+		return 0
+	}
+	if v, ok := playerStats(p)["power"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
 func calcStats(w http.ResponseWriter, r *http.Request) {
 	// v1.9.20 兼容两种请求格式：
 	//   新格式（正确）：{level, classId, equip:[...]}           → 直接解码

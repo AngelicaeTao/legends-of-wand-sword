@@ -1388,7 +1388,8 @@ async function renderGuild(){
           <span class="gm-name">${m.name}${me?'（你）':''}</span>
           <span class="gm-power">⚔ ${fmt(m.power||0)}</span>
           <span class="gm-role ${m.role==='president'?'r-p':m.role==='officer'?'r-o':''}">${GUILD_ROLE_TXT[m.role]||m.role}</span>
-          <span class="gm-lv">Lv.${m.level}</span></div>`;
+          <span class="gm-lv">Lv.${m.level}</span>
+          <button class="gm-pf" data-uid="${m.userId}" data-name="${m.name}" title="查看该成员档案">档案</button></div>`;
       }).join('')}
     </div>
     <div style="margin-top:12px;display:flex;gap:10px">
@@ -1396,7 +1397,10 @@ async function renderGuild(){
       <span class="sec-sub" style="flex:1;text-align:right;align-self:center">捐献与商店为服务端权威计数 · 每日 0 点重置</span>
     </div>`;
   $('panelSub').textContent=`${gv.name} · Lv.${lv} 公会`;
-  $('guildDonate').onclick=async()=>{
+  // v1.9.61 公会成员行加"档案"按钮：点开看该成员的完整档案
+  body.querySelectorAll('.gm-pf').forEach(b=>{
+    b.onclick=(ev)=>{ ev.stopPropagation(); askPlayerProfile({userId:b.dataset.uid,name:b.dataset.name}); };
+  });  $('guildDonate').onclick=async()=>{
     try{
       const r=await api('/api/player/action',{userId:uid(),action:'guild_donate'});
       if(r.state){state=r.state;await applyStats(r.stats);}
@@ -2273,35 +2277,45 @@ function toastModal(title,sub){
 /* ---- v1.9.42 玩家档案 / 在线玩家列表 ---- */
 async function askPlayerProfile(p){
   if(view!=='world')return;
+  const hadPanel=!!panel;   // v1.9.61 从公会面板点进来时，关闭后回到面板而不是恢复地图
   worldMap.active=false;
   showModal(`<h2>玩家档案</h2><div class="msub">正在查询 <b style="color:#f0d590">${p.name||'玩家'}</b> …</div>`);
   try{
     const uid2=p.userId||p.uid;
-    if(!uid2){ hideModal(); toastModal('玩家档案','该玩家信息暂不可见（未登录游客）'); worldMap.active=true; return; }
+    if(!uid2){ hideModal(); toastModal('玩家档案','该玩家信息暂不可见（未登录游客）'); if(!hadPanel)worldMap.active=true; return; }
     const d=await api('/api/player/profile?userId='+encodeURIComponent(uid2));
     const cls=(CFG&&CFG.classes.classes.find(x=>x.id===d.classId)||{}).name||d.classId;
+    const wn={W1:'青草平原',W2:'迷雾森林',W3:'赤焰峡谷',W4:'冰霜高原',W5:'流沙遗迹',W6:'星陨之巅',HOME:'家园'}[d.worldId]||d.worldId||'—';
+    // v1.9.61 装备表补战力列
     const eqRows=(d.equips||[]).map(e=>{
       const q=Math.max(0,Math.min(7,e.quality||0));
-      return `<tr><td style="color:${QCOLOR[q]}">${QUALITY[q]}</td><td>${SLOT_CN[e.slot]||e.slot}</td><td>${e.enhance?('+'+e.enhance):'—'}</td></tr>`;
-    }).join('')||'<tr><td colspan="3">未穿戴装备</td></tr>';
+      return `<tr><td style="color:${QCOLOR[q]};font-weight:700">${QUALITY[q]}</td><td>${SLOT_CN[e.slot]||e.slot}</td><td>${e.enhance?('+'+e.enhance):'—'}</td><td style="color:#7fe0a0">${fmt(e.power||0)}</td></tr>`;
+    }).join('')||'<tr><td colspan="4">未穿戴装备</td></tr>';
     const gr={president:'会长',officer:'副会长',member:'成员'}[d.guildRole]||d.guildRole;
     showModal(`<h2>玩家档案</h2>
       <div class="guild-hero" style="margin:10px 0">
         <div class="gh-emblem">${ICON.card?ICON.card(40):ICON.shield(40,'#5a6b80')}</div>
         <div class="gh-meta">
           <div class="gh-name">${d.name} ${d.online?'<em style="color:#7fe0a0;font-style:normal">● 在线</em>':'<em style="color:#8a93a6;font-style:normal">● 离线</em>'}</div>
-          <div class="gh-sub">${cls} · Lv.${d.level} · 战力 ${fmt(d.power)}${d.guild?(' · 公会 '+d.guild+(gr?('（'+gr+'）'):'')):' · 未加入公会'}</div>
+          <div class="gh-sub">${cls} · Lv.${d.level} · 战力 ${fmt(d.power)}</div>
+          <div class="gh-sub">${d.guild?('公会 '+d.guild+(gr?('（'+gr+'）'):'')):'未加入公会'} · 所在地图 ${wn}</div>
         </div>
       </div>
-      <div class="sec-title">穿戴装备</div>
+      <div class="pf-attr">
+        <div><span>生命</span><b>${Math.round(d.hp||0)}</b></div>
+        <div><span>攻击</span><b>${Number(d.atk||0).toFixed(1)}</b></div>
+        <div><span>防御</span><b>${Number(d.def||0).toFixed(1)}</b></div>
+        <div><span>暴击</span><b>${(Number(d.crit||0)*100).toFixed(0)}%</b></div>
+      </div>
+      <div class="sec-title">穿戴装备（${(d.equips||[]).length}/4）</div>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="color:#8a93a6"><th style="text-align:left;padding:4px">品质</th><th style="text-align:left;padding:4px">部位</th><th style="text-align:left;padding:4px">强化</th></tr></thead>
+        <thead><tr style="color:#8a93a6"><th style="text-align:left;padding:4px">品质</th><th style="text-align:left;padding:4px">部位</th><th style="text-align:left;padding:4px">强化</th><th style="text-align:left;padding:4px">战力</th></tr></thead>
         <tbody>${eqRows}</tbody>
       </table>
       <div class="enc-btns"><button class="btn-gray" id="pfClose">关闭</button></div>`);
-    $('pfClose').onclick=()=>{ hideModal(); worldMap.active=true; };
+    $('pfClose').onclick=()=>{ hideModal(); if(!hadPanel)worldMap.active=true; };
   }catch(e){
-    hideModal(); worldMap.active=true;
+    hideModal(); if(!hadPanel)worldMap.active=true;
     toastModal('玩家档案','查询失败：'+e.message);
   }
 }

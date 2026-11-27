@@ -834,6 +834,14 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .gm-role{font-size:11px;color:#9aa7bd;min-width:34px;text-align:center}
 .gm-role.r-p{color:#f0d590;font-weight:700}
 .gm-role.r-o{color:#8fd4ff}
+/* v1.9.61 公会成员行"档案"按钮 + 玩家档案属性块 */
+.gm-pf{flex:0 0 auto;margin-left:4px;padding:2px 7px;border-radius:6px;font-size:11px;cursor:pointer;
+  color:#cfe0f5;background:rgba(120,170,230,.12);border:1px solid rgba(120,170,230,.38)}
+.gm-pf:hover{background:rgba(120,170,230,.26);color:#fff}
+.pf-attr{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0 10px}
+.pf-attr>div{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px 4px;text-align:center}
+.pf-attr span{display:block;font-size:11px;color:#93a3b8;margin-bottom:3px}
+.pf-attr b{font-size:15px;color:#f0d590}
 /* ===== v1.9.21 强化工坊 ===== */
 .forge-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0 4px}
 .forge-cell{display:flex;align-items:center;gap:6px;background:#1b2436;border:1px solid #3a4a63;border-radius:8px;padding:8px 9px;cursor:pointer;min-width:0;position:relative}
