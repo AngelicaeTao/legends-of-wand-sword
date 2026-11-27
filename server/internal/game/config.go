@@ -148,6 +148,8 @@ type EconomyConfig struct {
 	Rendering   map[string]any `json:"rendering"`
 	Multiplayer map[string]any `json:"multiplayer"`
 	Dungeons    []DungeonDef   `json:"dungeons"`
+	// v1.9.53 商店兑换比例：material/exp 两段，每段按货币给单价；缺配置时用代码默认值。
+	Shop map[string]any `json:"shop"`
 }
 
 type DungeonDef struct {

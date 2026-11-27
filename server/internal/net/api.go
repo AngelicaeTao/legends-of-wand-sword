@@ -550,6 +550,8 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		QuestID  string            `json:"questId"`
 		HomeLook map[string]string `json:"homeLook"` // update_look
 		To       string            `json:"to"`       // class_advance
+		ShopItem string            `json:"shopItem"` // shop_exchange：material/exp
+		PayWith  string            `json:"payWith"`  // shop_exchange：gold/gem
 	}
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 		http.Error(w, err.Error(), 400)
@@ -814,6 +816,14 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		p.Core.Material += rw.Mat
 		p.GainExp(rw.Exp)
 		extra["reward"] = map[string]int{"gold": rw.Gold, "gem": rw.Gem, "exp": rw.Exp, "material": rw.Mat}
+	case "shop_exchange":
+		// v1.9.53 商店：金币/钻石 → 强化材料 / 经验（比例服务端权威，前端只报商品+货币+数量）
+		cost, got, e := p.ShopExchange(q.ShopItem, q.PayWith, q.Qty)
+		if e != nil { http.Error(w, e.Error(), 400); return }
+		extra["cost"] = cost
+		extra["got"] = got
+		extra["shopItem"] = q.ShopItem
+		extra["payWith"] = q.PayWith
 	case "home_decorate":
 		// 家园装饰升级（服务端权威：定价 + 扣费 + 等级上限，前端只报 itemId）
 		item := q.ItemID
