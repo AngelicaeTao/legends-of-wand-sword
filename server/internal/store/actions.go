@@ -403,20 +403,71 @@ func sellUnitPrice(itemID, kind, pay string) int {
 	}
 	if group == "consume" {
 		if pay == "gold" {
-			return 15
+			return 150 // v1.9.57 兜底价 ×10（原 15；配置缺失时也不至于贱卖）
 		}
-		return 1
-	}
-	if pay == "gold" {
 		return 10
 	}
-	return 1
+	if pay == "gold" {
+		return 100 // v1.9.57 兜底价 ×10（原 10）
+	}
+	return 10
+}
+
+// bagQty 读取 Ext.bag（初始背包）里某物品的数量。
+// JSON 反序列化后数字是 float64，内存里可能是 int，两种都兼容；不存在返回 0。
+func bagQty(p *PlayerState, itemID string) int {
+	bag, _ := p.Ext["bag"].(map[string]any)
+	if bag == nil {
+		return 0
+	}
+	switch v := bag[itemID].(type) {
+	case float64:
+		if v > 0 {
+			return int(v)
+		}
+	case int:
+		if v > 0 {
+			return v
+		}
+	case int64:
+		if v > 0 {
+			return int(v)
+		}
+	}
+	return 0
+}
+
+// takeFromBag 从 Ext.bag 扣减指定数量，返回实际扣减的件数（不足时扣到 0 为止）。
+func takeFromBag(p *PlayerState, itemID string, want int) int {
+	if want <= 0 {
+		return 0
+	}
+	bag, _ := p.Ext["bag"].(map[string]any)
+	if bag == nil {
+		return 0
+	}
+	cur := bagQty(p, itemID)
+	if cur <= 0 {
+		return 0
+	}
+	take := cur
+	if take > want {
+		take = want
+	}
+	if left := cur - take; left > 0 {
+		bag[itemID] = float64(left)
+	} else {
+		delete(bag, itemID) // 卖空即移除，背包面板不再显示 0
+	}
+	return take
 }
 
 // ShopSell 背包回收（v1.9.56）：把仓库/背包里的材料或药水换成金币或钻石。
 //
 //	itemID 按 id 匹配（同 id 多堆叠会一起扣减），pay=gold|gem，qty=要卖掉的件数。
 //	返回单件价、实际到账总额；数量不足或物品不可回收时报错且不扣任何东西。
+//	v1.9.57：除仓库（Warehouse）外，也支持初始背包（Ext.bag）里的材料类物品
+//	（秘银、金币袋等）——先扣仓库，不够再扣背包；两者数量合并计算持有量。
 func (p *PlayerState) ShopSell(itemID string, qty int, pay string) (unit, got int, err error) {
 	if itemID == "" {
 		return 0, 0, fmt.Errorf("缺少物品 id")
@@ -437,6 +488,13 @@ func (p *PlayerState) ShopSell(itemID string, qty int, pay string) (unit, got in
 			if kind == "" {
 				kind = it.Kind
 			}
+		}
+	}
+	// 初始背包物品无 kind 字段，统一按材料计价（秘银 / 金币袋 走 items 里的精确 id 定价）
+	if fromBag := bagQty(p, itemID); fromBag > 0 {
+		avail += fromBag
+		if kind == "" {
+			kind = "材料"
 		}
 	}
 	if avail <= 0 {
@@ -467,6 +525,10 @@ func (p *PlayerState) ShopSell(itemID string, qty int, pay string) (unit, got in
 		out = append(out, it)
 	}
 	p.Warehouse = out
+	// 仓库不够的部分从初始背包补扣
+	if left > 0 {
+		takeFromBag(p, itemID, left)
+	}
 	got = unit * qty
 	curCN := "金币"
 	if pay == "gold" {

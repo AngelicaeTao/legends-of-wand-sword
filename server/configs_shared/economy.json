@@ -29,19 +29,21 @@
     "exp": { "goldPerUnit": 1, "gemPerExp": 10 },
     "maxQty": 1000000,
     "sell": {
-      "_note": "v1.9.56 回收单价 = 每 1 件可换到的金币 / 钻石；items 按物品 id 定价，未列出的按 default 按类别兜底（material=材料，consume=药水）",
+      "_note": "v1.9.56 回收单价 = 每 1 件可换到的金币 / 钻石；items 按物品 id 定价，未列出的按 default 按类别兜底（material=材料，consume=药水）。v1.9.57 全表单价 ×10（原 12/20/60/8/6/15/45 → 120/200/600/80/60/150/450），并补 秘银、金币袋 两种初始背包物品的回收标准",
       "items": {
-        "钢锭":   { "gold": 12, "gem": 1 },
-        "精铁":   { "gold": 20, "gem": 2 },
-        "蓝宝石": { "gold": 60, "gem": 5 },
-        "皮革":   { "gold": 8,  "gem": 1 },
-        "布料":   { "gold": 6,  "gem": 1 },
-        "potion_s": { "gold": 15, "gem": 1 },
-        "potion_l": { "gold": 45, "gem": 3 }
+        "钢锭":   { "gold": 120, "gem": 10 },
+        "精铁":   { "gold": 200, "gem": 20 },
+        "蓝宝石": { "gold": 600, "gem": 50 },
+        "皮革":   { "gold": 80,  "gem": 10 },
+        "布料":   { "gold": 60,  "gem": 10 },
+        "potion_s": { "gold": 150, "gem": 10 },
+        "potion_l": { "gold": 450, "gem": 30 },
+        "秘银":     { "gold": 400, "gem": 40 },
+        "金币袋":   { "gold": 500, "gem": 50 }
       },
       "default": {
-        "material": { "gold": 10, "gem": 1 },
-        "consume":  { "gold": 15, "gem": 1 }
+        "material": { "gold": 100, "gem": 10 },
+        "consume":  { "gold": 150, "gem": 10 }
       }
     }
   },
@@ -59,8 +61,9 @@
     "bossDiamondMin": 50,
     "bossDiamondMax": 100,
     "monsterChest": {
-      "_note": "v1.9.46 怪物掉落宝箱档位权重（服务端权威 roll）。每条内部按 木>银>金>钻石>水晶 严格递减且不设 0；怪物档次越高，高品质（钻石+水晶）概率越高：普通 9% < 精英 16% < 首领 24%。",
+      "_note": "v1.9.46 怪物掉落宝箱档位权重（服务端权威 roll）。每条内部按 木>银>金>钻石>水晶 严格递减且不设 0；怪物档次越高，高品质（钻石+水晶）概率越高：普通 9% < 精英 16% < 首领 24%。v1.9.57 每档新增 floor（保底品质）：低于 floor 的权重在 roll 时全部并入 floor，等效「保底箱概率 = 自身权重 + 所有更低品质权重之和」。原始权重保留在表里便于追溯，普通怪 floor=wood 故数值不变。",
       "normal": {
+        "floor": "wood",
         "wood": 50,
         "silver": 28,
         "gold": 13,
@@ -68,6 +71,7 @@
         "crystal": 3
       },
       "elite": {
+        "floor": "silver",
         "wood": 40,
         "silver": 27,
         "gold": 17,
@@ -75,6 +79,7 @@
         "crystal": 6
       },
       "boss": {
+        "floor": "gold",
         "wood": 30,
         "silver": 26,
         "gold": 20,

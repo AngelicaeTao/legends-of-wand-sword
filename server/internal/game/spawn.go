@@ -343,9 +343,27 @@ func DropKindOf(kind string) string {
 	return "normal"
 }
 
+// tierIndexByName 箱子品质名 → 档位序号（1木 2银 3金 4钻石 5水晶）。
+// v1.9.57 供 monsterChest 的 floor（保底品质）解析用；未知/空名按木箱兜底。
+func tierIndexByName(name string) int {
+	switch name {
+	case "silver":
+		return 2
+	case "gold":
+		return 3
+	case "diamond":
+		return 4
+	case "crystal":
+		return 5
+	}
+	return 1
+}
+
 // rollDropTier 按 monsterChest 权重掷档位（1木 2银 3金 4钻石 5水晶）。
 // 保底（rollContent 的 8 次计数）对掉落箱不适用：每次掉落都是独立的一次抽取。
 // v1.9.46：三档权重来自配置，每档内部递减且不设 0；缺配置时按 normal 兜底。
+// v1.9.57：每档可配 floor（保底品质）。低于 floor 的权重在掷档前全部并入 floor，
+// 即「保底箱概率 = 自身权重 + 所有更低品质权重之和」——精英怪必出银箱起、首领必出金箱起。
 func (m *SpawnManager) rollDropTier(kind string) int {
 	prof := DropKindOf(kind)
 	raw, _ := C().Economy.Drop["monsterChest"].(map[string]any)
@@ -360,13 +378,34 @@ func (m *SpawnManager) rollDropTier(kind string) int {
 		vals[i] = numOf(w, n, 0)
 		total += vals[i]
 	}
-	if total <= 0 { // 配置缺失兜底：普通怪木箱、首领金箱
-		if prof == "boss" { return 3 }
+	if total <= 0 { // 配置缺失兜底：普通怪木箱、精英怪银箱、首领金箱
+		switch prof {
+		case "elite":
+			return 2
+		case "boss":
+			return 3
+		}
 		return 1
+	}
+	// 保底档归一：低于 floor 的权重并入 floor，这些档位不再单独产出
+	floor := 1 // 缺省按木箱兜底
+	if fs, ok := w["floor"].(string); ok && fs != "" {
+		floor = tierIndexByName(fs)
+	}
+	if floor > 1 {
+		merge := 0.0
+		for i := 0; i < floor-1; i++ {
+			merge += vals[i]
+			vals[i] = 0
+		}
+		vals[floor-1] += merge
 	}
 	r := m.rand.Float64() * total
 	acc := 0.0
 	for i, v := range vals {
+		if v <= 0 {
+			continue
+		}
 		acc += v
 		if r < acc { return i + 1 }
 	}

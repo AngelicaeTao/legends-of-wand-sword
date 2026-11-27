@@ -90,6 +90,7 @@ func TestSkillUpgradeMaxLevel(t *testing.T) {
 }
 
 // v1.9.56 背包回收：材料/药水 → 金币或钻石，按件计价，扣减正确。
+// v1.9.57 单价整体 ×10，并支持初始背包（ext.bag）里的 秘银 / 金币袋。
 func TestShopSell(t *testing.T) {
 	if err := game.Init("../../../configs"); err != nil {
 		t.Fatal(err)
@@ -102,15 +103,15 @@ func TestShopSell(t *testing.T) {
 		{ID: "钢锭", Qty: 5, Kind: "材料"}, // 同 id 多堆叠
 	}
 
-	// 钢锭 12 金币/件（配置），15 件全部堆叠合计
+	// 钢锭 120 金币/件（v1.9.57：配置 12 → 120，整体 ×10），15 件全部堆叠合计
 	unit, got, err := p.ShopSell("钢锭", 15, "gold")
 	if err != nil {
 		t.Fatalf("回收钢锭失败：%v", err)
 	}
-	if unit != 12 || got != 180 {
-		t.Fatalf("钢锭应 12 金/件、15 件共 180，实际 unit=%d got=%d", unit, got)
+	if unit != 120 || got != 1800 {
+		t.Fatalf("钢锭应 120 金/件、15 件共 1800，实际 unit=%d got=%d", unit, got)
 	}
-	if p.Core.Gold != 180 {
+	if p.Core.Gold != 1800 {
 		t.Fatalf("金币到账错误：%d", p.Core.Gold)
 	}
 	for _, it := range p.Warehouse {
@@ -119,12 +120,12 @@ func TestShopSell(t *testing.T) {
 		}
 	}
 
-	// 药水回收成钻石：potion_s 1 钻/件
+	// 药水回收成钻石：potion_s 10 钻/件（原 1 ×10）
 	unit, got, err = p.ShopSell("potion_s", 2, "gem")
 	if err != nil {
 		t.Fatalf("回收药水失败：%v", err)
 	}
-	if unit != 1 || got != 2 || p.Core.Gem != 2 {
+	if unit != 10 || got != 20 || p.Core.Gem != 20 {
 		t.Fatalf("药水回收钻石错误：unit=%d got=%d gem=%d", unit, got, p.Core.Gem)
 	}
 	// 剩余 2 瓶
@@ -151,5 +152,50 @@ func TestShopSell(t *testing.T) {
 	}
 	if _, _, err := p.ShopSell("potion_s", 0, "gold"); err == nil {
 		t.Fatalf("数量 0 应报错")
+	}
+
+	// ---- v1.9.57 初始背包（ext.bag）回收：新角色自带 秘银×2、金币袋×5 ----
+	if n := bagQty(p, "秘银"); n != 2 {
+		t.Fatalf("新角色应有秘银 2，实际 %d", n)
+	}
+	unit, got, err = p.ShopSell("秘银", 2, "gem") // 40 钻/件
+	if err != nil {
+		t.Fatalf("回收秘银失败：%v", err)
+	}
+	if unit != 40 || got != 80 || p.Core.Gem != 100 {
+		t.Fatalf("秘银回收错误：unit=%d got=%d gem=%d", unit, got, p.Core.Gem)
+	}
+	if n := bagQty(p, "秘银"); n != 0 {
+		t.Fatalf("秘银应已全部卖空，背包仍有 %d", n)
+	}
+	if bag, _ := p.Ext["bag"].(map[string]any); bag != nil {
+		if _, ok := bag["秘银"]; ok {
+			t.Fatalf("秘银卖空后应从 ext.bag 删除键（背包面板不再显示 0）")
+		}
+	}
+
+	// 仓库 + 背包混合：仓库 1 个金币袋，背包 5 个，卖 3 → 先扣仓库再扣背包
+	p.Warehouse = append(p.Warehouse, Item{ID: "金币袋", Qty: 1, Kind: "材料"})
+	unit, got, err = p.ShopSell("金币袋", 3, "gold") // 500 金/件
+	if err != nil {
+		t.Fatalf("回收金币袋失败：%v", err)
+	}
+	if unit != 500 || got != 1500 {
+		t.Fatalf("金币袋应 500 金/件、3 件共 1500，实际 unit=%d got=%d", unit, got)
+	}
+	if n := bagQty(p, "金币袋"); n != 3 { // 5 - (3-1) = 3
+		t.Fatalf("金币袋背包应剩 3，实际 %d", n)
+	}
+	for _, it := range p.Warehouse {
+		if it.ID == "金币袋" {
+			t.Fatalf("仓库金币袋应已扣完，仍有 qty=%d", it.Qty)
+		}
+	}
+	// 背包合计不足：报错且一件不扣
+	if _, _, err := p.ShopSell("金币袋", 99, "gold"); err == nil {
+		t.Fatalf("背包数量不足应报错")
+	}
+	if n := bagQty(p, "金币袋"); n != 3 {
+		t.Fatalf("报错后不应扣减，背包应仍为 3，实际 %d", n)
 	}
 }
