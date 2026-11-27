@@ -206,6 +206,83 @@ func (p *PlayerState) EnhanceEquip(itemID, slot string, goldCost, matCost int) (
 	return 0, fmt.Errorf("该槽位无装备：%s", slot)
 }
 
+// ShopExchange 商店兑换（v1.9.53）：用金币/钻石换强化材料或经验。
+//   item=material|exp，pay=gold|gem，qty=玩家想"得到"的数量（材料件数 / 经验点数）。
+//   比例读 configs/economy.json 的 shop 段，缺配置按默认：
+//     材料：10 金币/件、1 钻石/件；经验：1 金币/点、1 钻石 10 点（钻石档必须按 10 的倍数）。
+// 扣费与发放都在服务端完成，前端只报意图，返回实际消耗与获得量。
+func (p *PlayerState) ShopExchange(item, pay string, qty int) (cost, got int, err error) {
+	if qty <= 0 { return 0, 0, fmt.Errorf("兑换数量需大于 0") }
+	if max := shopInt("", "maxQty", 1000000); qty > max {
+		return 0, 0, fmt.Errorf("单次最多兑换 %d", max)
+	}
+	switch item {
+	case "material":
+		switch pay {
+		case "gold":
+			cost = qty * shopInt("material", "goldPerUnit", 10)
+		case "gem":
+			cost = qty * shopInt("material", "gemPerUnit", 1)
+		default:
+			return 0, 0, fmt.Errorf("不支持用 %s 兑换材料", pay)
+		}
+	case "exp":
+		switch pay {
+		case "gold":
+			cost = qty * shopInt("exp", "goldPerUnit", 1)
+		case "gem":
+			per := shopInt("exp", "gemPerExp", 10)
+			if per <= 0 { per = 10 }
+			if qty%per != 0 {
+				return 0, 0, fmt.Errorf("钻石兑换经验需按 %d 的倍数（当前 %d）", per, qty)
+			}
+			cost = qty / per
+		default:
+			return 0, 0, fmt.Errorf("不支持用 %s 兑换经验", pay)
+		}
+	default:
+		return 0, 0, fmt.Errorf("未知兑换商品：%s", item)
+	}
+	if cost <= 0 { return 0, 0, fmt.Errorf("兑换数量过小") }
+
+	switch pay {
+	case "gold":
+		if p.Core.Gold < cost {
+			return 0, 0, fmt.Errorf("金币不足（需 %d，持有 %d）", cost, p.Core.Gold)
+		}
+		p.Core.Gold -= cost
+	case "gem":
+		if p.Core.Gem < cost {
+			return 0, 0, fmt.Errorf("钻石不足（需 %d，持有 %d）", cost, p.Core.Gem)
+		}
+		p.Core.Gem -= cost
+	}
+
+	switch item {
+	case "material":
+		p.Core.Material += qty
+	case "exp":
+		p.GainExp(qty) // 复用升级处理：够经验会自动升级并重算战力
+	}
+	curCN := map[string]string{"gold": "金币", "gem": "钻石"}[pay]
+	itemCN := map[string]string{"material": "强化材料", "exp": "经验"}[item]
+	p.appendLogs([]string{fmt.Sprintf("商店兑换：-%d %s → %s +%d", cost, curCN, itemCN, qty)})
+	return cost, qty, nil
+}
+
+// shopInt 读取 shop 配置的整数比例；section 为空表示读顶层（maxQty）。
+func shopInt(section, key string, def int) int {
+	cfg := game.C().Economy.Shop
+	if cfg == nil { return def }
+	holder := cfg
+	if section != "" {
+		holder, _ = cfg[section].(map[string]any)
+	}
+	if holder == nil { return def }
+	if v, ok := holder[key].(float64); ok && v > 0 { return int(v) }
+	return def
+}
+
 // WarehouseDeposit 把背包物品存入仓库（演示：把装备实例转为仓库条目由 EquipItem 逆向完成，此处处理普通材料）。
 func (p *PlayerState) WarehouseDeposit(itemID string, qty int) error {
 	if qty <= 0 {

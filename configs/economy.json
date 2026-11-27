@@ -23,6 +23,12 @@
     "tickMs": 1000,
     "_note": "服务端按累计时间驱动自动战斗；回合数仅作UI展示，不作终止条件。种子由服务端生成随战报记录。"
   },
+  "shop": {
+    "_note": "v1.9.53 商店兑换比例。material=强化材料，exp=经验；goldPerUnit/gemPerUnit 为每 1 件材料的货币价，exp 段同理，gemPerExp 为 1 钻石可换的经验数（钻石兑经验按 10 的倍数）",
+    "material": { "goldPerUnit": 10, "gemPerUnit": 1 },
+    "exp": { "goldPerUnit": 1, "gemPerExp": 10 },
+    "maxQty": 1000000
+  },
   "drop": {
     "equipChanceNormal": 0.45,
     "equipChanceElite": 0.85,
