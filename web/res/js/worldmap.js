@@ -85,6 +85,11 @@ function WMap(canvas, opts){
   this.StandeeActor=window.StandeeActor; // 主角/职业装走整体立绘（交付包 §0.2）
   this.heroBundle='char_warrior';        // 由 classId 决定（char_warrior/char_mage/…）
   this.actorCache={}; // bundle -> PartActor 实例（怪物/宝箱每类一个）
+
+  // v1.9.64 地图旗标：大地图上点选地点后可选择是否跟踪（仅存本地，不落服务端）
+  // {wid,x,y,track}；wid 用于切图后不误显示别的地图的旗标
+  this.pin=null;
+  try{ const s=localStorage.getItem('zjcs.mapPin'); if(s)this.pin=JSON.parse(s)||null; }catch(e){}
 }
 
 /* ---------- 加载真实地形全图 + 通行掩码（异步） ---------- */
@@ -1375,6 +1380,37 @@ WMap.prototype.applySnapshot=function(players,selfId){
   for(const id in this.remote)if(!seen[id])delete this.remote[id];
 };
 
+/* ---------- v1.9.64 地图旗标：点选地点 + 是否跟踪 ---------- */
+/* 旗标只存本地（localStorage），不上报服务端：它不是玩法状态，只是玩家的导航便签。
+   切图后旗标仍保留，但只在它所属的世界（wid）绘制，避免"在森林标的点出现在沙漠"。 */
+const PIN_SVG='<svg class="pin-ico" viewBox="0 0 12 12" aria-hidden="true">'+
+  '<path d="M2.2 11V1.2" stroke="#6b4c00" stroke-width="1.7"/>'+
+  '<path d="M3 1.6 10.2 4.1 3 6.6Z" fill="#ffd65a" stroke="#6b4c00" stroke-width=".9"/></svg>';
+WMap.prototype.setPin=function(x,y){
+  this.pin={wid:this.worldId,x:Math.round(x),y:Math.round(y),track:this.pin?!!this.pin.track:true};
+  this.savePin();
+};
+WMap.prototype.setPinTrack=function(on){
+  if(!this.pin||this.pin.wid!==this.worldId)return;
+  this.pin.track=!!on; this.savePin();
+};
+WMap.prototype.clearPin=function(){
+  this.pin=null; this.savePin();
+};
+WMap.prototype.savePin=function(){
+  try{ localStorage.setItem('zjcs.mapPin', JSON.stringify(this.pin||null)); }catch(e){}
+  if(this._pinBarRefresh)this._pinBarRefresh();
+};
+/* 当前世界的旗标（别的地图标的点返回 null） */
+WMap.prototype.curPin=function(){
+  return (this.pin&&this.pin.wid===this.worldId)?this.pin:null;
+};
+/* 世界坐标 → 距离文案（1 格 = 160 世界单位，与探索格一致） */
+WMap.prototype.pinDist=function(){
+  const p=this.curPin(); if(!p)return 0;
+  return Math.round(Math.hypot(p.x-this.hero.x,p.y-this.hero.y)/160);
+};
+
 /* ---------- v1.9.29 大地图弹窗（M 键开关 / Esc / ✕ / 遮罩点击关闭） ---------- */
 WMap.prototype.toggleMapModal=function(){ if(this.mapModalOpen)this.closeMapModal(); else this.openMapModal(); };
 
@@ -1387,10 +1423,11 @@ WMap.prototype.openMapModal=function(){
   const layer=document.createElement('div');
   layer.id='wmapLayer';
   layer.innerHTML=`<div class="wmap-box">
-    <div class="wmap-head"><b>${title}</b><span class="wmap-tip">M / Esc 关闭 · 点✕退出</span>
+    <div class="wmap-head"><b>${title}</b><span class="wmap-tip">点地图标记地点 · M / Esc 关闭 · 点✕退出</span>
       <button class="btn-gray" id="wmapOnline" style="margin-right:8px;padding:3px 12px">在线玩家</button>
       <button id="wmapClose" title="关闭 (Esc / M)">✕</button></div>
     <canvas id="wmapCv" width="960" height="540"></canvas>
+    <div class="wmap-pinbar" id="wmapPinBar"></div>
     <div class="wmap-legend">
       <span><i class="lgdot lgdot-hero"></i>你</span>
       <span><i class="lgdot lgdot-gate"></i>传送门</span>
@@ -1432,6 +1469,37 @@ WMap.prototype.openMapModal=function(){
       <span><i class="lgdot lgdot-potion"></i>草药</span>`;
   const cv=layer.querySelector('#wmapCv'), g=cv.getContext('2d');
   layer.querySelector('.wmap-legend').innerHTML=legend;
+
+  /* v1.9.64 旗标交互 */
+  const bar=layer.querySelector('#wmapPinBar');
+  const refreshBar=()=>{
+    const p=self.curPin();
+    if(!p){
+      bar.innerHTML=`<span class="wmap-pin-none">${PIN_SVG}点地图任意位置放置旗标，可自由选择是否跟踪</span>`;
+      return;
+    }
+    bar.innerHTML=`<span class="wmap-pin-txt">${PIN_SVG}旗标 (${p.x}, ${p.y}) · 距你 ${self.pinDist()} 格</span>`+
+      `<button class="wmap-pin-btn${p.track?' on':''}" id="wmapPinTrack" type="button" title="小地图上持续指向该点">${p.track?'跟踪中 ✓':'跟踪'}</button>`+
+      `<button class="wmap-pin-btn ghost" id="wmapPinClear" type="button">清除</button>`;
+    bar.querySelector('#wmapPinTrack').onclick=()=>{ self.setPinTrack(!p.track); refreshBar(); };
+    bar.querySelector('#wmapPinClear').onclick=()=>{ self.clearPin(); refreshBar(); };
+  };
+  self._pinBarRefresh=refreshBar;
+  refreshBar();
+  cv.style.cursor='crosshair';
+  // 屏幕坐标 → 世界坐标：canvas 用 width:100% 缩放，必须按 rect 比例换算，不能用 offsetX
+  const pick=e=>{
+    const r=cv.getBoundingClientRect(); if(!r.width||!r.height)return null;
+    const S=cv.width/self.WM;
+    const wx=((e.clientX-r.left)*cv.width/r.width)/S;
+    const wy=((e.clientY-r.top)*cv.height/r.height)/S;
+    if(wx<0||wy<0||wx>self.WM||wy>self.HM)return null;
+    return {x:wx,y:wy};
+  };
+  cv.addEventListener('click',e=>{ const p=pick(e); if(!p)return; self.setPin(p.x,p.y); refreshBar(); });
+  cv.addEventListener('mousemove',e=>{ self._pinHover=pick(e); });
+  cv.addEventListener('mouseleave',()=>{ self._pinHover=null; });
+
   const loop=()=>{
     if(!this.mapModalOpen)return;
     this.drawMapModal(cv,g);
@@ -1449,6 +1517,13 @@ WMap.prototype.drawMapModal=function(cv,g){
   const S=cv.width/this.WM; // v1.9.31 动态：常规世界 960/7680=1/8；家园 960/2560
   const P=(x,y)=>({x:x*S,y:y*S});
   const dot=(x,y,r,fill,stroke)=>{ g.beginPath(); g.arc(x,y,r,0,6.2832); g.fillStyle=fill; g.fill(); if(stroke){g.lineWidth=1.5;g.strokeStyle=stroke;g.stroke();} };
+  // v1.9.64 悬停十字线：便于对准要标记的点（每帧重画，不落 DOM）
+  if(this._pinHover){
+    const h=P(this._pinHover.x,this._pinHover.y);
+    g.save(); g.strokeStyle='rgba(255,214,90,.45)'; g.lineWidth=1; g.setLineDash([4,5]);
+    g.beginPath(); g.moveTo(h.x,0); g.lineTo(h.x,cv.height); g.moveTo(0,h.y); g.lineTo(cv.width,h.y); g.stroke();
+    g.restore();
+  }
   // 怪物（精英/首领更大更醒目）
   for(const m of this.monsters){ const p=P(m.x,m.y); dot(p.x,p.y,m.elite?6:4,m.elite?'#e05a4a':'#c9756a','rgba(0,0,0,.5)'); }
   // 宝箱 / 草药（只画当前可交互的）
@@ -1470,12 +1545,42 @@ WMap.prototype.drawMapModal=function(cv,g){
   const hp=P(this.hero.x,this.hero.y);
   dot(hp.x,hp.y,9+Math.sin(t*2.5)*2.5,'rgba(255,214,90,.25)');
   dot(hp.x,hp.y,6,'#ffd65a','#6b4c00');
+  // v1.9.64 旗标：金色小旗 + 距离；跟踪开启时画角色→旗标的虚线
+  const pin=this.curPin();
+  if(pin){
+    const pp=P(pin.x,pin.y);
+    if(pin.track){
+      g.save(); g.strokeStyle='rgba(255,214,90,.42)'; g.lineWidth=2; g.setLineDash([7,7]);
+      g.beginPath(); g.moveTo(hp.x,hp.y); g.lineTo(pp.x,pp.y); g.stroke(); g.restore();
+    }
+    // 落点光晕（脉动）：小旗在满屏地形里容易被忽略，用一圈呼吸光勾出来
+    dot(pp.x,pp.y,10+Math.sin(t*2.2)*2.5,'rgba(255,214,90,.2)');
+    g.save();
+    g.lineCap='round';
+    // 旗杆：深棕描边 + 亮金内芯，深色草地/雪地上都能看清
+    g.strokeStyle='#6b4c00'; g.lineWidth=4.2;
+    g.beginPath(); g.moveTo(pp.x,pp.y); g.lineTo(pp.x,pp.y-26); g.stroke();
+    g.strokeStyle='#ffe9a8'; g.lineWidth=2.2;
+    g.beginPath(); g.moveTo(pp.x,pp.y); g.lineTo(pp.x,pp.y-26); g.stroke();
+    g.fillStyle='#ffd65a'; g.strokeStyle='#6b4c00'; g.lineWidth=1.8; g.lineJoin='round';
+    g.beginPath(); g.moveTo(pp.x+1,pp.y-26); g.lineTo(pp.x+22,pp.y-18.5); g.lineTo(pp.x+1,pp.y-11); g.closePath();
+    g.fill(); g.stroke();
+    g.restore();
+    const dm=this.pinDist(), txt=dm+' 格';
+    g.save(); g.font='bold 13px sans-serif'; g.textAlign='center';
+    const tw=g.measureText(txt).width;
+    g.fillStyle='rgba(8,12,20,.78)'; g.fillRect(pp.x-tw/2-6,pp.y+8,tw+12,18);
+    g.strokeStyle='rgba(217,180,91,.5)'; g.lineWidth=1; g.strokeRect(pp.x-tw/2-6,pp.y+8,tw+12,18);
+    g.fillStyle='#ffd65a'; g.fillText(txt,pp.x,pp.y+21);
+    g.restore();
+  }
 };
 
 WMap.prototype.closeMapModal=function(){
   if(!this.mapModalOpen)return;
   this.mapModalOpen=false;
   if(this._mapRaf)cancelAnimationFrame(this._mapRaf);
+  this._pinHover=null; this._pinBarRefresh=null; // 弹窗内引用随 DOM 一并释放
   const l=document.getElementById('wmapLayer'); if(l)l.remove();
 };
 
