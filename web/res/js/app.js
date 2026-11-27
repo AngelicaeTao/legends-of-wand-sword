@@ -208,6 +208,10 @@ function drawMiniMap(){
 let bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
 let bHp={hero:640,heroMax:640,mon:420,monMax:420};
 let bFx=[];
+// v1.9.51 攻击动画特效：近战冲刺位移 + 远程法球投射（纯前端渲染层，不改服务端战报）
+let heroLunge=null;    // {start,dur,tx,ty} 英雄冲刺到目标怪物身边的位移动画
+let magicShots=[];     // 飞行中的法球 {x0,y0,x1,y1,start,dur,color,r}
+let lastHeroX=420;     // 本帧英雄实际 X（供调试钩子实测）
 let battleHeroActor=null, battleMonActors=[], battleMonState=[], battleMonInfos=[];
 // v1.9.36 群怪：战斗座位（主怪居中，副怪左右错位稍后稍小，形成"敌方小队"纵深）
 const MON_SLOT=[{x:858,y:558,s:3.2},{x:722,y:574,s:2.55},{x:992,y:576,s:2.55}];
@@ -225,6 +229,30 @@ function setMonAnim(i,s,dur){
 function curMonAnim(i){const st=battleMonState[i];return st&&performance.now()<st.until?st.state:'idle';}
 function curBAnim(who){return performance.now()<(bAnim[who+'Until']||0)?bAnim[who]:'idle';}
 function spawnFx(text,x,y,color){bFx.push({text:String(text),x,y,color:color||'#ff6b6b',born:performance.now()});}
+
+/* v1.9.51 职业系攻击动画：战士系近战冲刺贴身，法师系远程法球投射（含转职） */
+const MELEE_CLASSES={warrior:1,fighter:1,knight:1};   // 战士 / 拳师 / 骑士
+const CASTER_CLASSES={mage:1,sage:1,warlock:1};       // 法师 / 祭祀 / 术士
+function heroIsMelee(){const id=(state&&state.core&&state.core.classId)||'warrior';return MELEE_CLASSES[id]===1;}
+function heroIsCaster(){const id=(state&&state.core&&state.core.classId)||'warrior';return CASTER_CLASSES[id]===1;}
+// 近战冲刺：0→150ms 冲到怪物身侧（贴身），之后回位；150ms 正好是现有战报的受击时点
+function startHeroLunge(sp){
+  const tx=Math.max(520,((sp&&sp.x)||858)-160);
+  heroLunge={start:performance.now(),dur:430,tx};
+}
+// 远程法球：从英雄手侧飞向怪物胸口，165ms 抵达（对齐受击时点），带拖尾 / 光晕 / 命中爆裂
+function fireMagicShot(sp,fx){
+  const color = fx==='fx_dmg_fire'?'#ff9b4a' : fx==='fx_dmg_holy'?'#ffe9a8'
+              : fx==='fx_dmg_dark'?'#b47bff' : fx==='fx_heal'?'#7fe0a0' : '#7fd9ff';
+  magicShots.push({x0:462,y0:470,x1:((sp&&sp.x)||858),y1:(((sp&&sp.y)||560)-120),
+                   start:performance.now(),dur:165,color});
+  if(magicShots.length>8) magicShots.shift();   // 防止极端连击堆积
+}
+function clearBattleFx(){heroLunge=null;magicShots=[];lastHeroX=420;}
+// 实测钩子：暴露英雄实际 X 与法球轨迹，供 Playwright 逐帧采样
+window.__fx=()=>({heroX:lastHeroX,melee:heroIsMelee(),
+  lunge:heroLunge?{tx:heroLunge.tx,elapsed:performance.now()-heroLunge.start}:null,
+  shots:magicShots.map(s=>({x0:s.x0,y0:s.y0,x1:s.x1,y1:s.y1,elapsed:performance.now()-s.start,color:s.color}))});
 // 准备战斗部件 actor（英雄固定法师，怪物按战报阵容逐只建独立 actor，动画互不干扰）
 function ensureBattleActors(monInfos){
   const hb=(state&&state.core)?heroBundleOf(state.core.classId):'char_warrior';
@@ -370,7 +398,27 @@ function drawBattle(t,now){
   });
   // 站位：英雄 420；怪物按 MON_SLOT 座位（主怪 858，副怪 722/992 错位纵深）
   const heroFacesR=(state&&state.core)?artFacesRight(state.core.classId):true;
-  if(battleHeroActor)battleHeroActor.render(cvb,420,560,1.6,{dir:heroFacesR?1:-1});
+  // v1.9.51 近战冲刺位移：前 35% 冲向怪物（缓出），后 65% 退回（缓入），150ms 处恰在贴身顶点
+  let heroX=420;
+  if(heroLunge){
+    const e=(now-heroLunge.start)/heroLunge.dur;
+    if(e>=1){ heroLunge=null; }
+    else{
+      let q;
+      if(e<0.35) q=1-Math.pow(1-e/0.35,3);          // 冲出去：easeOutCubic
+      else { const u=(e-0.35)/0.65; q=1-u*u*(3-2*u); } // 退回来：smoothstep
+      heroX=420+(heroLunge.tx-420)*q;
+      // 冲刺残影：仅在去程绘制两道淡影，强化速度感（不叠在静止帧上）
+      if(e<0.4&&battleHeroActor){
+        for(let k=1;k<=2;k++){
+          const back=heroX-k*26*(1-e/0.4);
+          battleHeroActor.render(cvb,back,560,1.6,{dir:heroFacesR?1:-1,alpha:0.22-k*0.07});
+        }
+      }
+    }
+  }
+  lastHeroX=heroX;
+  if(battleHeroActor)battleHeroActor.render(cvb,heroX,560,1.6,{dir:heroFacesR?1:-1});
   // v1.9.27 怪物死亡：die 动画 500ms 内压扁 → 380ms 后收掉 actor 用塌陷尘团替代（群怪每只独立）
   const monDie=(bAnim.mon==='die')?(now-(bAnim.monStart||now)):-1;
   battleMonActors.forEach((a,i)=>{
@@ -392,6 +440,45 @@ function drawBattle(t,now){
       }
     }
   });
+  // v1.9.51 法球投射：飞行段（拖尾+光晕+核心）→ 命中爆裂段（放射线+冲击环）
+  if(magicShots.length){
+    cvb.save();
+    magicShots=magicShots.filter(s=>now-s.start<s.dur+420);
+    for(const s of magicShots){
+      const e=Math.min(1,(now-s.start)/s.dur);
+      const sm=e*e*(3-2*e);
+      const px=u=>s.x0+(s.x1-s.x0)*u;
+      const py=u=>s.y0+(s.y1-s.y0)*u-Math.sin(Math.PI*u)*46;   // 抛物线弧
+      if(e<1){
+        for(let i=3;i>=1;i--){                                   // 拖尾
+          const te=Math.max(0,e-i*0.07), tes=te*te*(3-2*te);
+          cvb.globalAlpha=0.46-i*0.12;cvb.fillStyle=s.color;
+          cvb.beginPath();cvb.arc(px(tes),py(tes),9-i*2,0,7);cvb.fill();
+        }
+        const x=px(sm),y=py(sm);
+        cvb.globalAlpha=1;
+        const gr=cvb.createRadialGradient(x,y,1,x,y,24);
+        gr.addColorStop(0,'#ffffff');gr.addColorStop(0.38,s.color);gr.addColorStop(1,'rgba(0,0,0,0)');
+        cvb.fillStyle=gr;cvb.beginPath();cvb.arc(x,y,24,0,7);cvb.fill();
+        cvb.fillStyle='#fff';cvb.beginPath();cvb.arc(x,y,5.5,0,7);cvb.fill();
+      }else{                                                    // 命中爆裂
+        const bt=(now-s.start-s.dur)/420;
+        if(bt<1){
+          cvb.globalAlpha=1-bt;cvb.strokeStyle=s.color;cvb.lineWidth=3;
+          for(let k=0;k<8;k++){
+            const a=k*Math.PI/4, r=12+bt*54;
+            cvb.beginPath();
+            cvb.moveTo(s.x1+Math.cos(a)*r*0.65,s.y1+Math.sin(a)*r*0.42);
+            cvb.lineTo(s.x1+Math.cos(a)*r,s.y1+Math.sin(a)*r*0.65);
+            cvb.stroke();
+          }
+          cvb.lineWidth=2;cvb.globalAlpha=(1-bt)*0.6;
+          cvb.beginPath();cvb.ellipse(s.x1,s.y1,10+bt*54,(10+bt*54)*0.6,0,0,7);cvb.stroke();
+        }
+      }
+    }
+    cvb.restore();
+  }
   bFx=bFx.filter(f=>now-f.born<620);
   for(const f of bFx){
     const age=(now-f.born)/620;
@@ -2415,6 +2502,7 @@ async function playBattle(rep,mon,bd){
   // 上一场可能停在 die 姿态（战败倒地/怪物尸体），新战斗开始必须显式复位，
   // 否则第一帧会出现"尸体站起来"或"英雄躺着出手"。
   bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
+  clearBattleFx();   // v1.9.51：清掉上一场残留的冲刺位移 / 飞行法球
   if(battleHeroActor)battleHeroActor.play('idle');
   // v1.9.36 群怪：按战报 monsters 重建怪物阵容 actor（与遭遇贴图一致）
   const monInfos=(rep.monsters&&rep.monsters.length)?rep.monsters:[{sprite:(mon&&(mon.sprite||mon.type))||'slime',isBoss:mon&&mon.type==='boss_beetle'}];
@@ -2464,8 +2552,14 @@ async function playBattle(rep,mon,bd){
       else if(kind==='heal') window.SFX&&SFX.cast();
       else if(kind==='shield') window.SFX&&SFX.shield();
       else window.SFX&&SFX.cast();
-      setBAnim('hero','attack',420);await sleep(150);
       const sp=slotOf(ti);
+      // v1.9.51 攻击位移/投射：按职业系判定（含普攻 basic 兜底），均在 150ms 抵达时点触发受击
+      // 不按 kind 判定——普攻 action='basic' 会落到 physical 默认值，法师普攻也应发法球
+      if(r.damage>0){
+        if(heroIsMelee()) startHeroLunge(sp);       // 战士系（战士/拳师/骑士）：冲到怪物身边再砍
+        else if(heroIsCaster()) fireMagicShot(sp,r.fx);  // 法师系（法师/祭祀/术士）：法球飞向怪物
+      }
+      setBAnim('hero','attack',420);await sleep(150);
       if(r.damage>0){
         setMonAnim(ti,'hit',300);
         spawnFx('-'+Math.round(r.damage),sp.x,430,'#ff6b6b');
