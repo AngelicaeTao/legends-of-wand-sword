@@ -148,9 +148,13 @@ func (p *PlayerState) QualityUp(itemID string, goldCost, matCost int, mults []fl
 	for i := range p.Warehouse {
 		if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == itemID {
 			e := p.Warehouse[i].Equip
-			if e == nil { return 0, nil, fmt.Errorf("装备数据异常") }
+			if e == nil {
+				return 0, nil, fmt.Errorf("装备数据异常")
+			}
 			q, st, err := qualityUpOne(e, goldCost, matCost, mults, p)
-			if err != nil { return 0, nil, err }
+			if err != nil {
+				return 0, nil, err
+			}
 			p.Warehouse[i].Equip = e
 			return q, st, nil
 		}
@@ -160,17 +164,25 @@ func (p *PlayerState) QualityUp(itemID string, goldCost, matCost int, mults []fl
 
 func qualityUpOne(e *Equip, goldCost, matCost int, mults []float64, p *PlayerState) (int, map[string]float64, error) {
 	maxQ := len(mults) - 1
-	if maxQ < 0 { maxQ = 7 }
+	if maxQ < 0 {
+		maxQ = 7
+	}
 	if e.Quality >= maxQ {
 		return 0, nil, fmt.Errorf("已达最高品质（混沌），无法继续升品")
 	}
 	// 用旧品质 mult 反推基值，再乘新品质 mult（保留装备成长一致性）
 	oldMult := 1.0
 	newMult := 1.0
-	if e.Quality < len(mults) { oldMult = mults[e.Quality] }
-	if e.Quality+1 < len(mults) { newMult = mults[e.Quality+1] }
+	if e.Quality < len(mults) {
+		oldMult = mults[e.Quality]
+	}
+	if e.Quality+1 < len(mults) {
+		newMult = mults[e.Quality+1]
+	}
 	ratio := 1.0
-	if oldMult > 0 { ratio = newMult / oldMult }
+	if oldMult > 0 {
+		ratio = newMult / oldMult
+	}
 	for k, v := range e.Stats {
 		e.Stats[k] = round2f(v * ratio)
 	}
@@ -202,17 +214,23 @@ func (p *PlayerState) EnhanceEquip(itemID, slot string, goldCost, matCost int) (
 			return p.Equip[i].Enhance, nil
 		}
 	}
-	if itemID != "" { return 0, fmt.Errorf("未找到装备：%s", itemID) }
+	if itemID != "" {
+		return 0, fmt.Errorf("未找到装备：%s", itemID)
+	}
 	return 0, fmt.Errorf("该槽位无装备：%s", slot)
 }
 
 // ShopExchange 商店兑换（v1.9.53）：用金币/钻石换强化材料或经验。
-//   item=material|exp，pay=gold|gem，qty=玩家想"得到"的数量（材料件数 / 经验点数）。
-//   比例读 configs/economy.json 的 shop 段，缺配置按默认：
-//     材料：10 金币/件、1 钻石/件；经验：1 金币/点、1 钻石 10 点（钻石档必须按 10 的倍数）。
+//
+//	item=material|exp，pay=gold|gem，qty=玩家想"得到"的数量（材料件数 / 经验点数）。
+//	比例读 configs/economy.json 的 shop 段，缺配置按默认：
+//	  材料：10 金币/件、1 钻石/件；经验：1 金币/点、1 钻石 10 点（钻石档必须按 10 的倍数）。
+//
 // 扣费与发放都在服务端完成，前端只报意图，返回实际消耗与获得量。
 func (p *PlayerState) ShopExchange(item, pay string, qty int) (cost, got int, err error) {
-	if qty <= 0 { return 0, 0, fmt.Errorf("兑换数量需大于 0") }
+	if qty <= 0 {
+		return 0, 0, fmt.Errorf("兑换数量需大于 0")
+	}
 	if max := shopInt("", "maxQty", 1000000); qty > max {
 		return 0, 0, fmt.Errorf("单次最多兑换 %d", max)
 	}
@@ -232,7 +250,9 @@ func (p *PlayerState) ShopExchange(item, pay string, qty int) (cost, got int, er
 			cost = qty * shopInt("exp", "goldPerUnit", 1)
 		case "gem":
 			per := shopInt("exp", "gemPerExp", 10)
-			if per <= 0 { per = 10 }
+			if per <= 0 {
+				per = 10
+			}
 			if qty%per != 0 {
 				return 0, 0, fmt.Errorf("钻石兑换经验需按 %d 的倍数（当前 %d）", per, qty)
 			}
@@ -243,7 +263,9 @@ func (p *PlayerState) ShopExchange(item, pay string, qty int) (cost, got int, er
 	default:
 		return 0, 0, fmt.Errorf("未知兑换商品：%s", item)
 	}
-	if cost <= 0 { return 0, 0, fmt.Errorf("兑换数量过小") }
+	if cost <= 0 {
+		return 0, 0, fmt.Errorf("兑换数量过小")
+	}
 
 	switch pay {
 	case "gold":
@@ -273,14 +295,188 @@ func (p *PlayerState) ShopExchange(item, pay string, qty int) (cost, got int, er
 // shopInt 读取 shop 配置的整数比例；section 为空表示读顶层（maxQty）。
 func shopInt(section, key string, def int) int {
 	cfg := game.C().Economy.Shop
-	if cfg == nil { return def }
+	if cfg == nil {
+		return def
+	}
 	holder := cfg
 	if section != "" {
 		holder, _ = cfg[section].(map[string]any)
 	}
-	if holder == nil { return def }
-	if v, ok := holder[key].(float64); ok && v > 0 { return int(v) }
+	if holder == nil {
+		return def
+	}
+	if v, ok := holder[key].(float64); ok && v > 0 {
+		return int(v)
+	}
 	return def
+}
+
+// ---------- v1.9.56 技能升级 ----------
+
+// SkillLevelOf 技能当前等级：缺省 / 非法值按 1 级（老存档兼容）。
+func (p *PlayerState) SkillLevelOf(id string) int {
+	if p.Skills.Levels != nil {
+		if lv := p.Skills.Levels[id]; lv > 0 {
+			return lv
+		}
+	}
+	return 1
+}
+
+// SkillUpgrade 技能升级（v1.9.56）：
+//   - 只能升已解锁且属于当前职业技能池的技能；
+//   - 每级效果 +8%（战斗内对 power/治疗/减伤同乘，见 game.SkillEffectMult）；
+//   - 消耗钻石 = baseGem + stepGem×(当前等级-1)，上限 maxLevel；
+//   - 扣费在服务端完成，返回升级后等级与实际消耗。
+func (p *PlayerState) SkillUpgrade(id string) (level, cost int, err error) {
+	c := game.C()
+	if _, ok := c.SkillByID(id); !ok {
+		return 0, 0, fmt.Errorf("未知技能：%s", id)
+	}
+	if !c.InBDPool(p.Core.ClassID, id) {
+		return 0, 0, fmt.Errorf("该技能不属于当前职业")
+	}
+	unlocked := false
+	for _, x := range p.Skills.Unlocked {
+		if x == id {
+			unlocked = true
+			break
+		}
+	}
+	if !unlocked {
+		return 0, 0, fmt.Errorf("技能尚未解锁，先解锁再升级")
+	}
+	cur := p.SkillLevelOf(id)
+	if max := game.SkillMaxLevel(); cur >= max {
+		return cur, 0, fmt.Errorf("技能已满级（%d 级）", max)
+	}
+	cost = game.SkillUpgradeCost(cur)
+	if cost <= 0 {
+		return cur, 0, fmt.Errorf("技能已满级")
+	}
+	if p.Core.Gem < cost {
+		return cur, cost, fmt.Errorf("钻石不足（需 %d，持有 %d）", cost, p.Core.Gem)
+	}
+	p.Core.Gem -= cost
+	if p.Skills.Levels == nil {
+		p.Skills.Levels = map[string]int{}
+	}
+	p.Skills.Levels[id] = cur + 1
+	p.appendLogs([]string{fmt.Sprintf("技能升级：%s → Lv.%d（消耗 %d 钻石）", id, cur+1, cost)})
+	return cur + 1, cost, nil
+}
+
+// ---------- v1.9.56 背包回收（材料 / 药水 → 金币或钻石） ----------
+
+// sellableKind 判断该物品类别能否回收：材料与药水可回收，装备不在此列。
+func sellableKind(kind string) bool {
+	switch kind {
+	case "材料", "material", "药水", "consume", "potion":
+		return true
+	}
+	return false
+}
+
+// sellUnitPrice 单件回收价：优先按物品 id 定价，其次按类别兜底，最后用硬编码保底。
+func sellUnitPrice(itemID, kind, pay string) int {
+	group := "material"
+	if kind == "consume" || kind == "药水" || kind == "potion" {
+		group = "consume"
+	}
+	if cfg := game.C().Economy.Shop; cfg != nil {
+		if sell, ok := cfg["sell"].(map[string]any); ok {
+			if items, ok := sell["items"].(map[string]any); ok {
+				if row, ok := items[itemID].(map[string]any); ok {
+					if v, ok := row[pay].(float64); ok && v > 0 {
+						return int(v)
+					}
+				}
+			}
+			if def, ok := sell["default"].(map[string]any); ok {
+				if row, ok := def[group].(map[string]any); ok {
+					if v, ok := row[pay].(float64); ok && v > 0 {
+						return int(v)
+					}
+				}
+			}
+		}
+	}
+	if group == "consume" {
+		if pay == "gold" {
+			return 15
+		}
+		return 1
+	}
+	if pay == "gold" {
+		return 10
+	}
+	return 1
+}
+
+// ShopSell 背包回收（v1.9.56）：把仓库/背包里的材料或药水换成金币或钻石。
+//
+//	itemID 按 id 匹配（同 id 多堆叠会一起扣减），pay=gold|gem，qty=要卖掉的件数。
+//	返回单件价、实际到账总额；数量不足或物品不可回收时报错且不扣任何东西。
+func (p *PlayerState) ShopSell(itemID string, qty int, pay string) (unit, got int, err error) {
+	if itemID == "" {
+		return 0, 0, fmt.Errorf("缺少物品 id")
+	}
+	if qty <= 0 {
+		return 0, 0, fmt.Errorf("回收数量需大于 0")
+	}
+	if max := shopInt("", "maxQty", 1000000); qty > max {
+		return 0, 0, fmt.Errorf("单次最多回收 %d 件", max)
+	}
+	if pay != "gold" && pay != "gem" {
+		return 0, 0, fmt.Errorf("不支持回收成 %s", pay)
+	}
+	avail, kind := 0, ""
+	for _, it := range p.Warehouse {
+		if it.ID == itemID && sellableKind(it.Kind) && it.Qty > 0 {
+			avail += it.Qty
+			if kind == "" {
+				kind = it.Kind
+			}
+		}
+	}
+	if avail <= 0 {
+		return 0, 0, fmt.Errorf("背包里没有可回收的 %s", itemID)
+	}
+	if avail < qty {
+		return 0, 0, fmt.Errorf("数量不足（持有 %d，想卖 %d）", avail, qty)
+	}
+	unit = sellUnitPrice(itemID, kind, pay)
+	if unit <= 0 {
+		return 0, 0, fmt.Errorf("该物品暂不支持回收")
+	}
+	// 扣减：同 id 多堆叠依次扣，扣空即移除（沿用原切片，避免额外分配）
+	left := qty
+	out := p.Warehouse[:0]
+	for _, it := range p.Warehouse {
+		if left > 0 && it.ID == itemID && sellableKind(it.Kind) && it.Qty > 0 {
+			take := it.Qty
+			if take > left {
+				take = left
+			}
+			it.Qty -= take
+			left -= take
+			if it.Qty <= 0 {
+				continue
+			}
+		}
+		out = append(out, it)
+	}
+	p.Warehouse = out
+	got = unit * qty
+	curCN := "金币"
+	if pay == "gold" {
+		p.Core.Gold += got
+	} else {
+		p.Core.Gem += got
+		curCN = "钻石"
+	}
+	p.appendLogs([]string{fmt.Sprintf("商店回收：%s x%d → %s +%d", itemID, qty, curCN, got)})
+	return unit, got, nil
 }
 
 // WarehouseDeposit 把背包物品存入仓库（演示：把装备实例转为仓库条目由 EquipItem 逆向完成，此处处理普通材料）。
@@ -360,12 +556,16 @@ func (p *PlayerState) WarehouseEquipIn(itemID string) error {
 // 返还金额由 net 层按 economy.drop.decompose 配置算好传入，服务端权威校验与入账。
 // 返回实际入账（金币, 材料）。
 func (p *PlayerState) WarehouseDecompose(itemID string, goldGain, matGain int) (int, int, error) {
-	if goldGain < 0 || matGain < 0 { return 0, 0, fmt.Errorf("分解收益配置无效") }
+	if goldGain < 0 || matGain < 0 {
+		return 0, 0, fmt.Errorf("分解收益配置无效")
+	}
 	for i := range p.Warehouse {
 		if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == itemID {
 			e := p.Warehouse[i].Equip
 			name := itemID
-			if e != nil { name = e.ID }
+			if e != nil {
+				name = e.ID
+			}
 			p.Core.Gold += goldGain
 			p.Core.Material += matGain
 			p.Warehouse = append(p.Warehouse[:i], p.Warehouse[i+1:]...)
@@ -387,7 +587,9 @@ func (p *PlayerState) WarehouseDecomposeAll() (int, int, int) {
 			gold += g
 			mat += m
 			name := it.ID
-			if it.Equip != nil { name = it.Equip.ID }
+			if it.Equip != nil {
+				name = it.Equip.ID
+			}
 			p.appendLogs([]string{fmt.Sprintf("分解仓库装备：%s（金币 +%d，材料 +%d）", name, g, m)})
 			continue
 		}
@@ -401,9 +603,15 @@ func (p *PlayerState) WarehouseDecomposeAll() (int, int, int) {
 
 // SetDecomposeConfig 注入分解收益基准表（net 层从 economy 配置同步进来，v1.9.41）。
 func SetDecomposeConfig(goldBase, matBase []int, enhMult float64) {
-	if len(goldBase) > 0 { decomposeGoldBase = goldBase }
-	if len(matBase) > 0 { decomposeMatBase = matBase }
-	if enhMult > 0 { decomposeEnhMult = enhMult }
+	if len(goldBase) > 0 {
+		decomposeGoldBase = goldBase
+	}
+	if len(matBase) > 0 {
+		decomposeMatBase = matBase
+	}
+	if enhMult > 0 {
+		decomposeEnhMult = enhMult
+	}
 }
 
 // decomposeGoldOf / decomposeMatOf 按品质+强化等级算分解收益（与 net 层单件公式同源）。
@@ -413,15 +621,23 @@ var decomposeMatBase = []int{10, 30, 80, 200, 500}
 var decomposeEnhMult = 0.15
 
 func decomposeGoldOf(e *Equip) int {
-	if e == nil { return decomposeGoldBase[0] }
+	if e == nil {
+		return decomposeGoldBase[0]
+	}
 	q := e.Quality
-	if q < 0 || q >= len(decomposeGoldBase) { q = 0 }
+	if q < 0 || q >= len(decomposeGoldBase) {
+		q = 0
+	}
 	return int(float64(decomposeGoldBase[q]) * (1 + float64(e.Enhance)*decomposeEnhMult))
 }
 func decomposeMatOf(e *Equip) int {
-	if e == nil { return decomposeMatBase[0] }
+	if e == nil {
+		return decomposeMatBase[0]
+	}
 	q := e.Quality
-	if q < 0 || q >= len(decomposeMatBase) { q = 0 }
+	if q < 0 || q >= len(decomposeMatBase) {
+		q = 0
+	}
 	return decomposeMatBase[q]
 }
 

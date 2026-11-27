@@ -7,17 +7,17 @@ import "zjcs/server/internal/game"
 // PlayerState 是角色完整存档的内存表示。每个字段对应一个逻辑表。
 type PlayerState struct {
 	UserID     string         `json:"userId"`
-	Core       Core           `json:"core"`       // characters
-	World      World          `json:"world"`      // world_progress
-	Warehouse  []Item         `json:"warehouse"`  // warehouse
-	Equip      []Equip        `json:"equip"`      // equipment
-	Skills     Skills         `json:"skills"`     // skills
-	Pets       Pets           `json:"pets"`       // pets / pet_state（预留）
-	Home       Home           `json:"home"`       // home（预留）
-	Appearance Appearance     `json:"appearance"` // appearance（v1.9.7 角色创建与换装）
+	Core       Core           `json:"core"`            // characters
+	World      World          `json:"world"`           // world_progress
+	Warehouse  []Item         `json:"warehouse"`       // warehouse
+	Equip      []Equip        `json:"equip"`           // equipment
+	Skills     Skills         `json:"skills"`          // skills
+	Pets       Pets           `json:"pets"`            // pets / pet_state（预留）
+	Home       Home           `json:"home"`            // home（预留）
+	Appearance Appearance     `json:"appearance"`      // appearance（v1.9.7 角色创建与换装）
 	Guild      *GuildRef      `json:"guild,omitempty"` // 公会引用（nil=未加入，v1.9.18）
-	Logs       []LogEntry     `json:"logs"`       // logs
-	Ext        map[string]any `json:"ext"`        // ext_data 扩展位
+	Logs       []LogEntry     `json:"logs"`            // logs
+	Ext        map[string]any `json:"ext"`             // ext_data 扩展位
 }
 
 // Appearance 外观表（交付包 §3）：created=false 时强制进创建界面；
@@ -67,6 +67,8 @@ type Equip struct {
 type Skills struct {
 	Slots    []string `json:"slots"` // 4个已装备技能
 	Unlocked []string `json:"unlocked"`
+	// v1.9.56 技能等级（技能id→等级，1 级起，缺省视为 1）。老存档没有该字段时按 1 级处理。
+	Levels map[string]int `json:"levels,omitempty"`
 }
 type Pets struct {
 	Owned  []string `json:"owned"`
@@ -135,7 +137,9 @@ func NewPlayer(userID, name, classID string) *PlayerState {
 // 按玩家当前职业归入对应武器系，保证"武器不互通"对老玩家平滑生效。
 // 返回是否发生变更（调用方据此决定是否落盘）。
 func (p *PlayerState) MigrateWeaponClass() bool {
-	if p.Core.ClassID == "" { return false }
+	if p.Core.ClassID == "" {
+		return false
+	}
 	wc := game.WeaponClassFor(p.Core.ClassID)
 	changed := false
 	for i := range p.Equip {

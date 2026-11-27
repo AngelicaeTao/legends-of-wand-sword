@@ -84,11 +84,11 @@ type SkillPool struct {
 
 // CreatorConfig 对应交付包 creator_manifest.json（format=creator_parts_v2）。
 type CreatorConfig struct {
-	Format       string                 `json:"format"`
-	CharacterSize []int                 `json:"character_size"`
-	ScaleRoot    int                    `json:"scaleRoot"`
-	OverlayOrder []string               `json:"overlay_order"`
-	Slots        map[string]CreatorSlot `json:"slots"`
+	Format        string                 `json:"format"`
+	CharacterSize []int                  `json:"character_size"`
+	ScaleRoot     int                    `json:"scaleRoot"`
+	OverlayOrder  []string               `json:"overlay_order"`
+	Slots         map[string]CreatorSlot `json:"slots"`
 }
 type CreatorSlot struct {
 	Label   string          `json:"label"`
@@ -149,7 +149,10 @@ type EconomyConfig struct {
 	Multiplayer map[string]any `json:"multiplayer"`
 	Dungeons    []DungeonDef   `json:"dungeons"`
 	// v1.9.53 商店兑换比例：material/exp 两段，每段按货币给单价；缺配置时用代码默认值。
+	// v1.9.56 增加 sell 段：背包材料/药水回收单价（按物品 id 定价，未列出按类别兜底）。
 	Shop map[string]any `json:"shop"`
+	// v1.9.56 技能升级：每级效果 +8%，升级消耗钻石随等级递增；缺配置时用代码默认值。
+	SkillUpgrade map[string]any `json:"skillUpgrade"`
 }
 
 type DungeonDef struct {

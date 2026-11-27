@@ -8,16 +8,16 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
-	"os"
 
 	"zjcs/server/internal/game"
 	"zjcs/server/internal/store"
 )
 
 var disk *store.DiskStore
-var webFile string // 可选：前端单文件页面路径，非空时由 "/" 托管
+var webFile string   // 可选：前端单文件页面路径，非空时由 "/" 托管
 var webResDir string // 可选：静态资源目录（png 等），由 /res/ 托管
 
 // Handler 聚合所有 API 路由（兼容旧调用，不托管前端）。
@@ -28,7 +28,9 @@ func Handler(cfgDir string) http.Handler {
 // HandlerWithWeb 聚合所有 API 路由，并可托管前端页面与静态资源（同源部署，单端口）。
 // FlushSaves 优雅关闭前刷盘（v1.9.41 异步落盘配套）。
 func FlushSaves() error {
-	if disk == nil { return nil }
+	if disk == nil {
+		return nil
+	}
 	return disk.FlushAll()
 }
 
@@ -39,11 +41,15 @@ func decomposeTables() (goldBase, matBase []int) {
 	if cfg, ok := game.C().Economy.Drop["decompose"].(map[string]any); ok {
 		if b, ok := cfg["goldBase"].([]any); ok && len(b) > 0 {
 			gb = make([]int, len(b))
-			for i, v := range b { gb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
+			for i, v := range b {
+				gb[i] = int(numAny(map[string]any{"v": v}, "v", 0))
+			}
 		}
 		if b, ok := cfg["matBase"].([]any); ok && len(b) > 0 {
 			mb = make([]int, len(b))
-			for i, v := range b { mb[i] = int(numAny(map[string]any{"v": v}, "v", 0)) }
+			for i, v := range b {
+				mb[i] = int(numAny(map[string]any{"v": v}, "v", 0))
+			}
 		}
 	}
 	return gb, mb
@@ -58,15 +64,19 @@ func playersOnline(w http.ResponseWriter, r *http.Request) {
 func playerProfile(w http.ResponseWriter, r *http.Request) {
 	uid := r.URL.Query().Get("userId")
 	if uid == "" {
-		http.Error(w, "userId 不能为空", 400); return
+		http.Error(w, "userId 不能为空", 400)
+		return
 	}
 	p, err := disk.Load(uid)
 	if err != nil || p == nil {
-		http.Error(w, "玩家不存在或尚未创建角色", 404); return
+		http.Error(w, "玩家不存在或尚未创建角色", 404)
+		return
 	}
 	equips := []map[string]any{}
 	for _, e := range p.Equip {
-		if !e.Equipped { continue }
+		if !e.Equipped {
+			continue
+		}
 		equips = append(equips, map[string]any{
 			"id": e.ID, "slot": e.Slot, "quality": e.Quality, "enhance": e.Enhance,
 			"stats": e.Stats, "classId": e.ClassID,
@@ -78,7 +88,10 @@ func playerProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	online := false
 	for _, op := range OnlinePlayers() {
-		if op["userId"] == uid { online = true; break }
+		if op["userId"] == uid {
+			online = true
+			break
+		}
 	}
 	jsonOut(w, map[string]any{
 		"userId": uid, "name": p.Core.Name, "level": p.Core.Level,
@@ -126,7 +139,7 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 
 	// 世界/点位/宝箱权威接口
 	mux.HandleFunc("/api/chest/open", chestOpen)
-	mux.HandleFunc("/api/chest/drop", chestDrop) // v1.9.45 怪物掉落宝箱登记（服务端掷档）
+	mux.HandleFunc("/api/chest/drop", chestDrop)   // v1.9.45 怪物掉落宝箱登记（服务端掷档）
 	mux.HandleFunc("/api/potion/pick", potionPick) // v1.9.27 采集地图草药（回血药水）
 	mux.HandleFunc("/api/monster/kill", monsterKill)
 	mux.HandleFunc("/api/guild/list", guildList)
@@ -138,8 +151,8 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 	mux.HandleFunc("/api/world/travel", worldTravel)
 
 	// 实时多人（同端口 WebSocket）
-	mux.HandleFunc("/api/players/online", playersOnline)  // v1.9.42 在线玩家列表
-	mux.HandleFunc("/api/player/profile", playerProfile)  // v1.9.42 他人玩家档案
+	mux.HandleFunc("/api/players/online", playersOnline) // v1.9.42 在线玩家列表
+	mux.HandleFunc("/api/player/profile", playerProfile) // v1.9.42 他人玩家档案
 	mux.HandleFunc("/ws", wsHandler)
 
 	mux.HandleFunc("/api/stats/calc", calcStats)
@@ -310,11 +323,11 @@ type calcEquipItem struct {
 }
 
 type calcStatsReq struct {
-	Level   int             `json:"level"`
-	ClassID string          `json:"classId"`
-	Equip   []calcEquipItem `json:"equip"`
-	Avatar  *game.Avatar    `json:"avatar"` // 旧格式兼容
-	Items   []game.EquipItem `json:"items"` // 旧格式兼容
+	Level   int              `json:"level"`
+	ClassID string           `json:"classId"`
+	Equip   []calcEquipItem  `json:"equip"`
+	Avatar  *game.Avatar     `json:"avatar"` // 旧格式兼容
+	Items   []game.EquipItem `json:"items"`  // 旧格式兼容
 }
 
 // calcStatsResp 总属性（扁平字段）+ 每件装备战力。
@@ -453,7 +466,8 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 	req := game.BattleRequest{
 		UserID: q.UserID, Avatar: game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip},
 		BD: bd, MonsterID: q.MonsterID, MonsterLv: q.MonsterLv, Elite: q.Elite,
-		StartHP: p.Core.HP, // v1.9.27 全局血量：以当前血量开局，战斗后余量写回存档
+		StartHP: p.Core.HP,       // v1.9.27 全局血量：以当前血量开局，战斗后余量写回存档
+		SkillLv: p.Skills.Levels, // v1.9.56 技能等级：每级效果 +8%，以存档为准
 	}
 	// v1.9.36 群怪模版：带点位的大世界战斗 → 服务端取点位当前组合结算（与遭遇贴图同源，所见即所战）
 	if q.WorldID != "" && q.NodeID != "" {
@@ -540,12 +554,12 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 	var q struct {
 		UserID   string            `json:"userId"`
 		Action   string            `json:"action"`
-		Slots    []string          `json:"slots"`    // submit_bd
-		SkillID  string            `json:"skillId"`  // unlock_skill
-		ItemID   string            `json:"itemId"`   // equip/unequip/deposit/withdraw/storage_decompose
-		All      bool              `json:"all"`      // storage_decompose 批量分解全部
-		Qty      int               `json:"qty"`      // deposit/withdraw
-		Slot     string            `json:"slot"`     // enhance
+		Slots    []string          `json:"slots"`   // submit_bd
+		SkillID  string            `json:"skillId"` // unlock_skill
+		ItemID   string            `json:"itemId"`  // equip/unequip/deposit/withdraw/storage_decompose
+		All      bool              `json:"all"`     // storage_decompose 批量分解全部
+		Qty      int               `json:"qty"`     // deposit/withdraw
+		Slot     string            `json:"slot"`    // enhance
 		DGID     string            `json:"dungeonId"`
 		QuestID  string            `json:"questId"`
 		HomeLook map[string]string `json:"homeLook"` // update_look
@@ -558,22 +572,35 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uid, ok := authUserID(r)
-	if !ok && q.UserID != "" { uid = q.UserID }
-	if uid == "" { uid = "anonymous" }
+	if !ok && q.UserID != "" {
+		uid = q.UserID
+	}
+	if uid == "" {
+		uid = "anonymous"
+	}
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 
 	var logs []string
 	var extra map[string]any = map[string]any{}
 	switch q.Action {
 	case "submit_bd":
 		slots, e := p.SubmitBD(q.Slots)
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["slots"] = slots
 	case "update_look":
 		// 家园换装（服务端权威：只改 appearance，不碰职业/装备/技能）
 		look, e := p.UpdateLook(q.HomeLook)
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["homeLook"] = look
 		p.Logs = append(p.Logs, store.LogEntry{Event: "更换家园外观"})
 	case "class_advance":
@@ -615,30 +642,49 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 	case "unlock_skill":
 		cost := 300
 		unlocked, e := p.UnlockSkill(q.SkillID, cost)
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["unlocked"] = unlocked
 	case "equip":
 		logs, err = p.EquipItem(q.ItemID)
-		if err != nil { http.Error(w, err.Error(), 400); return }
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 	case "unequip":
 		logs, err = p.UnequipItem(q.ItemID)
-		if err != nil { http.Error(w, err.Error(), 400); return }
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 	case "enhance":
 		// v1.9.20/21：消耗按配置公式 costBase × costGrowth^当前强化等级 递增；
 		// v1.9.21 支持按装备实例 ID（itemId）精确定位，避免同槽位多件装备强化错对象。
 		enh := game.C().Equipment.Enhance
 		goldBase := 1200
-		if v, ok := enh["costBase"].(float64); ok { goldBase = int(v) }
+		if v, ok := enh["costBase"].(float64); ok {
+			goldBase = int(v)
+		}
 		growth := 1.35
-		if v, ok := enh["costGrowth"].(float64); ok { growth = v }
+		if v, ok := enh["costGrowth"].(float64); ok {
+			growth = v
+		}
 		matCost := 1 // v1.9.41 由 2 下调
 		curLv := 0
 		for _, e := range p.Equip {
-			if (q.ItemID != "" && e.ID == q.ItemID) || (q.ItemID == "" && e.Slot == q.Slot) { curLv = e.Enhance; break }
+			if (q.ItemID != "" && e.ID == q.ItemID) || (q.ItemID == "" && e.Slot == q.Slot) {
+				curLv = e.Enhance
+				break
+			}
 		}
 		goldCost := int(float64(goldBase) * math.Pow(growth, float64(curLv)))
 		lvl, e := p.EnhanceEquip(q.ItemID, q.Slot, goldCost, matCost)
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["enhanceLevel"] = lvl
 		extra["enhanceCost"] = map[string]int{"gold": goldCost, "material": matCost}
 	case "quality_up": // v1.9.42 装备升品：品质+1（最高混沌），按新档分解基准折算消耗
@@ -649,29 +695,46 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		cfg, _ := game.C().Economy.Drop["qualityUp"].(map[string]any)
 		goldMult, matMult := 1.2, 0.6
 		if cfg != nil {
-			if v, ok := cfg["goldMult"].(float64); ok { goldMult = v }
-			if v, ok := cfg["matMult"].(float64); ok { matMult = v }
+			if v, ok := cfg["goldMult"].(float64); ok {
+				goldMult = v
+			}
+			if v, ok := cfg["matMult"].(float64); ok {
+				matMult = v
+			}
 		}
 		gb, mb := decomposeTables()
 		// 目标新品质档（当前+1）的基准值决定消耗
 		curQ := -1
 		for i := range p.Equip {
-			if p.Equip[i].ID == q.ItemID { curQ = p.Equip[i].Quality; break }
+			if p.Equip[i].ID == q.ItemID {
+				curQ = p.Equip[i].Quality
+				break
+			}
 		}
 		if curQ < 0 {
 			for i := range p.Warehouse {
 				if p.Warehouse[i].Kind == "equip" && p.Warehouse[i].ID == q.ItemID && p.Warehouse[i].Equip != nil {
-					curQ = p.Warehouse[i].Equip.Quality; break
+					curQ = p.Warehouse[i].Equip.Quality
+					break
 				}
 			}
 		}
-		if curQ < 0 { http.Error(w, "未找到装备："+q.ItemID, 400); return }
+		if curQ < 0 {
+			http.Error(w, "未找到装备："+q.ItemID, 400)
+			return
+		}
 		newQ := curQ + 1
-		if newQ >= len(gb) { http.Error(w, "已达最高品质（混沌），无法继续升品", 409); return }
+		if newQ >= len(gb) {
+			http.Error(w, "已达最高品质（混沌），无法继续升品", 409)
+			return
+		}
 		goldCost := int(float64(gb[newQ]) * goldMult)
 		matCost := int(float64(mb[newQ]) * matMult)
 		newQ2, _, e := p.QualityUp(q.ItemID, goldCost, matCost, mults)
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["quality"] = newQ2
 		extra["cost"] = map[string]int{"gold": goldCost, "material": matCost}
 		extra["gold"] = p.Core.Gold
@@ -681,35 +744,61 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		potCfg, _ := game.C().Economy.Drop["potion"].(map[string]any)
 		healPct := 0.35
 		if m, ok := potCfg[q.ItemID].(map[string]any); ok {
-			if v, ok := m["healPct"].(float64); ok && v > 0 && v <= 1 { healPct = v }
+			if v, ok := m["healPct"].(float64); ok && v > 0 && v <= 1 {
+				healPct = v
+			}
 		}
 		healed, e := p.UsePotion(q.ItemID, healPct, maxHpOf(p))
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["healed"] = healed
 		extra["hp"] = p.Core.HP
 		extra["maxHp"] = maxHpOf(p)
 	case "deposit":
-		if err = p.WarehouseDeposit(q.ItemID, q.Qty); err != nil { http.Error(w, err.Error(), 400); return }
+		if err = p.WarehouseDeposit(q.ItemID, q.Qty); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 	case "withdraw":
-		if err = p.WarehouseWithdraw(q.ItemID, q.Qty); err != nil { http.Error(w, err.Error(), 400); return }
+		if err = p.WarehouseWithdraw(q.ItemID, q.Qty); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 	case "wh_equip_in": // 背包装备 → 仓库（点击背包装备存入）
-		if err = p.WarehouseEquipIn(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
+		if err = p.WarehouseEquipIn(q.ItemID); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 	case "wh_equip_out": // 仓库装备 → 背包（点击仓库装备取出）
-		if err = p.WarehouseEquipOut(q.ItemID); err != nil { http.Error(w, err.Error(), 400); return }
+		if err = p.WarehouseEquipOut(q.ItemID); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 	case "storage_decompose": // v1.9.40 分解仓库装备 / v1.9.41 加材料返还 + 批量分解
 		enhMult := 0.15
 		if cfg, ok := game.C().Economy.Drop["decompose"].(map[string]any); ok {
-			if v, ok := cfg["enhanceMult"].(float64); ok { enhMult = v }
+			if v, ok := cfg["enhanceMult"].(float64); ok {
+				enhMult = v
+			}
 		}
-		base := []any{}   // 兼容下方 target 品质取值逻辑
+		base := []any{} // 兼容下方 target 品质取值逻辑
 		matBase := []any{}
 		gb, mb := decomposeTables()
-		for _, v := range gb { base = append(base, float64(v)) }
-		for _, v := range mb { matBase = append(matBase, float64(v)) }
+		for _, v := range gb {
+			base = append(base, float64(v))
+		}
+		for _, v := range mb {
+			matBase = append(matBase, float64(v))
+		}
 		store.SetDecomposeConfig(gb, mb, enhMult)
 		if q.All { // 批量：分解仓库全部装备
 			n, gold, mat := p.WarehouseDecomposeAll()
-			if n == 0 { http.Error(w, "仓库中没有装备可分解", 400); return }
+			if n == 0 {
+				http.Error(w, "仓库中没有装备可分解", 400)
+				return
+			}
 			extra["decomposed"] = n
 			extra["goldGain"] = gold
 			extra["matGain"] = mat
@@ -728,87 +817,159 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		qi, goldGain, matGain := 0, 40, 10
 		if target != nil {
 			qi = target.Quality
-			if qi < 0 || qi >= len(base) { qi = 0 }
+			if qi < 0 || qi >= len(base) {
+				qi = 0
+			}
 			g, _ := base[qi].(float64)
 			m, _ := matBase[qi].(float64)
 			goldGain = int(g * (1 + float64(target.Enhance)*enhMult))
 			matGain = int(m)
 		}
 		gGain, mGain, e := p.WarehouseDecompose(q.ItemID, goldGain, matGain)
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["goldGain"] = gGain
 		extra["matGain"] = mGain
 		extra["gold"] = p.Core.Gold
 		extra["material"] = p.Core.Material
 	case "dungeon_enter":
 		perDay := 0
-		var mon string; var elite bool; var lvReq int
+		var mon string
+		var elite bool
+		var lvReq int
 		for _, d := range game.C().Economy.Dungeons {
-			if d.ID == q.DGID { perDay = d.PerDay; mon = d.Mon; elite = d.Elite; lvReq = d.Level; break }
+			if d.ID == q.DGID {
+				perDay = d.PerDay
+				mon = d.Mon
+				elite = d.Elite
+				lvReq = d.Level
+				break
+			}
 		}
-		if perDay <= 0 { http.Error(w, "副本不存在", 400); return }
-		if p.Core.Level < lvReq { http.Error(w, fmt.Sprintf("等级不足：需 Lv.%d", lvReq), 403); return }
+		if perDay <= 0 {
+			http.Error(w, "副本不存在", 400)
+			return
+		}
+		if p.Core.Level < lvReq {
+			http.Error(w, fmt.Sprintf("等级不足：需 Lv.%d", lvReq), 403)
+			return
+		}
 		remain, e := p.DungeonEnter(q.DGID, perDay)
-		if e != nil { http.Error(w, e.Error(), 409); return }
+		if e != nil {
+			http.Error(w, e.Error(), 409)
+			return
+		}
 		extra["remain"] = remain
 		extra["monsterId"] = mon
 		extra["elite"] = elite
 	case "dungeon_remain":
 		perDay := 0
 		for _, d := range game.C().Economy.Dungeons {
-			if d.ID == q.DGID { perDay = d.PerDay; break }
+			if d.ID == q.DGID {
+				perDay = d.PerDay
+				break
+			}
 		}
 		extra["remain"] = p.DungeonRemain(q.DGID, perDay)
 	case "guild_donate":
-		if p.Guild == nil { http.Error(w, "尚未加入公会", 409); return }
-		if p.Ext == nil { p.Ext = map[string]any{} }
+		if p.Guild == nil {
+			http.Error(w, "尚未加入公会", 409)
+			return
+		}
+		if p.Ext == nil {
+			p.Ext = map[string]any{}
+		}
 		today := time.Now().Format("2006-01-02")
 		if d, _ := p.Ext["guildDay"].(string); d != today {
 			p.Ext["guildDay"] = today
 			p.Ext["guildDonated"] = float64(0)
 		}
 		donated := 0
-		if v, ok := p.Ext["guildDonated"].(float64); ok { donated = int(v) }
-		if donated >= 3 { http.Error(w, "今日捐献次数已用完（3/3）", 409); return }
+		if v, ok := p.Ext["guildDonated"].(float64); ok {
+			donated = int(v)
+		}
+		if donated >= 3 {
+			http.Error(w, "今日捐献次数已用完（3/3）", 409)
+			return
+		}
 		const cost = 600 // v1.9.41 由 1000 下调
-		if p.Core.Gold < cost { http.Error(w, "金币不足（需 1,000）", 400); return }
+		if p.Core.Gold < cost {
+			http.Error(w, fmt.Sprintf("金币不足（需 %d）", cost), 400)
+			return
+		}
 		p.Core.Gold -= cost
 		coin := 0
-		if v, ok := p.Ext["guildCoin"].(float64); ok { coin = int(v) }
-		coin += 50
+		if v, ok := p.Ext["guildCoin"].(float64); ok {
+			coin = int(v)
+		}
+		// v1.9.56 捐献奖励 ×10：公会币 50→500、经验 60→600（捐献消耗与公会进度不变，
+		// 进度是公会共享等级进度，跟着 ×10 会让公会等级一夜暴涨，故保持 +50）
+		coin += 500
 		p.Ext["guildCoin"] = float64(coin)
 		p.Ext["guildDonated"] = float64(donated + 1)
-		p.GainExp(60)
+		p.GainExp(600)
 		// v1.9.18：公会进度 +50，成员等级/战力快照同步进注册表（服务端权威）
 		progress, _, derr := store.Guilds().GuildDonate(p.Guild.ID, p.UserID, p.Core.Level, p.Core.BattlePower)
-		if derr != nil { http.Error(w, derr.Error(), 409); return }
+		if derr != nil {
+			http.Error(w, derr.Error(), 409)
+			return
+		}
 		extra["guildCoin"] = coin
 		extra["guildDonated"] = donated + 1
 		extra["guildProgress"] = progress
 	case "guild_buy":
-		if p.Guild == nil { http.Error(w, "尚未加入公会", 409); return }
-		if p.Ext == nil { p.Ext = map[string]any{} }
+		if p.Guild == nil {
+			http.Error(w, "尚未加入公会", 409)
+			return
+		}
+		if p.Ext == nil {
+			p.Ext = map[string]any{}
+		}
 		prices := map[string]int{"gem_pack": 200, "material_pack": 150, "skill_book": 300}
 		price, ok := prices[q.ItemID]
-		if !ok { http.Error(w, "未知商品", 400); return }
+		if !ok {
+			http.Error(w, "未知商品", 400)
+			return
+		}
 		coin := 0
-		if v, ok := p.Ext["guildCoin"].(float64); ok { coin = int(v) }
-		if coin < price { http.Error(w, "公会币不足", 400); return }
+		if v, ok := p.Ext["guildCoin"].(float64); ok {
+			coin = int(v)
+		}
+		if coin < price {
+			http.Error(w, "公会币不足", 400)
+			return
+		}
 		coin -= price
 		p.Ext["guildCoin"] = float64(coin)
 		switch q.ItemID {
-		case "gem_pack": p.Core.Gem += 60
-		case "material_pack": p.Core.Material += 30
-		case "skill_book": p.Core.Gem += 30; p.GainExp(300)
+		case "gem_pack":
+			p.Core.Gem += 60
+		case "material_pack":
+			p.Core.Material += 30
+		case "skill_book":
+			p.Core.Gem += 30
+			p.GainExp(300)
 		}
 		extra["guildCoin"] = coin
 	case "quest_claim":
 		rw, ok := questRewards[q.QuestID]
-		if !ok { http.Error(w, "未知任务", 400); return }
-		if p.Ext == nil { p.Ext = map[string]any{} }
+		if !ok {
+			http.Error(w, "未知任务", 400)
+			return
+		}
+		if p.Ext == nil {
+			p.Ext = map[string]any{}
+		}
 		claimed, _ := p.Ext["quests"].(map[string]any)
-		if claimed == nil { claimed = map[string]any{} }
-		if claimed[q.QuestID] == true { http.Error(w, "该任务奖励已领取", 409); return }
+		if claimed == nil {
+			claimed = map[string]any{}
+		}
+		if claimed[q.QuestID] == true {
+			http.Error(w, "该任务奖励已领取", 409)
+			return
+		}
 		claimed[q.QuestID] = true
 		p.Ext["quests"] = claimed
 		p.Core.Gold += rw.Gold
@@ -819,11 +980,40 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 	case "shop_exchange":
 		// v1.9.53 商店：金币/钻石 → 强化材料 / 经验（比例服务端权威，前端只报商品+货币+数量）
 		cost, got, e := p.ShopExchange(q.ShopItem, q.PayWith, q.Qty)
-		if e != nil { http.Error(w, e.Error(), 400); return }
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
 		extra["cost"] = cost
 		extra["got"] = got
 		extra["shopItem"] = q.ShopItem
 		extra["payWith"] = q.PayWith
+	case "shop_sell":
+		// v1.9.56 背包回收：材料/药水 → 金币或钻石（单价读 economy.shop.sell，服务端扣减）
+		unit, got, e := p.ShopSell(q.ItemID, q.Qty, q.PayWith)
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
+		extra["unit"] = unit
+		extra["got"] = got
+		extra["itemId"] = q.ItemID
+		extra["payWith"] = q.PayWith
+		extra["qty"] = q.Qty
+	case "skill_upgrade":
+		// v1.9.56 技能升级：每级效果 +8%，消耗钻石随等级递增（服务端权威）
+		lv, cost, e := p.SkillUpgrade(q.SkillID)
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
+		if skill, ok := game.C().SkillByID(q.SkillID); ok {
+			extra["skillName"] = skill.Name
+		}
+		extra["skillId"] = q.SkillID
+		extra["level"] = lv
+		extra["cost"] = cost
+		extra["mult"] = game.SkillEffectMult(lv)
 	case "home_decorate":
 		// 家园装饰升级（服务端权威：定价 + 扣费 + 等级上限，前端只报 itemId）
 		item := q.ItemID
@@ -859,7 +1049,10 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "未知操作："+q.Action, 400)
 		return
 	}
-	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := disk.Save(uid, p); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	extra["logs"] = logs
 	extra["state"] = p
 	jsonOut(w, extra)
@@ -867,6 +1060,7 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 
 // 主线任务奖励（服务端白名单：前端只报 questId，金额不可篡改）
 type questReward struct{ Gold, Gem, Exp, Mat int }
+
 var questRewards = map[string]questReward{
 	"q_kill3":    {800, 30, 300, 0},
 	"q_chest1":   {600, 20, 200, 2},

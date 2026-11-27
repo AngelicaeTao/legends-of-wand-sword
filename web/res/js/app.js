@@ -1054,7 +1054,7 @@ function shopCostOf(it, qty){
 }
 function renderShop(){
   $('panelTitle').textContent='商店';
-  $('panelSub').textContent='金币/钻石兑换强化材料与经验 · 数量自填';
+  $('panelSub').textContent='金币/钻石兑换材料与经验 · 背包材料药水可回收 · 数量自填';
   const c=(state&&state.core)||{};
   const cards=SHOP_ITEMS.map(it=>{
     const id='sq_'+it.key+'_'+it.pay;
@@ -1070,10 +1070,27 @@ function renderShop(){
       <div class="sc-cost" id="${id}_cost"></div>
     </div>`;
   }).join('');
+  // v1.9.56 背包回收：材料 / 药水 → 金币或钻石（单价读 CFG.economy.shop.sell）
+  const sellList=sellableList();
+  const sellRows=sellList.map(([id,qty],i)=>{
+    const kind=(state.warehouse||[]).find(it=>it.id===id)?.kind||'材料';
+    const g=sellPriceOf(id,kind,'gold'), m=sellPriceOf(id,kind,'gem');
+    return `<div class="sell-row">
+      <div class="sr-main"><span class="sr-name">${itemCN(id)}</span><span class="sr-qty">×${fmt(qty)}</span></div>
+      <div class="sr-price">${fmt(g)} 金 / ${fmt(m)} 钻 · 每件</div>
+      <input id="sellq_${i}" type="number" min="1" max="${qty}" step="1" value="1" inputmode="numeric">
+      <button class="sr-btn" data-sell="${i}|gold">收金币</button>
+      <button class="sr-btn sr-btn-gem" data-sell="${i}|gem">收钻石</button>
+    </div>`;
+  }).join('');
+  window._sellList=sellList;
   $('panelBody').innerHTML=`<div class="sec-title">兑换商店</div>
     <div class="sec-sub" style="margin-bottom:6px">材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）</div>
     <div class="shop-grid">${cards}</div>
-    <div class="shop-tip">兑换即时到账：强化材料计入角色材料数（强化/升品时消耗）；经验直接加到当前等级进度，攒够会自动升级。</div>`;
+    <div class="shop-tip">兑换即时到账：强化材料计入角色材料数（强化/升品时消耗）；经验直接加到当前等级进度，攒够会自动升级。</div>
+    <div class="sec-title" style="margin-top:16px">背包回收（材料 / 药水 → 金币或钻石）</div>
+    <div class="sec-sub" style="margin-bottom:6px">按件计价，卖出即时到账；装备请到家园›仓库分解，不在本列表。</div>
+    <div class="sell-grid">${sellRows||'<div class="sec-sub">背包里没有可回收的材料或药水</div>'}</div>`;
   SHOP_ITEMS.forEach(it=>{
     const id='sq_'+it.key+'_'+it.pay;
     const inp=$(id), costEl=$(id+'_cost'), btn=inp&&inp.parentElement.querySelector('button');
@@ -1089,6 +1106,53 @@ function renderShop(){
     btn.onclick=()=>shopBuy(it, inp);
     upd();
   });
+  // v1.9.56 回收：数量自填，超出持有量前端先拦一层，服务端再兜一次
+  $('panelBody').querySelectorAll('.sr-btn[data-sell]').forEach(b=>b.onclick=()=>{
+    const [idx,pay]=b.dataset.sell.split('|');
+    const row=(window._sellList||[])[Number(idx)];
+    if(!row) return;
+    const inp=$('sellq_'+idx);
+    const qty=Math.floor(Number(inp&&inp.value)||0);
+    shopSell(row[0], pay, qty, row[1]);
+  });
+}
+// 可回收物品聚合：材料 / 药水按 id 合并堆叠
+function sellableList(){
+  const agg={};
+  (state.warehouse||[]).forEach(it=>{
+    if(!it||!it.id||!(it.qty>0)) return;
+    const k=it.kind;
+    if(k!=='材料'&&k!=='material'&&k!=='consume'&&k!=='药水'&&k!=='potion') return;
+    agg[it.id]=(agg[it.id]||0)+it.qty;
+  });
+  return Object.entries(agg);
+}
+// 单件回收价：优先按 id 定价，其次按类别兜底（与服务端同一套规则）
+function sellPriceOf(id,kind,pay){
+  const sell=(CFG&&CFG.economy&&CFG.economy.shop&&CFG.economy.shop.sell)||{};
+  const row=(sell.items||{})[id];
+  if(row&&Number(row[pay])>0) return Number(row[pay]);
+  const g=(kind==='consume'||kind==='药水'||kind==='potion')?'consume':'material';
+  const def=((sell.default||{})[g]||{});
+  if(Number(def[pay])>0) return Number(def[pay]);
+  return pay==='gold'?(g==='consume'?15:10):1;
+}
+// 物品中文名：装备之外的中文 id 直接用，内部 id 走 ITEM_CN
+function itemCN(id){ return ITEM_CN[id]||id; }
+async function shopSell(itemId,pay,qty){
+  if(!(qty>0)){ toastModal('回收失败','请输入大于 0 的回收数量'); return; }
+  try{
+    const r=await api('/api/player/action',{userId:uid(),action:'shop_sell',itemId,payWith:pay,qty});
+    if(r.state) state=r.state;
+    window.SFX&&SFX.coin();
+    syncHud();
+    await refreshStats();
+    renderShop();
+    toastModal('回收成功',`${itemCN(itemId)} ×${fmt(r.qty||qty)} → ${pay==='gold'?'金币':'钻石'} +${fmt(r.got)}`);
+  }catch(e){
+    window.SFX&&SFX.fail();
+    toastModal('回收失败',(e&&e.message)||String(e));
+  }
 }
 async function shopBuy(it, inp){
   const qty=shopNormQty(it, inp.value);
@@ -1358,7 +1422,7 @@ async function renderGuild(){
     <div class="guild-donate">
       <div class="gd-info">
         <div class="gd-t">每日捐献 <b>${donated}/3</b></div>
-        <div class="gd-s">消耗 1,000 金币 → 个人获 50 公会币 + 60 经验，公会进度 +50</div>
+        <div class="gd-s">消耗 600 金币 → 个人获 500 公会币 + 600 经验，公会进度 +50</div>
       </div>
       <button class="big-btn goldbtn" id="guildDonate" ${donated>=3?'disabled style="opacity:.5;cursor:not-allowed"':''}>${donated>=3?'今日已满':'捐 献'}</button>
     </div>
@@ -1392,7 +1456,7 @@ async function renderGuild(){
       const r=await api('/api/player/action',{userId:uid(),action:'guild_donate'});
       if(r.state){state=r.state;await refreshStats();syncHud();}
       window.SFX&&SFX.donate();
-      toastModal('捐献成功','公会币 +50 · 经验 +60 · 公会进度 +50');
+      toastModal('捐献成功','公会币 +500 · 经验 +600 · 公会进度 +50');
       renderGuild();
     }catch(e){ window.SFX&&SFX.fail(); toastModal('捐献失败',e.message); }
   };
@@ -1583,6 +1647,21 @@ function renderRole(){
     const color=['sk-fire','sk-ice','sk-heal','sk-shield'];
     const kindDesc=s=>s.kind==='heal'?'恢复生命':s.kind==='shield'?'吸收伤害':s.kind==='buff'?'增益':s.kind==='debuff'?'减益':'单体伤害';
     const kindIco={physical:'sword',magic:'bolt',heal:'flask',shield:'shield',buff:'star',debuff:'skull'};
+    // v1.9.56 技能升级：每级 +8%，消耗钻石随等级递增（数值读 CFG.economy.skillUpgrade）
+    const SU=(CFG&&CFG.economy&&CFG.economy.skillUpgrade)||{};
+    const suPer=Number(SU.perLevel||0.08), suMax=Number(SU.maxLevel||20),
+          suBase=Number(SU.baseGem||60), suStep=Number(SU.stepGem||30);
+    const suLv=id=>{const v=(state.skills&&state.skills.levels&&state.skills.levels[id])||1;return Math.max(1,Math.min(suMax,v));};
+    const suCost=lv=>lv>=suMax?0:suBase+suStep*(lv-1);
+    const upRows=visible.filter(s=>unlocked.includes(s.id)).map(s=>{
+      const lv=suLv(s.id), cost=suCost(lv), mx=lv>=suMax, mult=1+suPer*(lv-1);
+      const afford=((state.core&&state.core.gem)||0)>=cost;
+      return `<div class="skup-row">
+        <div class="sku-main"><span class="sku-name">${s.name}</span><span class="sku-lv">Lv.${lv}</span></div>
+        <div class="sku-eff">效果 ×${mult.toFixed(2)} · 每级 +${(suPer*100).toFixed(0)}%${mx?' · 已满级':''}</div>
+        <button class="sku-btn" data-up="${s.id}" ${(mx||!afford)?'disabled':''}>${mx?'满级':'升级 '+fmt(cost)+' 钻'}</button>
+      </div>`;
+    }).join('');
     const cards=equipped.map((sid,i)=>{
       const s=all.find(x=>x.id===sid)||{name:sid,kind:'physical'};
       const ic=kindIco[s.kind]||'sword';
@@ -1609,7 +1688,10 @@ function renderRole(){
       <div class="skill-grid2">${cards}</div>
       <div class="sec-title">技能库（仅本职业）</div>${lib?`<div class="lib-grid">${lib}</div>`:`<div class="sec-sub">本职业 ${visible.length} 个技能已全部装配，无更多可选项。</div>`}
       <button class="big-btn goldbtn" id="submitBD" style="margin-top:12px">保存 BD 配置</button>
-      <div class="sec-sub" style="margin-top:8px">已解锁 ${unlocked.length}/${visible.length} · 未解锁技能点击花费 300 钻石解锁</div>`;
+      <div class="sec-sub" style="margin-top:8px">已解锁 ${unlocked.length}/${visible.length} · 未解锁技能点击花费 300 钻石解锁</div>
+      <div class="sec-title" style="margin-top:16px">技能升级（每级效果 +${(suPer*100).toFixed(0)}%）</div>
+      <div class="sec-sub" style="margin-bottom:6px">花钻石升级，伤害 / 治疗 / 减伤同步提升；等级越高，下一级越贵（上限 ${suMax} 级）。</div>
+      <div class="skup-list">${upRows||'<div class="sec-sub">暂无可升级技能（先解锁本职业技能）</div>'}</div>`;
   } else if(roleTab==='class'){
     const stage=(state.world&&state.world.unlocked)?state.world.unlocked.length:1;
     const cps=CFG.skills.classes||{};
@@ -1687,6 +1769,18 @@ function renderRole(){
         renderRole();
       }catch(e){window.SFX&&SFX.fail();toastModal('保存失败',e.message);}
     };
+    // v1.9.56 技能升级：服务端权威扣钻石，返回新等级与效果倍率
+    body.querySelectorAll('.sku-btn[data-up]').forEach(b=>b.onclick=async()=>{
+      if(b.disabled) return;
+      const sid=b.dataset.up;
+      try{
+        const r=await api('/api/player/action',{userId:uid(),action:'skill_upgrade',skillId:sid});
+        if(r.state){state=r.state;await refreshStats();syncHud();}
+        window.SFX&&SFX.rune();
+        toastModal('技能升级',`${r.skillName||sid} → Lv.${r.level} · 效果 ×${Number(r.mult||1).toFixed(2)}（消耗 ${fmt(r.cost)} 钻石）`);
+        renderRole();
+      }catch(e){window.SFX&&SFX.fail();toastModal('升级失败',(e&&e.message)||String(e));}
+    });
   }
   if(roleTab==='equip'){
     // 穿戴/卸下（v1.9.21 强化入口已移除，统一走 家园›仓库›强化工坊）

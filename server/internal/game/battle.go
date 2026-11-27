@@ -13,12 +13,14 @@ type BattleRequest struct {
 	BD        []string `json:"bd"` // 战前配置的4个技能
 	MonsterID string   `json:"monsterId"`
 	MonsterLv int      `json:"monsterLv"`
-	Elite     string   `json:"elite"` // ""/elite/rareElite
-	Seed      int64    `json:"seed"`  // >0 时用于复现（playtest 回放）；=0 由服务端随机生成
-	StartHP   float64  `json:"startHp"` // v1.9.27 全局血量：战斗以该血量开局（>0 且 < 最大血量时生效）
+	Elite     string   `json:"elite"`           // ""/elite/rareElite
+	Seed      int64    `json:"seed"`            // >0 时用于复现（playtest 回放）；=0 由服务端随机生成
+	StartHP   float64  `json:"startHp"`         // v1.9.27 全局血量：战斗以该血量开局（>0 且 < 最大血量时生效）
 	Group     []string `json:"group,omitempty"` // v1.9.36 群怪模版：怪物组合（服务端权威点位下发，可混编）；空=单怪
 	// v1.9.53 推进进度 0~1（W1=0/W6=1），由服务端按存档填写，用于首领动态强度；客户端传值无效
 	Progress float64 `json:"progress,omitempty"`
+	// v1.9.56 技能等级（技能id→等级），由服务端按存档填写；每级效果 +8%，客户端传值无效
+	SkillLv map[string]int `json:"-"`
 }
 
 // BattleRound 是战报中的一回合（表现用最小单元）。
@@ -30,7 +32,7 @@ type BattleRound struct {
 	FX        string  `json:"fx"`
 	Damage    float64 `json:"damage"`
 	Heal      float64 `json:"heal"`
-	DR        float64 `json:"dr,omitempty"`   // v1.9.40 本回合怪物伤害被持续减伤降低的比例（0=无）
+	DR        float64 `json:"dr,omitempty"` // v1.9.40 本回合怪物伤害被持续减伤降低的比例（0=无）
 	HeroHP    float64 `json:"heroHp"`
 	MonHP     float64 `json:"monHp"`
 	MonIdx    int     `json:"monIdx,omitempty"` // v1.9.36 群怪：本回合怪物出手者/英雄攻击目标的组合索引
@@ -48,22 +50,22 @@ type MonInfo struct {
 
 // BattleReport 服务端下发的权威战报。客户端只做表现，不参与结算。
 type BattleReport struct {
-	Seed       int64         `json:"seed"`
-	Result     string        `json:"result"` // win/lose
-	Rounds     []BattleRound `json:"rounds"`
-	Exp        int           `json:"exp"`
-	Gold       int           `json:"gold"`
-	Drops      []EquipItem   `json:"drops"`
+	Seed   int64         `json:"seed"`
+	Result string        `json:"result"` // win/lose
+	Rounds []BattleRound `json:"rounds"`
+	Exp    int           `json:"exp"`
+	Gold   int           `json:"gold"`
+	Drops  []EquipItem   `json:"drops"`
 	// v1.9.54 低于同部位在穿战力的掉落已在入包前分解，不再出现在 drops 里；
 	// 这里只带汇总，前端据此显示"自动分解 N 件 · 金币 +X · 材料 +Y"。
-	DecomposedCount int `json:"decomposedCount,omitempty"`
-	DecomposedGold  int `json:"decomposedGold,omitempty"`
-	DecomposedMat   int `json:"decomposedMat,omitempty"`
-	Seconds    float64       `json:"seconds"`
-	Log        string        `json:"log"`
-	HeroHPStart float64      `json:"heroHpStart"` // v1.9.27 战斗开局血量（全局血量不回满）
-	HeroHPEnd   float64      `json:"heroHpEnd"`   // 战斗结束血量（战败保底 1，防软锁）
-	Monsters   []MonInfo     `json:"monsters"`    // v1.9.36 群怪：敌方阵容（单怪时长度 1，贴图与结算一致）
+	DecomposedCount int       `json:"decomposedCount,omitempty"`
+	DecomposedGold  int       `json:"decomposedGold,omitempty"`
+	DecomposedMat   int       `json:"decomposedMat,omitempty"`
+	Seconds         float64   `json:"seconds"`
+	Log             string    `json:"log"`
+	HeroHPStart     float64   `json:"heroHpStart"` // v1.9.27 战斗开局血量（全局血量不回满）
+	HeroHPEnd       float64   `json:"heroHpEnd"`   // 战斗结束血量（战败保底 1，防软锁）
+	Monsters        []MonInfo `json:"monsters"`    // v1.9.36 群怪：敌方阵容（单怪时长度 1，贴图与结算一致）
 }
 
 // ResolveBattle 服务端权威结算。给定相同 seed + 输入必得相同战报（可复现 bug / playtest 回放）。
@@ -78,8 +80,12 @@ func ResolveBattle(req BattleRequest) BattleReport {
 
 	// v1.9.36 群怪模版：组合非空按组合展开成员（服务端权威点位下发，可混编不同怪），否则单怪。
 	group := req.Group
-	if len(group) == 0 { group = []string{req.MonsterID} }
-	if len(group) > 3 { group = group[:3] } // 上限 3 只，防异常请求
+	if len(group) == 0 {
+		group = []string{req.MonsterID}
+	}
+	if len(group) > 3 {
+		group = group[:3]
+	} // 上限 3 只，防异常请求
 	type monUnit struct {
 		def      MonsterDef
 		hp, atk  float64
@@ -91,7 +97,9 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	sr := c.Monsters.SpawnRule
 	for gi, gid := range group {
 		m, ok := c.MonsterByID(gid)
-		if !ok { m = c.Monsters.Monsters[0] }
+		if !ok {
+			m = c.Monsters.Monsters[0]
+		}
 		// v1.9.43 高等级削峰：成长由指数 growth^(lv-1) 改为线性 1+(growth-1)×(lv-1)。
 		// 玩家每级是线性成长（+18血/+3攻），指数在 Lv20+ 会失控（旧公式 Boss Lv20 攻 604，一刀秒人）。
 		lvFactor := 1 + (m.Growth-1)*float64(req.MonsterLv-1)
@@ -101,10 +109,18 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		isMain := gi == 0
 		noEliteStack := isMain && m.IsBoss
 		if isMain && !noEliteStack {
-			if v, ok := sr["eliteHpMult"].(float64); ok && req.Elite == "elite" { u.hp *= v }
-			if v, ok := sr["eliteAtkMult"].(float64); ok && req.Elite == "elite" { u.atk *= v }
-			if v, ok := sr["rareEliteHpMult"].(float64); ok && req.Elite == "rareElite" { u.hp *= v }
-			if v, ok := sr["rareEliteAtkMult"].(float64); ok && req.Elite == "rareElite" { u.atk *= v }
+			if v, ok := sr["eliteHpMult"].(float64); ok && req.Elite == "elite" {
+				u.hp *= v
+			}
+			if v, ok := sr["eliteAtkMult"].(float64); ok && req.Elite == "elite" {
+				u.atk *= v
+			}
+			if v, ok := sr["rareEliteHpMult"].(float64); ok && req.Elite == "rareElite" {
+				u.hp *= v
+			}
+			if v, ok := sr["rareEliteAtkMult"].(float64); ok && req.Elite == "rareElite" {
+				u.atk *= v
+			}
 		}
 		// v1.9.53 图域首领动态强度：血量按挑战者相对同级裸装的战力倍率放大，攻击按目标承伤比例反解
 		if isMain && m.ScaleWithPlayer {
@@ -132,6 +148,17 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	queue := make([]slotCD, 0, len(req.BD))
 	for _, sid := range req.BD {
 		if s, ok := c.SkillByID(sid); ok {
+			// v1.9.56 技能等级加成：power/heal/减伤 同乘 (1+0.08×(lv-1))
+			if m := SkillEffectMult(req.SkillLv[sid]); m > 1 {
+				s.Power *= m
+				s.HotPer *= m
+				if s.DRPct > 0 {
+					s.DRPct *= m
+					if s.DRPct > 0.85 { // 减伤封顶 85%，避免高等级直接免疫
+						s.DRPct = 0.85
+					}
+				}
+			}
 			queue = append(queue, slotCD{def: s})
 		}
 	}
@@ -166,7 +193,9 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	heroFirst := hero.Spd >= 10
 	totalMonHP := func() float64 {
 		s := 0.0
-		for i := range mems { s += mems[i].hp }
+		for i := range mems {
+			s += mems[i].hp
+		}
 		return s
 	}
 	// v1.9.36 群怪：怪物轮转出手（死亡的自动跳过），英雄攻击第一个存活目标
@@ -174,7 +203,9 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	nextAlive := func(from int) int {
 		for k := 0; k < len(mems); k++ {
 			i := (from + k) % len(mems)
-			if mems[i].hp > 0 { return i }
+			if mems[i].hp > 0 {
+				return i
+			}
 		}
 		return -1
 	}
@@ -187,8 +218,12 @@ func ResolveBattle(req BattleRequest) BattleReport {
 					hotLeft--
 					jump := hotPer
 					healed := hero.HP - heroHP
-					if jump > healed { jump = healed }
-					if jump > 0 { heroHP += jump }
+					if jump > healed {
+						jump = healed
+					}
+					if jump > 0 {
+						heroHP += jump
+					}
 					n++
 					rep.Rounds = append(rep.Rounds, BattleRound{
 						N: n, Actor: "hero", Action: "hot", SkillName: hotName + "（持续）",
@@ -217,7 +252,9 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				r := BattleRound{N: n, Actor: "hero", Action: act.ID, SkillName: act.Name, FX: act.FX}
 				power := act.Power
 				ti := nextAlive(turnIdx) // 英雄攻击目标：第一个存活怪
-				if ti < 0 { ti = 0 }
+				if ti < 0 {
+					ti = 0
+				}
 				tgt := &mems[ti]
 				r.MonIdx = ti
 				switch act.Kind {
@@ -229,8 +266,12 @@ func ResolveBattle(req BattleRequest) BattleReport {
 						hotName = act.Name
 						heal := hotPer
 						healed := hero.HP - heroHP
-						if heal > healed { heal = healed }
-						if heal > 0 { heroHP += heal }
+						if heal > healed {
+							heal = healed
+						}
+						if heal > 0 {
+							heroHP += heal
+						}
 						r.Heal = round2(heal)
 					} else {
 						heal := hero.HP * power
@@ -269,11 +310,15 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				rep.Rounds = append(rep.Rounds, r)
 			} else {
 				mi := nextAlive(turnIdx)
-				if mi < 0 { break }
+				if mi < 0 {
+					break
+				}
 				atkUnit := &mems[mi]
 				turnIdx = (mi + 1) % len(mems) // 下回合轮到下一只
 				dmg := atkUnit.atk * (1 - monAtkDebuff) * (1 - hero.DEF/(hero.DEF+100))
-				if drLeft > 0 { dmg *= 1 - drPct } // v1.9.40 格挡姿态持续减伤
+				if drLeft > 0 {
+					dmg *= 1 - drPct
+				} // v1.9.40 格挡姿态持续减伤
 				dmg *= 0.9 + rng.Float64()*0.2
 				actual := dmg
 				if shield > 0 {
@@ -288,9 +333,13 @@ func ResolveBattle(req BattleRequest) BattleReport {
 					FX: "fx_dmg_normal", Damage: round2(actual), MonIdx: mi,
 					HeroHP: round2(math.Max(0, heroHP)), MonHP: round2(math.Max(0, totalMonHP())),
 				}
-				if drLeft > 0 { mr.DR = drPct } // 前端据此显示"格挡减伤"
+				if drLeft > 0 {
+					mr.DR = drPct
+				} // 前端据此显示"格挡减伤"
 				rep.Rounds = append(rep.Rounds, mr)
-				if drLeft > 0 { drLeft-- } // 每次怪物攻击消耗一回合减伤
+				if drLeft > 0 {
+					drLeft--
+				} // 每次怪物攻击消耗一回合减伤
 			}
 			if heroHP <= 0 || totalMonHP() <= 0 {
 				break
@@ -385,16 +434,24 @@ func rollDrops(req BattleRequest, mon MonsterDef, rng *rand.Rand) []EquipItem {
 func RollChestEquip(classID, tier string, rng *rand.Rand) (EquipItem, bool) {
 	c := C()
 	chance := map[string]float64{"wood": 0.12, "silver": 0.25, "gold": 0.45, "diamond": 0.70, "crystal": 1.0}[tier]
-	if chance == 0 { chance = 0.12 }
-	if rng.Float64() >= chance { return EquipItem{}, false }
+	if chance == 0 {
+		chance = 0.12
+	}
+	if rng.Float64() >= chance {
+		return EquipItem{}, false
+	}
 	qCap := map[string]int{"wood": 1, "silver": 2, "gold": 3, "diamond": 5, "crystal": 7}[tier]
-	if qCap >= len(c.Equipment.Quality) { qCap = len(c.Equipment.Quality) - 1 }
+	if qCap >= len(c.Equipment.Quality) {
+		qCap = len(c.Equipment.Quality) - 1
+	}
 	slot := rollSlot(c, rng)
 	q := rng.Intn(qCap + 1)
 	if tier == "crystal" {
 		// 水晶箱品质下限彩虹（5）：在 5..qCap 内偏高端 roll
 		q = qCap - rng.Intn(3)
-		if q < 5 { q = 5 }
+		if q < 5 {
+			q = 5
+		}
 	}
 	base := c.Equipment.BaseStatsBySlot[slot]
 	stats := map[string]float64{}
@@ -411,20 +468,30 @@ func RollChestEquip(classID, tier string, rng *rand.Rand) (EquipItem, bool) {
 func rollQuality(rng *rand.Rand) int {
 	r := rng.Float64() * 100
 	switch {
-	case r < 38: return 0
-	case r < 66: return 1
-	case r < 84: return 2
-	case r < 94: return 3
-	case r < 98.2: return 4
-	case r < 99.4: return 5
-	case r < 99.9: return 6
-	default: return 7
+	case r < 38:
+		return 0
+	case r < 66:
+		return 1
+	case r < 84:
+		return 2
+	case r < 94:
+		return 3
+	case r < 98.2:
+		return 4
+	case r < 99.4:
+		return 5
+	case r < 99.9:
+		return 6
+	default:
+		return 7
 	}
 }
 
 // weaponClassIf 仅武器槽返回职业所属武器系，其余槽位返回空（通用）。
 func weaponClassIf(slot, classID string) string {
-	if slot == "weapon" { return WeaponClassFor(classID) }
+	if slot == "weapon" {
+		return WeaponClassFor(classID)
+	}
 	return ""
 }
 

@@ -24,10 +24,33 @@
     "_note": "服务端按累计时间驱动自动战斗；回合数仅作UI展示，不作终止条件。种子由服务端生成随战报记录。"
   },
   "shop": {
-    "_note": "v1.9.53 商店兑换比例。material=强化材料，exp=经验；goldPerUnit/gemPerUnit 为每 1 件材料的货币价，exp 段同理，gemPerExp 为 1 钻石可换的经验数（钻石兑经验按 10 的倍数）",
+    "_note": "v1.9.53 商店兑换比例。material=强化材料，exp=经验；goldPerUnit/gemPerUnit 为每 1 件材料的货币价，exp 段同理，gemPerExp 为 1 钻石可换的经验数（钻石兑经验按 10 的倍数）。v1.9.56 增加 sell 段：背包材料/药水回收单价",
     "material": { "goldPerUnit": 10, "gemPerUnit": 1 },
     "exp": { "goldPerUnit": 1, "gemPerExp": 10 },
-    "maxQty": 1000000
+    "maxQty": 1000000,
+    "sell": {
+      "_note": "v1.9.56 回收单价 = 每 1 件可换到的金币 / 钻石；items 按物品 id 定价，未列出的按 default 按类别兜底（material=材料，consume=药水）",
+      "items": {
+        "钢锭":   { "gold": 12, "gem": 1 },
+        "精铁":   { "gold": 20, "gem": 2 },
+        "蓝宝石": { "gold": 60, "gem": 5 },
+        "皮革":   { "gold": 8,  "gem": 1 },
+        "布料":   { "gold": 6,  "gem": 1 },
+        "potion_s": { "gold": 15, "gem": 1 },
+        "potion_l": { "gold": 45, "gem": 3 }
+      },
+      "default": {
+        "material": { "gold": 10, "gem": 1 },
+        "consume":  { "gold": 15, "gem": 1 }
+      }
+    }
+  },
+  "skillUpgrade": {
+    "_note": "v1.9.56 技能升级：每升 1 级技能效果 +8%（power/heal/减伤同乘），升级消耗钻石 = baseGem + stepGem×(当前等级-1)，最高 maxLevel 级",
+    "perLevel": 0.08,
+    "maxLevel": 20,
+    "baseGem": 60,
+    "stepGem": 30
   },
   "drop": {
     "equipChanceNormal": 0.45,
