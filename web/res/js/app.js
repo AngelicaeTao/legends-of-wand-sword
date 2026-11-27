@@ -138,7 +138,8 @@ miniCvEl.addEventListener('click',(e)=>{
   const r=miniCvEl.getBoundingClientRect(); if(!r.width)return;
   const cx=(e.clientX-r.left)*(MM_S/r.width), cy=(e.clientY-r.top)*(MM_S/r.height);
   if(Math.hypot(cx-MM_S/2,cy-MM_S/2)>MM_S/2-2)return;
-  if(worldMap)worldMap.openMapModal();
+  // 与 M 键同一守卫：仅大世界态（战斗中/面板打开时 active=false）
+  if(worldMap&&worldMap.active)worldMap.openMapModal();
 });
 
 // v1.9.64 小地图下方旗标条：跟踪状态 + 距离，点一下清除标记
