@@ -2761,6 +2761,14 @@ async function doFight(mon){
       worldId:worldMap.worldId,nodeId:mon.nodeId||''});
     if(bundle.state){state=bundle.state;await refreshStats();syncHud();}
     currentReport=bundle.report;
+    // v1.9.58 一击必杀：服务端判定怪物总血量低于普攻保底伤害时直接判胜，
+    // 前端跳过整段战斗演出与血条播放，直接弹结算（不切战斗视图）
+    if(bundle.report.oneShot){
+      battlePlaying=false; paused=false;
+      window.SFX&&SFX.coin();
+      showBattleResult(bundle.report,mon);
+      return;
+    }
     await playBattle(bundle.report,mon,bd);
   }catch(e){toastModal('交战失败',e.message);worldMap.active=true;}
 }

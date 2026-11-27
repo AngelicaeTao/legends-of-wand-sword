@@ -50,6 +50,8 @@ type MonInfo struct {
 type BattleReport struct {
 	Seed       int64         `json:"seed"`
 	Result     string        `json:"result"` // win/lose
+	// v1.9.58 秒杀：遭遇总血量低于普攻保底伤害时直接判胜，Rounds 为空、前端跳过战斗演出
+	OneShot    bool          `json:"oneShot,omitempty"`
 	Rounds     []BattleRound `json:"rounds"`
 	Exp        int           `json:"exp"`
 	Gold       int           `json:"gold"`
@@ -179,6 +181,23 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		return -1
 	}
 	n := 0
+	// v1.9.58 秒杀判定：本次遭遇总血量 ≤ 普攻保底伤害时，直接判胜、跳过整个回合模拟。
+	// 保底伤害取最保守口径：普攻 power × 最低浮动 0.9 × 组合内最高防御减伤，判定必杀即真必杀。
+	// 玩家先手（heroFirst）才允许，避免"还没出手就被打死"却被判胜。
+	oneShot := false
+	if heroFirst {
+		maxMdef := 0.0
+		for i := range mems {
+			if mems[i].mdef > maxMdef {
+				maxMdef = mems[i].mdef
+			}
+		}
+		basicDmg := hero.ATK * basic.Power * (1 - maxMdef/(maxMdef+100)) * 0.9
+		if basicDmg > 0 && totalMonHP() <= basicDmg {
+			oneShot = true
+			maxTicks = 0
+		}
+	}
 	for t := 0; t < maxTicks && heroHP > 0 && totalMonHP() > 0; t++ {
 		for _, first := range []bool{heroFirst, !heroFirst} {
 			if first {
@@ -297,14 +316,21 @@ func ResolveBattle(req BattleRequest) BattleReport {
 			}
 		}
 	}
-	if totalMonHP() <= 0 {
+	if oneShot {
+		rep.Result = "win"
+		rep.OneShot = true
+	} else if totalMonHP() <= 0 {
 		rep.Result = "win"
 	} else {
 		rep.Result = "lose"
 	}
 	// v1.9.27 战斗结束血量：保留余量（战败保底 1 点，防 0 血软锁；用回血道具恢复）
 	rep.HeroHPEnd = round2(math.Max(1, heroHP))
-	rep.Seconds = round2(float64(len(rep.Rounds)) / 2.0 * tick)
+	if oneShot {
+		rep.Seconds = 0 // 秒杀不消耗战斗时长
+	} else {
+		rep.Seconds = round2(float64(len(rep.Rounds)) / 2.0 * tick)
+	}
 
 	if rep.Result == "win" {
 		mult := 1.0
@@ -340,6 +366,9 @@ func ResolveBattle(req BattleRequest) BattleReport {
 			}
 		}
 		rep.Log = "服务端权威结算：胜利，经验/金币/掉落已入账"
+		if oneShot {
+			rep.Log = "一击必杀：怪物血量低于普攻保底伤害，跳过战斗直接结算"
+		}
 	} else {
 		rep.Log = "服务端权威结算：战败，无奖励，体力照常消耗，返回大世界原坐标"
 	}
