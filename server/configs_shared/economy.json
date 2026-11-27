@@ -30,21 +30,28 @@
     "bossDiamondMin": 50,
     "bossDiamondMax": 100,
     "monsterChest": {
-          "_note": "v1.9.45 怪物掉落宝箱档位权重（服务端权威 roll，客户端只传是否 BOSS）。普通/精英共用 normal：木47/银30/金8/钻12/水晶3（原 木50/银34/金8/钻8/水晶0，钻石+4、水晶+3）",
-          "normal": {
-                "wood": 47,
-                "silver": 30,
-                "gold": 8,
-                "diamond": 12,
-                "crystal": 3
-          },
-          "boss": {
-                "wood": 0,
-                "silver": 0,
-                "gold": 50,
-                "diamond": 30,
-                "crystal": 20
-          }
+      "_note": "v1.9.46 怪物掉落宝箱档位权重（服务端权威 roll）。每条内部按 木>银>金>钻石>水晶 严格递减且不设 0；怪物档次越高，高品质（钻石+水晶）概率越高：普通 9% < 精英 16% < 首领 24%。",
+      "normal": {
+        "wood": 50,
+        "silver": 28,
+        "gold": 13,
+        "diamond": 6,
+        "crystal": 3
+      },
+      "elite": {
+        "wood": 40,
+        "silver": 27,
+        "gold": 17,
+        "diamond": 10,
+        "crystal": 6
+      },
+      "boss": {
+        "wood": 30,
+        "silver": 26,
+        "gold": 20,
+        "diamond": 14,
+        "crystal": 10
+      }
     },
     "chest": {
       "wood": {

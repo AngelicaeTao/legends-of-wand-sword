@@ -32,7 +32,9 @@ const THEMES={
   arena:    {name:'星陨之巅',ground:['#4a4560','#514b68','#423d58','#564f6e'],road:'#8a86a3',wall:'meteor',pond:'#3a3550',deco:'star'}
 };
 const MON_NAMES={slime:'史莱姆',skeleton:'骷髅兵',bat:'蝙蝠',boss_beetle:'甲虫将军',
-  slime_toxic:'毒液史莱姆',skeleton_archer:'骷髅弓手',bat_crimson:'血蝙蝠'};
+  slime_toxic:'毒液史莱姆',skeleton_archer:'骷髅弓手',bat_crimson:'血蝙蝠',map_boss:'图域首领'};
+// v1.9.46 贴图别名：怪物 id 与像素资源包名不一致时在此登记（否则会 404 请求 mon_map_boss/parts.json）
+const MON_SPRITE={map_boss:'boss_beetle'};
 
 function WMap(canvas, opts){
   this.cv=canvas;
@@ -671,19 +673,28 @@ WMap.prototype.applySpots=function(spots){
       // v1.9.39 修复：贴图取组合内第一只怪（与实际战斗一致），不再用点位原类型。
       // 此前用 monId 选贴图、group 算名字 → 出现"名字骷髅兵、贴图史莱姆"的错位。
       const firstMon=group[0]||monId;
-      const sprite=MON_NAMES[firstMon]?firstMon:(MON_NAMES[monId]?monId:'slime');
+      // v1.9.46：先查贴图别名（map_boss → boss_beetle），再回退按 id 取名
+      const alias=MON_SPRITE[firstMon]||MON_SPRITE[monId];
+      const sprite=alias||(MON_NAMES[firstMon]?firstMon:(MON_NAMES[monId]?monId:'slime'));
       const actor=this.makeFreshActor('mon_'+sprite,'idle');
       // 组合名：按怪物 id 计数（如"史莱姆×2 · 骷髅×1"）
       const cnt={};group.forEach(g=>{cnt[g]=(cnt[g]||0)+1;});
       const gangName=Object.keys(cnt).map(k=>(MON_NAMES[k]||k)+'×'+cnt[k]).join(' · ');
-      const pre=s.type==='ELITE'?'精英 ':(s.type==='BOSS'?'首领 ':'');
-      this.monsters.push({x:s.x,y:s.y,nodeId:s.nodeId,type:sprite,name:pre+gangName,
-        group,gangName,monId,elite:s.type!=='MOB',
-        state:'idle',r:30,alert:s.type==='ELITE'?360:300,actor,phase:Math.random()*6});
+      // v1.9.46 三档怪物：normal/elite/boss，掉落档位、等级加成、标签都以此为准
+      const kind=s.type==='BOSS'?'boss':(s.type==='ELITE'?'elite':'normal');
+      // v1.9.46 首领随机落点：每次进入地图在可行走区域随机刷新，避免固定蹲点被卡位刷
+      let px=s.x, py=s.y;
+      if(kind==='boss'&&s.randomPos){ const rp=this.randomBossPoint(); if(rp){px=rp.x;py=rp.y;} }
+      const pre=kind==='elite'?'精英 ':(kind==='boss'?'首领 ':'');
+      this.monsters.push({x:px,y:py,nodeId:s.nodeId,type:sprite,name:pre+gangName,
+        group,gangName,monId,kind,elite:kind!=='normal',
+        state:'idle',r:kind==='boss'?44:30,
+        alert:kind==='boss'?440:(kind==='elite'?360:300),actor,phase:Math.random()*6});
       continue;
     }
     if(s.type==='CHEST'){
-      const tier=['wood','silver','gold','diamond','crystal'][Math.max(0,Math.min(2,(s.tier||1)-1))]||'wood';
+      // v1.9.46 修复：此前 Math.min(2,…) 把档位截断在 gold，钻石/水晶箱点位永远显示黄金箱
+      const tier=['wood','silver','gold','diamond','crystal'][Math.max(0,Math.min(4,(s.tier||1)-1))]||'wood';
       const actor=this.makeFreshActor('item_chest_'+tier,'closed');
       this.chests.push({x:s.x,y:s.y,nodeId:s.nodeId,tier,state:'closed',actor,phase:Math.random()*6});
     }
@@ -856,6 +867,20 @@ WMap.prototype.findWalkableNear=function(x,y,maxR){
     }
   }
   return {x:Math.max(40,Math.min(this.WM-40,x)),y:Math.max(40,Math.min(this.HM-40,y))};
+};
+/* v1.9.46 首领随机落点：在可行走区域随机采样，避开出生锚点周围 900 单位，
+   采样 80 次仍失败（水域/密林极多的图）则返回 null，回落到配置坐标。 */
+WMap.prototype.randomBossPoint=function(){
+  const margin=220, minFromAnchor=900;
+  const anchor=(this.anchors&&this.anchors[0])||null;
+  for(let i=0;i<80;i++){
+    const x=margin+Math.random()*(this.WM-margin*2);
+    const y=margin+Math.random()*(this.HM-margin*2);
+    if(this.blocked(x,y,44))continue;
+    if(anchor&&Math.hypot(x-anchor.x,y-anchor.y)<minFromAnchor)continue;
+    return {x:Math.round(x),y:Math.round(y)};
+  }
+  return null;
 };
 
 /* ---------- 输入 ---------- */

@@ -4,7 +4,7 @@ import "testing"
 
 // v1.9.38：武器两套命名（战斗掉落/开箱/角色面板共用）
 func TestWeaponNaming(t *testing.T) {
-	if err := Init("../../configs_shared"); err != nil { t.Fatal(err) }
+	if err := Init("../../../configs"); err != nil { t.Fatal(err) }
 	cases := []struct{ cls string; q int }{
 		{"warrior", 0}, {"warrior", 2}, {"warrior", 4}, {"mage", 0}, {"mage", 3},
 	}
