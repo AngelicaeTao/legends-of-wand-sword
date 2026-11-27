@@ -825,7 +825,8 @@ function connectWS(){
         $('wsHint').textContent='多人已连接'+(wsChannel>0?'·'+wsChannel+'线':'');
       }else if(d.type==='state_snapshot'){
         worldMap.applySnapshot(d.players||[],clientId); // 视野裁剪在 worldmap 内做
-        onlineCount=(d.players||[]).length;
+        // v1.9.63 徽标只统计"本图其他玩家"：原来把自己也算进去，徽标与在线列表永远差 1
+        onlineCount=(d.players||[]).filter(p=>p&&p.id!==clientId).length;
         $('onlineBadge').textContent='● 在线 '+onlineCount;
       }
     };
@@ -2324,14 +2325,16 @@ async function showOnlinePlayers(){
   showModal(`<h2>在线玩家</h2><div class="msub">正在获取当前在线名单…</div>`);
   try{
     const r=await api('/api/players/online');
-    const ps=r.players||[];
+    // v1.9.63 在线列表排除自己与游客（原来把自己也列进去，人数多算 1，还出现无法查看档案的空条目）
+    const me=uid();
+    const ps=(r.players||[]).filter(p=>p&&p.userId&&p.userId!==me);
     const rows=ps.map((p,i)=>{
       const cls=(CFG&&CFG.classes.classes.find(x=>x.id===p.classId)||{}).name||p.classId;
       const wn={W1:'青草平原',W2:'迷雾森林',W3:'赤焰峡谷',W4:'冰霜高原',W5:'流沙遗迹',W6:'星陨之巅',HOME:'家园'}[p.worldId]||p.worldId;
       return `<div class="gr-row">
         <div class="gr-emb">${ICON.card?ICON.card(22,'#f0d590'):ICON.shield(22,'#f0d590')}</div>
         <div class="gr-main"><div class="gr-name">${p.name} <em>${cls}</em></div>
-          <div class="gr-sub">${wn} · ${p.channel+1} 线</div></div>
+          <div class="gr-sub">${wn} · ${(p.channel||0)+1} 线</div></div>
         <button class="btn-gray gr-view" data-uid="${p.userId||''}" data-name="${p.name}" ${p.userId?'':'disabled style="opacity:.45"'}>档案</button>
       </div>`;
     }).join('')||'<div class="sec-sub">当前没有其他玩家在线</div>';
