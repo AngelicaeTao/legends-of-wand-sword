@@ -1331,7 +1331,8 @@ WMap.prototype.drawGate=function(g,gt,sx,sy,t){  const glow=0.5+0.5*Math.sin(t*2
 };
 WMap.prototype.drawRemote=function(g,r,sx,sy,t){
   g.fillStyle='rgba(0,0,0,.25)';g.beginPath();g.ellipse(sx,sy+10,18,7,0,0,Math.PI*2);g.fill();
-  if(r.actor)r.actor.render(g,sx,sy,1,{});
+  // v1.9.62 按目标朝向翻转（立绘默认朝右，faceRight=false 时镜像）
+  if(r.actor)r.actor.render(g,sx,sy,1,{dir:(r.faceRight===false?-1:1)});
   g.font='bold 12px sans-serif';g.textAlign='center';g.strokeStyle='#000';g.lineWidth=3;
   g.strokeText(r.name||'玩家',sx,sy-120);g.fillStyle='#8fd0ff';g.fillText(r.name||'玩家',sx,sy-120);
 };
@@ -1354,12 +1355,21 @@ WMap.prototype.applySnapshot=function(players,selfId){
       const rb='char_'+((p.classId&&['warrior','mage','knight','fighter','sage','warlock'].indexOf(p.classId)>=0)?p.classId:'warrior');
       const actor=new this.StandeeActor(rb);
       actor.init().then(()=>actor.play('idle'));
-      this.remote[p.id]={x:p.x,y:p.y,name:p.name,userId:p.userId||'',actor};
+      this.remote[p.id]={x:p.x,y:p.y,name:p.name,userId:p.userId||'',actor,faceRight:true};
     } else {
       const r=this.remote[p.id];
       // 插值：向目标坐标平滑移动（网络姿态平滑）
-      r.x+=(p.x-r.x)*0.3;r.y+=(p.y-r.y)*0.3;
+      const dx=p.x-r.x, dy=p.y-r.y;
+      const moving=Math.hypot(dx,dy)>2;
+      // v1.9.62 远端角色朝向：按服务器快照的位移方向决定，原来完全不翻转（永远朝同一个方向）
+      if(moving&&Math.abs(dx)>0.5) r.faceRight=dx>0;
+      r.x+=dx*0.3;r.y+=dy*0.3;
       r.name=p.name;r.userId=p.userId||'';
+      // v1.9.62 远端角色走动时播 walk，停下回 idle（原来永远 idle，像在滑行）
+      if(r.actor){
+        if(moving&&r.actor.state!=='walk')r.actor.play('walk');
+        else if(!moving&&r.actor.state!=='idle')r.actor.play('idle');
+      }
     }
   }
   for(const id in this.remote)if(!seen[id])delete this.remote[id];
