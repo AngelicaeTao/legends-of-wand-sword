@@ -17,6 +17,8 @@ type BattleRequest struct {
 	Seed      int64    `json:"seed"`  // >0 时用于复现（playtest 回放）；=0 由服务端随机生成
 	StartHP   float64  `json:"startHp"` // v1.9.27 全局血量：战斗以该血量开局（>0 且 < 最大血量时生效）
 	Group     []string `json:"group,omitempty"` // v1.9.36 群怪模版：怪物组合（服务端权威点位下发，可混编）；空=单怪
+	// v1.9.53 推进进度 0~1（W1=0/W6=1），由服务端按存档填写，用于首领动态强度；客户端传值无效
+	Progress float64 `json:"progress,omitempty"`
 }
 
 // BattleRound 是战报中的一回合（表现用最小单元）。
@@ -98,6 +100,15 @@ func ResolveBattle(req BattleRequest) BattleReport {
 			if v, ok := sr["eliteAtkMult"].(float64); ok && req.Elite == "elite" { u.atk *= v }
 			if v, ok := sr["rareEliteHpMult"].(float64); ok && req.Elite == "rareElite" { u.hp *= v }
 			if v, ok := sr["rareEliteAtkMult"].(float64); ok && req.Elite == "rareElite" { u.atk *= v }
+		}
+		// v1.9.53 图域首领动态强度：血量按挑战者相对同级裸装的战力倍率放大，攻击按目标承伤比例反解
+		if isMain && m.ScaleWithPlayer {
+			if hpMul, atkAbs, ok := bossScale(req); ok {
+				u.hp *= hpMul
+				if atkAbs > 0 {
+					u.atk = atkAbs
+				}
+			}
 		}
 		mems = append(mems, u)
 		monInfos = append(monInfos, MonInfo{

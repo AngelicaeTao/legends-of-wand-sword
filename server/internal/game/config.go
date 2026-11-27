@@ -122,6 +122,8 @@ type QualityDef struct {
 type MonstersConfig struct {
 	Monsters  []MonsterDef   `json:"monsters"`
 	SpawnRule map[string]any `json:"spawnRule"`
+	// v1.9.53 图域首领动态强度系数（血/攻按玩家装备品质、强化、推进进度上调）
+	BossScaling map[string]any `json:"bossScaling"`
 }
 type MonsterDef struct {
 	ID       string             `json:"id"`
@@ -133,6 +135,8 @@ type MonsterDef struct {
 	Exp      float64            `json:"exp"`
 	Gold     float64            `json:"gold"`
 	DropTier int                `json:"dropTier"`
+	// v1.9.53 按挑战者成长动态放大血/攻（仅大地图首领开启，副本首领保持固定）
+	ScaleWithPlayer bool `json:"scaleWithPlayer"`
 }
 
 type EconomyConfig struct {

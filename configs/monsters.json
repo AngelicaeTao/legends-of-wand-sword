@@ -105,6 +105,7 @@
       "name": "图域首领",
       "sprite": "boss_beetle",
       "isBoss": true,
+      "scaleWithPlayer": true,
       "base": {
         "hp": 130,
         "atk": 12,
@@ -129,5 +130,18 @@
     "rareEliteHpMult": 2.6,
     "rareEliteAtkMult": 1.8,
     "pity": 8
+  },
+  "bossScaling": {
+    "_note": "v1.9.53 图域首领动态强度（仅 scaleWithPlayer=true 生效，当前 map_boss）。锚点是挑战者自身而非怪物等级：r=玩家实际攻击力/同等级同职业裸装攻击力（等级、职业、装备品质、强化全含在 r 内）。血量=基准曲线×clamp(r-hpRatioFree,min,max)^hpExp×(1+hpPerProgress*w)；hpRatioFree 把 r 超出 1 的前一段当基础装备豁免，避免一级玩家被练习剑抬高 1.5 倍难度。攻击反解伤害公式 dmg=monATK*(1-DEF/(DEF+100))，使每击稳定打掉玩家最大血量 share（默认 7.5%，随装备品质与进度微调）。q=品质分(Σ(quality+1)/32)、w=推进进度(W1=0/W6=1)。实测：低配 9~23 回合、中高配 13~15 回合、每击 7~9% 血量、胜率 99~100%。调参：要更肉加 hpExp，要更凶加 atkShare。",
+    "hpExp": 0.85,
+    "hpRatioFree": 0.5,
+    "hpRatioMin": 0.7,
+    "hpRatioMax": 4.5,
+    "hpPerProgress": 0.3,
+    "atkShare": 0.075,
+    "atkPerQuality": 0.15,
+    "atkPerProgress": 0.2,
+    "atkShareMin": 0.04,
+    "atkShareMax": 0.16
   }
 }

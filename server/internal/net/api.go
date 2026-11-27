@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"time"
 	"os"
 
@@ -394,6 +395,31 @@ func idleSettle(w http.ResponseWriter, r *http.Request) {
 
 // ---------- 结算 + 落库（真实游戏链路）----------
 
+// playerProgress 推进进度：已解锁最高世界在 W1..W6 中的位置，归一化到 0~1（W1=0，W6=1）。
+// v1.9.53 供首领动态强度使用，只认存档，不认客户端上报。
+func playerProgress(p *store.PlayerState) float64 {
+	best := 0
+	consider := func(id string) {
+		if len(id) < 2 || (id[0] != 'W' && id[0] != 'w') {
+			return
+		}
+		if n, err := strconv.Atoi(id[1:]); err == nil && n > best {
+			best = n
+		}
+	}
+	consider(p.World.WorldID)
+	for _, w := range p.World.Unlocked {
+		consider(w)
+	}
+	if best <= 1 {
+		return 0
+	}
+	if best >= 6 {
+		return 1
+	}
+	return float64(best-1) / 5
+}
+
 func battleFight(w http.ResponseWriter, r *http.Request) {
 	var q struct {
 		UserID    string   `json:"userId"`
@@ -436,6 +462,8 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 			req.MonsterID = g[0] // 主怪（精英倍率/奖励/掉落语义锚点）
 		}
 	}
+	// v1.9.53 推进进度以存档为准（不接受客户端传值）：首领强度据此缩放
+	req.Progress = playerProgress(p)
 	rep := game.ResolveBattle(req)
 	logs := store.ApplyBattleReport(p, rep)
 	// v1.9.31 战败回家园：大世界战败后送回家园休整（记录来源世界，出门可返回）
