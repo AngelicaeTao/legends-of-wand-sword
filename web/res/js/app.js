@@ -28,6 +28,9 @@ let roleTab='info';        // 角色面板内 tab：info | equip | skill | class
 let equipDetailSlot=null;  // 仓库内展开的装备详情部位
 let forgeSub=false;        // v1.9.21 强化工坊子层开关
 let forgeSel=null;         // 强化工坊当前选中的装备实例 id
+let whBatch=null;          // v1.9.50 仓库批量模式：null | 'in'（批量存入）| 'out'（批量取出）| 'dec'（批量分解）
+let whBatchSel=new Set();  // v1.9.50 批量选中项 key 集合：eq:<实例id> / mat:<物品id>
+function clearWhBatch(){ whBatch=null; whBatchSel.clear(); }
 let loggedUser=null;       // 当前登录账号（用户名）
 let authToken=null;        // 服务端签发的 token（跨设备续玩凭据）
 let authUserId=null;       // 服务端 userId
@@ -608,6 +611,8 @@ async function finishEnter(){
       if(tag==='INPUT'||tag==='TEXTAREA'||e.target.isContentEditable)return;
       const k=e.key.toLowerCase();
       const gameModal=!document.getElementById('modalLayer').classList.contains('hidden');
+      // v1.9.50 严格检测：仓库批量选择模式按 Esc 退出（不超过弹窗）
+      if(!gameModal&&k==='escape'&&whBatch){ e.preventDefault(); clearWhBatch(); if(typeof renderPanel==='function')renderPanel(); return; }
       // v1.9.47 弹窗（结算 / 在线玩家 / 玩家档案）现在浮在大地图之上（z-index 130 > 120），
       // 弹窗开着时按 M / Esc 不能再关掉被它盖住的地图，否则关掉弹窗会发现地图莫名消失。
       if(gameModal)return;
@@ -809,6 +814,7 @@ function openPanel(key){
     window.SFX&&SFX.deny(); toastModal('仓库在家园','回家园后打开家园面板 › 仓库 即可管理仓库'); return;
   }
   panel=key; equipDetailSlot=null; forgeSub=false; forgeSel=null; homeSub=null;
+  clearWhBatch();  // v1.9.50 严格检测：切换/关闭任何面板即退出仓库批量模式
   worldMap.active=false;                                        // 面板期间冻结地图
   const meta={role:'角色',home:'家园',dungeon:'副本',guild:'公会',map:'世界地图',warehouse:'仓库',idle:'挂机设置',bag:'背包'};
   $('panelTitle').textContent=meta[key]||'';
@@ -823,6 +829,7 @@ function openPanel(key){
 function closePanel(){
   if(view!=='world') return;
   panel=null; equipDetailSlot=null; forgeSub=false; forgeSel=null; homeSub=null;
+  clearWhBatch();  // v1.9.50 严格检测：离开仓库界面即取消批量模式
   $('panelLayer').classList.add('hidden');
   $('worldView').classList.remove('panel-open');
   document.body.classList.remove('panel-open');
@@ -1579,10 +1586,15 @@ function renderWarehouse(){
         <span class="fc-lv">+${lv||0}</span>
         ${badge?`<em class="fc-badge">${badge}</em>`:''}
       </div>`;
-    let listHtml=eqAll.map(e=>cell(e.id,e.slot,eqCN(e),e.enhance,e.equipped?'穿戴中':'背包',
-      forgeSel===e.id?' sel':'',false,`data-fid="${e.id}"`)).join('')
-      +whEqAll.map(it=>cell(it.id,(it.equip&&it.equip.slot)||'',eqCN(it.equip||{}),(it.equip&&it.equip.enhance)||0,'仓库中','',
-      true,`data-wh="${it.id}"`)).join('');
+    // v1.9.50 工坊装备分组：身上装备（穿戴中，可强化/升品）→ 背包装备 → 仓库装备（需取出）
+    const wornEq=eqAll.filter(e=>e.equipped), bagOnlyEq=eqAll.filter(e=>!e.equipped);
+    const grpWorn=wornEq.length?`<div class="forge-grp-t worn">身上装备（穿戴中 · 可直接强化/升品）</div>`+wornEq.map(e=>cell(e.id,e.slot,eqCN(e),e.enhance,'穿戴中',
+      forgeSel===e.id?' sel':'',false,`data-fid="${e.id}"`)).join(''):'';
+    const grpBag=bagOnlyEq.length?`<div class="forge-grp-t">背包装备</div>`+bagOnlyEq.map(e=>cell(e.id,e.slot,eqCN(e),e.enhance,'背包',
+      forgeSel===e.id?' sel':'',false,`data-fid="${e.id}"`)).join(''):'';
+    const grpWh=whEqAll.length?`<div class="forge-grp-t">仓库装备（需先取出）</div>`+whEqAll.map(it=>cell(it.id,(it.equip&&it.equip.slot)||'',eqCN(it.equip||{}),(it.equip&&it.equip.enhance)||0,'仓库中','',
+      true,`data-wh="${it.id}"`)).join(''):'';
+    let listHtml=grpWorn+grpBag+grpWh;
     if(!eqAll.length&&!whEqAll.length)listHtml='<div class="sec-sub">暂无任何装备</div>';
     // 强化栏
     let forgeBar;
@@ -1662,7 +1674,7 @@ function renderWarehouse(){
       ${backHome}
       <button class="sub-back" id="forgeBack">‹ 返回仓库</button>
       <div class="sec-title">⚒ 强化工坊</div>
-      <div class="sec-sub">选择装备放入强化栏 · 强化消耗随等级递增（${enhCfg.costBase||1200} × ${(enhCfg.costGrowth||1.35)}^等级 金币 + 2 材料）· 升品消耗按目标品质档计算</div>
+      <div class="sec-sub">身上装备 / 背包装备均可直接强化与升品 · 消耗随等级递增（${enhCfg.costBase||1200} × ${(enhCfg.costGrowth||1.35)}^等级 金币 + 1 材料）· 仓库装备需先取出</div>
       <div class="forge-grid">${listHtml}</div>
       <div class="sec-title">强化栏</div>
       ${forgeBar}
@@ -1749,7 +1761,7 @@ function renderWarehouse(){
           toastModal(isEquipped?'已卸下':'已穿戴',eqCN(eObj));renderWarehouse();
         }catch(err){window.SFX&&SFX.fail();toastModal('操作失败',err.message);}
       };
-      $('edToForge').onclick=()=>{forgeSub=true;forgeSel=eObj.id;window.SFX&&SFX.tab();renderWarehouse();};
+      $('edToForge').onclick=()=>{clearWhBatch();forgeSub=true;forgeSel=eObj.id;window.SFX&&SFX.tab();renderWarehouse();};
       return;
     }
   }
@@ -1762,9 +1774,20 @@ function renderWarehouse(){
   const whGoods=wh.filter(it=>it.kind!=='equip');
   const bagGoods=Object.entries((state&&state.ext&&state.ext.bag)||{}).filter(([k,v])=>(v|0)>0);
   const slotIco={weapon:ICON.sword(24,'#2a1c08'),helmet:ICON.helmet(24,'#2a1c08'),armor:ICON.armor(24,'#2a1c08'),trinket:ICON.ring(24,'#2a1c08')};
+  // v1.9.50 批量选择模式：whBatch='in'|'out'|'dec'；whBatchSel 存 'eq:<id>'/'mat:<id>'
+  const batchOn=!!whBatch;
+  const isSel=(kind,id)=>whBatchSel.has(kind+':'+id);
+  const selCls=(kind,id)=>isSel(kind,id)?' wh-sel':'';
+  const batchLabel=whBatch==='in'?'存入':whBatch==='out'?'取出':'分解';
+  const batchBar=batchOn?`
+    <div class="wh-batchbar" id="whBatchBar">
+      <div class="wbb-line"><b>批量${batchLabel} · 选择模式</b><span>点击物品勾选，再次点击取消勾选</span></div>
+      <div class="wbb-line wbb-actions"><span class="wbb-count">已选 <b id="wbbCount">${whBatchSel.size}</b> 件</span><button class="wbb-run" id="wbbRun">确认${batchLabel}</button><button class="wbb-cancel" id="wbbCancel">退出选择</button></div>
+    </div>`:'';
   body.innerHTML=`
     ${backHome}
     <button class="big-btn goldbtn" id="openForge" style="width:100%">⚒ 强化工坊 · 强化 / 升品装备（数值对比 · 品质进阶 · 消耗）</button>
+    ${batchBar}
     <div class="wh-confirm hidden" id="whConfirm">
       <span class="wh-c-name" id="whCName"></span>
       <input id="whQtyInput" type="number" min="1" value="1">
@@ -1772,33 +1795,46 @@ function renderWarehouse(){
       <button class="wh-mini btn-gray" id="whNo">取消</button>
       <button class="wh-mini wh-ok" id="whYes">确定</button>
     </div>
-    <div class="sec-title">背包 · 装备 <span class="sec-sub" style="display:inline">（未穿戴 ${bagEq.length} 件 · 点击装备直接存入）</span><button class="wh-batch" id="batchIn">⇪ 批量存入（装备+材料）</button></div>
+    <div class="sec-title">背包 · 装备 <span class="sec-sub" style="display:inline">（未穿戴 ${bagEq.length} 件 · ${batchOn?(whBatch==='in'?'点击勾选存入':'当前不可选'):'点击装备直接存入'}）</span><button class="wh-batch ${whBatch==='in'?'on':''}" id="batchIn">⇪ 批量存入</button></div>
     <div class="wg-grid">${bagEq.map(e=>`
-      <div class="wg-cell equip" data-in="${e.id}">
+      <div class="wg-cell equip${batchOn&&whBatch==='in'?selCls('eq',e.id):''}" data-in="${e.id}" data-selkey="eq:${e.id}">
         <div class="wgi" style="background:#b8862f">${slotIco[e.slot]||ICON.sword(24,'#2a1c08')}</div>${eqCN(e)} +${e.enhance||0}<div class="wq">x1</div>
         ${wcTag(e)||''}
         ${pwBadge(e)||''}
         <span class="wg-detail" data-detail="${e.slot}">详情</span>
       </div>`).join('')||'<div class="sec-sub">背包暂无未穿戴装备</div>'}</div>
-    <div class="sec-title">背包 · 材料与消耗品 <span class="sec-sub" style="display:inline">（点击选择数量存入）</span></div>
+    <div class="sec-title">背包 · 材料与消耗品 <span class="sec-sub" style="display:inline">（${batchOn&&whBatch==='in'?'点击勾选存入':'点击选择数量存入'}）</span></div>
     <div class="wg-grid">${bagGoods.map(([id,n])=>`
-      <div class="wg-cell" data-gin="${id}" data-n="${n|0}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
-    <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · 点击装备取出 · 点 ♻ 分解换金币/材料）</span><button class="wh-batch" id="batchDec" ${whEq.length?'':'disabled style="opacity:.45"'}>♻ 批量分解全部（${whEq.length} 件）</button><button class="wh-batch" id="batchOut">⇩ 批量取出（装备+材料）</button></div>
+      <div class="wg-cell${batchOn&&whBatch==='in'?selCls('mat',id):''}" data-gin="${id}" data-n="${n|0}" data-selkey="mat:${id}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
+    <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · ${batchOn?(whBatch==='out'||whBatch==='dec'?'点击勾选':'当前不可选'):'点击装备取出 · 点 ♻ 分解换金币/材料'}）</span><button class="wh-batch ${whBatch==='dec'?'on':''}" id="batchDec" ${whEq.length?'':'disabled style="opacity:.45"'}>♻ 批量分解</button><button class="wh-batch ${whBatch==='out'?'on':''}" id="batchOut">⇩ 批量取出</button></div>
     <div class="wg-grid">${whEq.map(it=>{
       const e=it.equip||{};
       const DEC=[40,120,300,800,2000], MAT=[10,30,80,200,500], qi=Math.max(0,Math.min(4,e.quality||0));
-      return `<div class="wg-cell equip" data-out="${it.id}">
+      return `<div class="wg-cell equip${batchOn&&(whBatch==='out'||whBatch==='dec')?selCls('eq',it.id):''}" data-out="${it.id}" data-selkey="eq:${it.id}">
         <div class="wgi" style="background:#b8862f">${slotIco[e.slot]||ICON.sword(24,'#2a1c08')}</div>${eqCN(e)}${e.enhance?(' +'+e.enhance):''}<div class="wq">x1</div>
         ${pwBadge(it.equip)||''}
         <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金+${MAT[qi]||10}材</span>
       </div>`;}).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
-    <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · 点击选择数量取出）</span></div>
+    <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · ${batchOn&&whBatch==='out'?'点击勾选取出':'点击选择数量取出'}）</span></div>
     <div class="wg-grid">${whGoods.map(it=>`
-      <div class="wg-cell" data-gout="${it.id}" data-n="${it.qty}"><div class="wgi" style="background:${it.kind==='consume'?'#5fd38a':'#8892a4'}">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(it.id)}<div class="wq">x${it.qty}</div></div>`).join('')||'<div class="sec-sub">空</div>'}</div>
+      <div class="wg-cell${batchOn&&whBatch==='out'?selCls('mat',it.id):''}" data-gout="${it.id}" data-n="${it.qty}" data-selkey="mat:${it.id}"><div class="wgi" style="background:${it.kind==='consume'?'#5fd38a':'#8892a4'}">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(it.id)}<div class="wq">x${it.qty}</div></div>`).join('')||'<div class="sec-sub">空</div>'}</div>
     <div class="wh-flash hidden" id="whFlash"></div>`;
   // 轻量浮条（替代弹窗提示，2.2 秒自动消失，不阻塞操作）
   const flash=(msg)=>{ const f=$('whFlash'); if(!f)return; f.textContent=msg; f.classList.remove('hidden');
     clearTimeout(f._t); f._t=setTimeout(()=>f.classList.add('hidden'),2200); };
+  // v1.9.50 批量选择：切换勾选（只改 DOM class + 计数，不整页重绘，保留勾选态）
+  const pickToggle=(el,key)=>{
+    if(whBatchSel.has(key)){ whBatchSel.delete(key); el.classList.remove('wh-sel'); }
+    else{ whBatchSel.add(key); el.classList.add('wh-sel'); }
+    const cnt=$('wbbCount'); if(cnt)cnt.textContent=whBatchSel.size;
+    window.SFX&&SFX.tab&&SFX.tab();
+  };
+  const updateBatchCount=()=>{ const cnt=$('wbbCount'); if(cnt)cnt.textContent=whBatchSel.size; };
+  const enterBatch=(mode)=>{
+    // 严格检测：切换批量类型时清空旧勾选；点同一按钮则退出
+    if(whBatch===mode){ clearWhBatch(); renderWarehouse(); flash('已退出批量选择'); return; }
+    whBatch=mode; whBatchSel.clear(); window.SFX&&SFX.tab&&SFX.tab(); renderWarehouse();
+  };
   // 单次存取（服务端权威，成功后刷新面板再浮条反馈）
   const doWh=async(action,itemId,qty,name)=>{
     try{
@@ -1834,6 +1870,7 @@ function renderWarehouse(){
   body.querySelectorAll('.wg-detail.dec').forEach(el=>{
     el.onclick=(ev)=>{
       ev.stopPropagation();  // 不触发外层"取出"
+      if(whBatch){ flash('批量模式下请点击装备本体勾选，或用「确认分解」执行'); return; }
       const id=el.dataset.dec;
       const it=(state.warehouse||[]).find(x=>x.id===id&&!x.hidden&&x.kind==='equip');
       const e=it&&it.equip||{};
@@ -1854,72 +1891,91 @@ function renderWarehouse(){
       };
     };
   });
-  // v1.9.41 批量分解：仓库全部装备一键分解（弹窗汇总总收益，服务端权威）
+  // v1.9.50 批量按钮：进入/切换选择模式（不再一键全执行）
   const bdBtn=$('batchDec');
-  if(bdBtn)bdBtn.onclick=async()=>{
-    const list=(state.warehouse||[]).filter(x=>x.kind==='equip'&&!x.hidden);
-    if(!list.length){ flash('仓库没有装备可分解'); return; }
-    let tg=0,tm=0;
-    list.forEach(x=>{ const s=decEst(x.equip||{}); tg+=s.gold; tm+=s.mat; });
-    showModal(`<h2>批量分解装备</h2><div class="msub">将仓库全部 <b style="color:#f0d590">${list.length} 件装备</b> 一次性分解？<br>预计返还 <b style="color:#ffd76b">${fmt(tg)} 金币</b> + <b style="color:#9ad6ff">${tm} 材料</b><br><span style="font-size:12px;color:#8a93a6">分解后全部装备消失，无法找回</span></div>
-      <div class="divider"></div>
-      <div class="enc-btns"><button class="btn-red" id="doBatchDec">全部分解（${list.length} 件）</button><button class="btn-gray" id="cancelBatchDec">再想想</button></div>`);
-    $('cancelBatchDec').onclick=hideModal;
-    $('doBatchDec').onclick=async()=>{
-      try{
-        const r=await api('/api/player/action',{userId:uid(),action:'storage_decompose',all:true});
-        hideModal();
-        if(r.state){state=r.state;syncHud();}
-        window.SFX&&SFX.coin&&SFX.coin();
-        toastModal('批量分解成功','分解 '+r.decomposed+' 件装备 → 金币 +'+fmt(r.goldGain)+' · 材料 +'+r.matGain);
-        renderPanel();
-      }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('批量分解失败',err.message); }
-    };
-  };
+  if(bdBtn)bdBtn.onclick=()=>{ if(!whEq.length&&whBatch!=='dec'){flash('仓库没有装备可分解');return;} enterBatch('dec'); };
   const openForgeBtn=$('openForge');
-  if(openForgeBtn)openForgeBtn.onclick=()=>{forgeSub=true;forgeSel=null;window.SFX&&SFX.tab();renderWarehouse();};
-  // 背包装备 → 点击直接存入；仓库装备 → 点击直接取出（不可堆叠，无需数量确认，不弹窗）
+  if(openForgeBtn)openForgeBtn.onclick=()=>{clearWhBatch();forgeSub=true;forgeSel=null;window.SFX&&SFX.tab();renderWarehouse();};
+  // v1.9.50 背包装备：批量模式=勾选；否则点击直接存入
   body.querySelectorAll('.wg-cell[data-in]').forEach(el=>el.onclick=()=>{
     const id=el.dataset.in;
+    if(whBatch){ if(whBatch!=='in'){flash('当前为批量'+batchLabel+'模式，背包装备不可选');return;} pickToggle(el,'eq:'+id); return; }
     doWh('wh_equip_in',id,1,eqCN((state.equip||[]).find(x=>x.id===id)||{}));
   });
+  // v1.9.50 仓库装备：批量模式=勾选（取出/分解）；否则点击直接取出
   body.querySelectorAll('.wg-cell[data-out]').forEach(el=>el.onclick=()=>{
     const id=el.dataset.out;
+    if(whBatch){ if(whBatch!=='out'&&whBatch!=='dec'){flash('当前为批量存入模式，仓库装备不可选');return;} pickToggle(el,'eq:'+id); return; }
     const it=wh.find(x=>x.id===id);
     doWh('wh_equip_out',id,1,eqCN((it&&it.equip)||{}));
   });
-  // 可堆叠材料/消耗品 → 点击打开数量确认条
-  body.querySelectorAll('.wg-cell[data-gin]').forEach(el=>el.onclick=()=>openConfirm(el.dataset.gin,el.dataset.n|0,'deposit',itemCN(el.dataset.gin)));
-  body.querySelectorAll('.wg-cell[data-gout]').forEach(el=>el.onclick=()=>openConfirm(el.dataset.gout,el.dataset.n|0,'withdraw',itemCN(el.dataset.gout)));
+  // v1.9.50 背包材料：批量模式=勾选（存入，整份）；否则打开数量确认条
+  body.querySelectorAll('.wg-cell[data-gin]').forEach(el=>el.onclick=()=>{
+    if(whBatch){ if(whBatch!=='in'){flash('当前为批量'+batchLabel+'模式，背包材料不可选');return;} pickToggle(el,'mat:'+el.dataset.gin); return; }
+    openConfirm(el.dataset.gin,el.dataset.n|0,'deposit',itemCN(el.dataset.gin));
+  });
+  // v1.9.50 仓库材料：批量模式=勾选（取出，整份）；否则打开数量确认条
+  body.querySelectorAll('.wg-cell[data-gout]').forEach(el=>el.onclick=()=>{
+    if(whBatch){ if(whBatch!=='out'){flash('当前为批量'+batchLabel+'模式，仓库材料不可选');return;} pickToggle(el,'mat:'+el.dataset.gout); return; }
+    openConfirm(el.dataset.gout,el.dataset.n|0,'withdraw',itemCN(el.dataset.gout));
+  });
   // 详情角标（穿戴/强化入口，不触发存入）
   body.querySelectorAll('.wg-detail[data-detail]').forEach(el=>el.onclick=ev=>{
     ev.stopPropagation();
+    clearWhBatch();  // v1.9.50 严格检测：进入装备详情即退出批量模式
     equipDetailSlot=el.dataset.detail;
     window.SFX&&SFX.tab();
     renderWarehouse();
   });
-  // 批量存取：顺序调用现有单件接口，全部完成统一刷新 + 汇总浮条（中途失败则提示已完成部分）
-  const batch=async(dir)=>{
-    const bIn=$('batchIn'),bOut=$('batchOut');
-    if(bIn)bIn.disabled=true; if(bOut)bOut.disabled=true;
-    let eqN=0,matN=0,err='';
-    try{
-      if(dir==='in'){
-        for(const e of bagEq){ const r=await api('/api/player/action',{userId:uid(),action:'wh_equip_in',itemId:e.id}); if(r.state){state=r.state;syncHud();} eqN++; }
-        for(const [id,n] of bagGoods){ const r=await api('/api/player/action',{userId:uid(),action:'deposit',itemId:id,qty:n|0}); if(r.state){state=r.state;syncHud();} matN++; }
-      }else{
-        for(const it of whEq){ const r=await api('/api/player/action',{userId:uid(),action:'wh_equip_out',itemId:it.id}); if(r.state){state=r.state;syncHud();} eqN++; }
-        for(const it of whGoods){ const r=await api('/api/player/action',{userId:uid(),action:'withdraw',itemId:it.id,qty:it.qty}); if(r.state){state=r.state;syncHud();} matN++; }
-      }
-    }catch(e){ err=e.message; }
-    renderPanel();
-    window.SFX&&SFX.bagIn();
-    flash((dir==='in'?'批量存入完成':'批量取出完成')+
-      '：装备 '+eqN+' 件 · 材料 '+matN+' 种'+(err?('（部分失败：'+err+'）'):''));
+  $('batchIn').onclick=()=>enterBatch('in');
+  $('batchOut').onclick=()=>enterBatch('out');
+  // v1.9.50 退出选择：严格检测（按钮/返回家园/面板切换均已清模式）
+  const wbbCancel=$('wbbCancel');
+  if(wbbCancel)wbbCancel.onclick=()=>{clearWhBatch();renderWarehouse();flash('已退出批量选择');};
+  // v1.9.50 确认执行：只处理勾选中的物品（服务端权威，逐件调用现有单件接口）
+  const wbbRun=$('wbbRun');
+  if(wbbRun)wbbRun.onclick=()=>{
+    if(!whBatchSel.size){flash('请先勾选要操作的物品');return;}
+    const mode=whBatch;
+    const keys=[...whBatchSel];
+    const exec=async()=>{
+      wbbRun.disabled=true;
+      let eqN=0,matN=0,tg=0,tm=0,err='';
+      try{
+        for(const key of keys){
+          const [kind,id]=key.split(':');
+          if(mode==='in'){
+            if(kind==='eq'){ const r=await api('/api/player/action',{userId:uid(),action:'wh_equip_in',itemId:id}); if(r.state){state=r.state;syncHud();} eqN++; }
+            else{ const n=(bagGoods.find(x=>x[0]===id)||[id,1])[1]|0; const r=await api('/api/player/action',{userId:uid(),action:'deposit',itemId:id,qty:n}); if(r.state){state=r.state;syncHud();} matN++; }
+          }else if(mode==='out'){
+            if(kind==='eq'){ const r=await api('/api/player/action',{userId:uid(),action:'wh_equip_out',itemId:id}); if(r.state){state=r.state;syncHud();} eqN++; }
+            else{ const it=whGoods.find(x=>x.id===id); const r=await api('/api/player/action',{userId:uid(),action:'withdraw',itemId:id,qty:it?it.qty:1}); if(r.state){state=r.state;syncHud();} matN++; }
+          }else{ // dec：批量分解勾选项，逐件服务端权威结算
+            const r=await api('/api/player/action',{userId:uid(),action:'storage_decompose',itemId:id});
+            if(r.state){state=r.state;syncHud();}
+            tg+=(r.goldGain||0); tm+=(r.matGain||0); eqN++;
+          }
+        }
+      }catch(e){ err=e.message; }
+      hideModal(); clearWhBatch();
+      renderPanel();
+      window.SFX&&(mode==='dec'?SFX.coin&&SFX.coin():SFX.bagIn&&SFX.bagIn());
+      if(mode==='dec') toastModal('批量分解成功','分解 '+eqN+' 件装备 → 金币 +'+fmt(tg)+' · 材料 +'+tm+(err?'（部分失败：'+err+'）':''));
+      else flash((mode==='in'?'批量存入完成':'批量取出完成')+'：装备 '+eqN+' 件 · 材料 '+matN+' 种'+(err?'（部分失败：'+err+'）':''));
+    };
+    // 分解不可逆：确认弹窗汇总收益（存入/取出直接执行）
+    if(mode==='dec'){
+      let tg=0,tm=0;
+      keys.forEach(k=>{ const [kind,id]=k.split(':'); if(kind!=='eq')return;
+        const it=wh.find(x=>x.id===id&&x.kind==='equip'); if(it){const s=decEst(it.equip||{});tg+=s.gold;tm+=s.mat;} });
+      showModal(`<h2>批量分解装备</h2><div class="msub">将勾选的 <b style="color:#f0d590">${keys.length} 件装备</b> 分解？<br>预计返还 <b style="color:#ffd76b">${fmt(tg)} 金币</b> + <b style="color:#9ad6ff">${tm} 材料</b><br><span style="font-size:12px;color:#8a93a6">分解后装备消失，无法找回</span></div>
+        <div class="divider"></div>
+        <div class="enc-btns"><button class="btn-red" id="doBatchDecConfirm">确认分解</button><button class="btn-gray" id="cancelBatchDec">再想想</button></div>`);
+      $('cancelBatchDec').onclick=()=>{hideModal();wbbRun.disabled=false;};
+      $('doBatchDecConfirm').onclick=exec;
+    }else exec();
   };
-  $('batchIn').onclick=()=>batch('in');
-  $('batchOut').onclick=()=>batch('out');
-  if(inHome)$('backToHome').onclick=()=>{homeSub=null;renderHome();};
+  if(inHome)$('backToHome').onclick=()=>{clearWhBatch();homeSub=null;renderHome();};
 }
 function renderMap(){
   const body=$('panelBody');

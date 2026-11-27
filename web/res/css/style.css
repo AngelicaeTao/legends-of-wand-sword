@@ -923,7 +923,26 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .wh-mini.wh-ok{background:#b8862f;color:#241a06;font-weight:700;border-color:#b8862f}
 .wh-batch{margin-left:auto;background:#22304a;color:#9fc0e8;border:1px solid #3a4a63;border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer}
 .wh-batch:hover{background:#2c3d5e}
+.wh-batch.on{background:#b8862f;color:#241a06;border-color:#f0d590;font-weight:700}
 .wh-batch:disabled{opacity:.45;cursor:not-allowed}
+/* v1.9.50 仓库批量选择模式：工具条 + 勾选态（勾直接绘在贴图.wgi 上） */
+.wh-batchbar{background:linear-gradient(90deg,#2a2214,#1b2436);border:1px solid #b8862f;border-radius:10px;padding:9px 12px;margin:8px 0 12px}
+.wh-batchbar .wbb-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.wh-batchbar .wbb-line b{color:#f0d590;font-size:14px}
+.wh-batchbar .wbb-line span{color:#9fb0c8;font-size:12px}
+.wh-batchbar .wbb-actions{margin-top:8px;justify-content:flex-end}
+.wh-batchbar .wbb-count{margin-right:auto;color:#cfe0f5;font-size:13px}
+.wh-batchbar .wbb-count b{color:#f0d590;font-size:16px}
+.wbb-run,.wbb-cancel{padding:6px 16px;font-size:13px;border-radius:6px;cursor:pointer;border:1px solid #3a4a63}
+.wbb-run{background:#b8862f;color:#241a06;font-weight:700;border-color:#f0d590}
+.wbb-run:disabled{opacity:.5;cursor:not-allowed}
+.wbb-cancel{background:#22304a;color:#cfe0f5}
+.wg-cell.wh-sel{border-color:#5fd38a;background:rgba(95,211,138,.16);box-shadow:0 0 0 1px #5fd38a}
+.wg-cell.wh-sel .wgi::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,30,18,.62);color:#7dffa8;font-size:26px;font-weight:900;border-radius:8px;text-shadow:0 1px 3px #000}
+.wg-cell .wgi{position:relative}
+/* v1.9.50 工坊装备分组标题 */
+.forge-grp-t{grid-column:1/-1;font-size:12px;font-weight:700;color:#9fb0c8;letter-spacing:.5px;padding:4px 2px 1px;border-bottom:1px solid #2c3a52;margin-top:2px}
+.forge-grp-t.worn{color:#f0d590;border-bottom-color:#5a4820}
 .wh-flash{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(12,18,30,.94);color:#f0d590;border:1px solid #b8862f;padding:8px 18px;border-radius:20px;font-size:14px;z-index:9999;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5)}
 .wh-flash.hidden{display:none}
 
