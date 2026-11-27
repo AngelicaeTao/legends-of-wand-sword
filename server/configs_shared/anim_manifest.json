@@ -1,0 +1,383 @@
+{
+  "format": "proc_anim_v1",
+  "size": [
+    64,
+    96
+  ],
+  "footY": 94,
+  "note": "程序变换帧，零AI成本。root变换做不出肢体动作，见设计说明。所有数值[PLACEHOLDER]。",
+  "chars": {
+    "char_warrior": {
+      "base": "base_prop.png",
+      "pivot": [
+        32,
+        94
+      ],
+      "bright": [
+        199,
+        197,
+        191
+      ],
+      "actions": {
+        "idle": [
+          "idle_f00.png",
+          "idle_f01.png",
+          "idle_f02.png",
+          "idle_f03.png"
+        ],
+        "walk": [
+          "walk_f00.png",
+          "walk_f01.png",
+          "walk_f02.png",
+          "walk_f03.png"
+        ],
+        "attack": [
+          "attack_f00.png",
+          "attack_f01.png",
+          "attack_f02.png",
+          "attack_f03.png"
+        ],
+        "cast": [
+          "cast_f00.png",
+          "cast_f01.png",
+          "cast_f02.png",
+          "cast_f03.png"
+        ],
+        "hit": [
+          "hit_f00.png",
+          "hit_f01.png",
+          "hit_f02.png",
+          "hit_f03.png"
+        ],
+        "death": [
+          "death_f00.png",
+          "death_f01.png",
+          "death_f02.png",
+          "death_f03.png"
+        ],
+        "victory": [
+          "victory_f00.png",
+          "victory_f01.png",
+          "victory_f02.png",
+          "victory_f03.png"
+        ],
+        "celebrate": [
+          "celebrate_f00.png",
+          "celebrate_f01.png",
+          "celebrate_f02.png",
+          "celebrate_f03.png"
+        ]
+      }
+    },
+    "char_knight": {
+      "base": "base_prop.png",
+      "pivot": [
+        32,
+        94
+      ],
+      "bright": [
+        203,
+        202,
+        199
+      ],
+      "actions": {
+        "idle": [
+          "idle_f00.png",
+          "idle_f01.png",
+          "idle_f02.png",
+          "idle_f03.png"
+        ],
+        "walk": [
+          "walk_f00.png",
+          "walk_f01.png",
+          "walk_f02.png",
+          "walk_f03.png"
+        ],
+        "attack": [
+          "attack_f00.png",
+          "attack_f01.png",
+          "attack_f02.png",
+          "attack_f03.png"
+        ],
+        "cast": [
+          "cast_f00.png",
+          "cast_f01.png",
+          "cast_f02.png",
+          "cast_f03.png"
+        ],
+        "hit": [
+          "hit_f00.png",
+          "hit_f01.png",
+          "hit_f02.png",
+          "hit_f03.png"
+        ],
+        "death": [
+          "death_f00.png",
+          "death_f01.png",
+          "death_f02.png",
+          "death_f03.png"
+        ],
+        "victory": [
+          "victory_f00.png",
+          "victory_f01.png",
+          "victory_f02.png",
+          "victory_f03.png"
+        ],
+        "celebrate": [
+          "celebrate_f00.png",
+          "celebrate_f01.png",
+          "celebrate_f02.png",
+          "celebrate_f03.png"
+        ]
+      }
+    },
+    "char_mage": {
+      "base": "base_prop.png",
+      "pivot": [
+        32,
+        94
+      ],
+      "bright": [
+        234,
+        242,
+        223
+      ],
+      "actions": {
+        "idle": [
+          "idle_f00.png",
+          "idle_f01.png",
+          "idle_f02.png",
+          "idle_f03.png"
+        ],
+        "walk": [
+          "walk_f00.png",
+          "walk_f01.png",
+          "walk_f02.png",
+          "walk_f03.png"
+        ],
+        "attack": [
+          "attack_f00.png",
+          "attack_f01.png",
+          "attack_f02.png",
+          "attack_f03.png"
+        ],
+        "cast": [
+          "cast_f00.png",
+          "cast_f01.png",
+          "cast_f02.png",
+          "cast_f03.png"
+        ],
+        "hit": [
+          "hit_f00.png",
+          "hit_f01.png",
+          "hit_f02.png",
+          "hit_f03.png"
+        ],
+        "death": [
+          "death_f00.png",
+          "death_f01.png",
+          "death_f02.png",
+          "death_f03.png"
+        ],
+        "victory": [
+          "victory_f00.png",
+          "victory_f01.png",
+          "victory_f02.png",
+          "victory_f03.png"
+        ],
+        "celebrate": [
+          "celebrate_f00.png",
+          "celebrate_f01.png",
+          "celebrate_f02.png",
+          "celebrate_f03.png"
+        ]
+      }
+    },
+    "char_fighter": {
+      "base": "base_prop.png",
+      "pivot": [
+        32,
+        94
+      ],
+      "bright": [
+        225,
+        172,
+        134
+      ],
+      "actions": {
+        "idle": [
+          "idle_f00.png",
+          "idle_f01.png",
+          "idle_f02.png",
+          "idle_f03.png"
+        ],
+        "walk": [
+          "walk_f00.png",
+          "walk_f01.png",
+          "walk_f02.png",
+          "walk_f03.png"
+        ],
+        "attack": [
+          "attack_f00.png",
+          "attack_f01.png",
+          "attack_f02.png",
+          "attack_f03.png"
+        ],
+        "cast": [
+          "cast_f00.png",
+          "cast_f01.png",
+          "cast_f02.png",
+          "cast_f03.png"
+        ],
+        "hit": [
+          "hit_f00.png",
+          "hit_f01.png",
+          "hit_f02.png",
+          "hit_f03.png"
+        ],
+        "death": [
+          "death_f00.png",
+          "death_f01.png",
+          "death_f02.png",
+          "death_f03.png"
+        ],
+        "victory": [
+          "victory_f00.png",
+          "victory_f01.png",
+          "victory_f02.png",
+          "victory_f03.png"
+        ],
+        "celebrate": [
+          "celebrate_f00.png",
+          "celebrate_f01.png",
+          "celebrate_f02.png",
+          "celebrate_f03.png"
+        ]
+      }
+    },
+    "char_sage": {
+      "base": "base_prop.png",
+      "pivot": [
+        32,
+        94
+      ],
+      "bright": [
+        240,
+        235,
+        213
+      ],
+      "actions": {
+        "idle": [
+          "idle_f00.png",
+          "idle_f01.png",
+          "idle_f02.png",
+          "idle_f03.png"
+        ],
+        "walk": [
+          "walk_f00.png",
+          "walk_f01.png",
+          "walk_f02.png",
+          "walk_f03.png"
+        ],
+        "attack": [
+          "attack_f00.png",
+          "attack_f01.png",
+          "attack_f02.png",
+          "attack_f03.png"
+        ],
+        "cast": [
+          "cast_f00.png",
+          "cast_f01.png",
+          "cast_f02.png",
+          "cast_f03.png"
+        ],
+        "hit": [
+          "hit_f00.png",
+          "hit_f01.png",
+          "hit_f02.png",
+          "hit_f03.png"
+        ],
+        "death": [
+          "death_f00.png",
+          "death_f01.png",
+          "death_f02.png",
+          "death_f03.png"
+        ],
+        "victory": [
+          "victory_f00.png",
+          "victory_f01.png",
+          "victory_f02.png",
+          "victory_f03.png"
+        ],
+        "celebrate": [
+          "celebrate_f00.png",
+          "celebrate_f01.png",
+          "celebrate_f02.png",
+          "celebrate_f03.png"
+        ]
+      }
+    },
+    "char_warlock": {
+      "base": "base_prop.png",
+      "pivot": [
+        32,
+        94
+      ],
+      "bright": [
+        199,
+        154,
+        157
+      ],
+      "actions": {
+        "idle": [
+          "idle_f00.png",
+          "idle_f01.png",
+          "idle_f02.png",
+          "idle_f03.png"
+        ],
+        "walk": [
+          "walk_f00.png",
+          "walk_f01.png",
+          "walk_f02.png",
+          "walk_f03.png"
+        ],
+        "attack": [
+          "attack_f00.png",
+          "attack_f01.png",
+          "attack_f02.png",
+          "attack_f03.png"
+        ],
+        "cast": [
+          "cast_f00.png",
+          "cast_f01.png",
+          "cast_f02.png",
+          "cast_f03.png"
+        ],
+        "hit": [
+          "hit_f00.png",
+          "hit_f01.png",
+          "hit_f02.png",
+          "hit_f03.png"
+        ],
+        "death": [
+          "death_f00.png",
+          "death_f01.png",
+          "death_f02.png",
+          "death_f03.png"
+        ],
+        "victory": [
+          "victory_f00.png",
+          "victory_f01.png",
+          "victory_f02.png",
+          "victory_f03.png"
+        ],
+        "celebrate": [
+          "celebrate_f00.png",
+          "celebrate_f01.png",
+          "celebrate_f02.png",
+          "celebrate_f03.png"
+        ]
+      }
+    }
+  }
+}

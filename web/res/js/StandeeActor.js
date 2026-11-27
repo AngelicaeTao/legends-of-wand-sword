@@ -16,23 +16,37 @@
   'use strict';
 
   const BASE = '/res/characters/parts/';
-  const cache = new Map(); // bundle -> {ready, parts, actions, img, tint}
+  const cache = new Map(); // bundle -> {ready, parts, actions, img, tint, frames}
 
   function loadBundle(bundle) {
     if (cache.has(bundle)) return cache.get(bundle);
-    const entry = { bundle, ready: null, img: null, tint: null };
+    const entry = { bundle, ready: null, img: null, tint: null, frames: {} };
     const p = fetch(BASE + bundle + '/parts.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
     const a = fetch(BASE + bundle + '/actions.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
     entry.ready = Promise.all([p, a]).then(([parts, actions]) => {
       entry.parts = parts || {};
       entry.actions = actions || { states: {} };
       const file = (parts && parts.sprite && parts.sprite.file) || (bundle + '_standee.png');
-      return new Promise(res => {
+      // v1.9.49: 逐帧序列（若 actions.json 某状态带 frames 字段则优先使用）
+      const states = entry.actions.states || {};
+      const jobs = [new Promise(res => {
         const im = new Image();
         im.onload = () => { entry.img = im; res(); };
         im.onerror = () => { entry.img = null; res(); };
         im.src = BASE + bundle + '/' + file;
-      });
+      })];
+      for (const st of Object.values(states)) {
+        if (!st.frames) continue;
+        for (const fn of st.frames) {
+          jobs.push(new Promise(res => {
+            const im = new Image();
+            im.onload = () => { entry.frames[fn] = im; res(); };
+            im.onerror = () => { res(); };
+            im.src = BASE + bundle + '/frames/' + fn;
+          }));
+        }
+      }
+      return Promise.all(jobs);
     });
     cache.set(bundle, entry);
     return entry;
@@ -68,7 +82,9 @@
     async init() { await this.entry.ready; return this; }
 
     play(state, onDone) {
-      const st = this.entry.actions && this.entry.actions.states[state];
+      let st = this.entry.actions && this.entry.actions.states[state];
+      // v1.9.49: 动作名别名（游戏用 die，新帧包用 death）
+      if (!st && state === 'die') st = this.entry.actions && this.entry.actions.states['death'];
       if (!st) return;
       this.state = state;
       this.loop = !!st.loop;
@@ -80,7 +96,10 @@
     /** 采样 root 变换（零分配，写入并复用 this.cur） */
     _sample(now) {
       const acts = this.entry.actions;
-      const st = acts && acts.states[this.state];
+      let st = acts && acts.states[this.state];
+      if (!st && this.state === 'die') st = acts && acts.states['death'];
+      // v1.9.49: 帧序列状态不做 root 变换（动画已烘焙进帧）
+      if (st && st.frames && st.frames.length) return this.cur;
       if (!st || !st.keys || !st.keys.length) return null;
       const keys = st.keys;
       const dur = keys[keys.length - 1].t || 1;
@@ -112,8 +131,39 @@
      */
     render(ctx, x, y, scale = 1, opts = {}) {
       const e = this.entry;
+      const now = performance.now();
+      let st = e.actions && e.actions.states[this.state];
+      if (!st && this.state === 'die') st = e.actions && e.actions.states['death'];
+      // v1.9.49: 逐帧序列渲染
+      if (st && st.frames && st.frames.length) {
+        const imgs = st.frames.map(fn => e.frames[fn]).filter(Boolean);
+        if (!imgs.length) return;
+        const fps = st.fps || 3;
+        const dur = imgs.length * (1000 / fps);
+        let ms = now - this.t0;
+        if (st.loop) ms = ms % dur;
+        else if (ms >= dur) ms = dur - 1; // 单次动作停在末帧
+        const idx = Math.min(imgs.length - 1, Math.floor(ms / (1000 / fps)));
+        const im = imgs[idx];
+        const w = 64 * scale, h = 96 * scale;
+        const a = Math.max(0, Math.min(1, opts.alpha == null ? 1 : opts.alpha));
+        if (a < 0.02) return;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.imageSmoothingEnabled = w < im.naturalWidth;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.translate(x, y);
+        if ((opts.dir || 1) === -1) ctx.scale(-1, 1);
+        ctx.drawImage(im, -w / 2, -h, w, h);
+        ctx.restore();
+        // 单次动作结束回调
+        if (!st.loop && this.onDone && now - this.t0 >= dur) {
+          const cb = this.onDone; this.onDone = null; cb();
+        }
+        return;
+      }
       if (!e.img) return;
-      const tf = this._sample(performance.now());
+      const tf = this._sample(now);
       if (!tf) return;
       // 立绘 PNG = 逻辑尺寸 × 2
       const w = 64 * scale, h = 96 * scale;
