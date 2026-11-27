@@ -903,7 +903,7 @@ function openPanel(key){
   panel=key; equipDetailSlot=null; forgeSub=false; forgeSel=null; homeSub=null;
   clearWhBatch();  // v1.9.50 严格检测：切换/关闭任何面板即退出仓库批量模式
   worldMap.active=false;                                        // 面板期间冻结地图
-  const meta={role:'角色',home:'家园',dungeon:'副本',guild:'公会',map:'世界地图',warehouse:'仓库',idle:'挂机设置',bag:'背包'};
+  const meta={role:'角色',home:'家园',dungeon:'副本',guild:'公会',map:'世界地图',warehouse:'仓库',idle:'挂机设置',bag:'背包',shop:'商店'};
   $('panelTitle').textContent=meta[key]||'';
   $('panelSub').textContent='';
   renderPanel();
@@ -945,9 +945,13 @@ function syncHud(){
   const ef=$('expFill'), et=$('expTxt');
   if(ef){ ef.style.width=pct.toFixed(1)+'%'; }
   if(et){ et.textContent=`EXP ${fmt(exp)} / ${fmt(need)}`; }
-  $('worldLv').innerHTML=`Lv.${c.level} · 战力 ${fmt(power)} · ` +
-    `<b class="cur cur-gold">${ICON.gold(13)}<i>${fmt(c.gold)}</i></b>` +
-    `<b class="cur cur-gem">${ICON.gem(13)}<i>${fmt(c.gem)}</i></b>`;
+  $('worldLv').innerHTML=`Lv.${c.level} · 战力 ${fmt(power)}`;
+  // v1.9.53 金币/钻石/强化材料从角色条移到右上角独立显示（需求：不要和左上角角色放一起）
+  const hc=$('hudCurrency');
+  if(hc) hc.innerHTML=
+    `<b class="hc hc-gold" title="金币">${ICON.gold(15)}<em>金币</em><i>${fmt(c.gold)}</i></b>`+
+    `<b class="hc hc-gem" title="钻石">${ICON.gem(15)}<em>钻石</em><i>${fmt(c.gem)}</i></b>`+
+    `<b class="hc hc-mat" title="强化材料">${ICON.crystal(15,'#9ad6ff')}<em>材料</em><i>${fmt(c.material)}</i></b>`;
   const iconKey=(cdef&&cdef.icon)?cdef.icon.replace('ui_card_','').replace('.png',''):'warrior';
   $('worldClsIco').src=RES+'characters/cards/ui_card_'+iconKey+'.png';
   $('heroName').textContent=(c.name||'英雄')+' Lv.'+c.level;
@@ -1022,6 +1026,7 @@ function renderPanel(){
   if(panel==='dungeon') return renderMap();                     // v1.9.34 副本已并入地图面板
   if(panel==='guild') return renderGuild();
   if(panel==='map') return renderMap();
+  if(panel==='shop') return renderShop();                       // v1.9.53 商店面板
   // 兼容旧入口：仓库/挂机作为家园二级页
   if(panel==='warehouse') return renderWarehouse();
   if(panel==='idle') return renderIdle();
@@ -1029,6 +1034,79 @@ function renderPanel(){
 function tabRow(active){
   const tabs=[['info','角色'],['equip','装备栏'],['skill','技能'],['class','转职']];
   return `<div class="tab-row">${tabs.map(([k,n])=>`<button class="tab ${k===active?'on':''}" data-rtab="${k}">${n}</button>`).join('')}</div>`;
+}
+
+/* ---- 商店页（v1.9.53）：金币/钻石 → 强化材料 / 经验，兑换数量由玩家输入 ---- */
+const SHOP_ITEMS=[
+  {key:'material', pay:'gold', name:'强化材料', rate:'10 金币 / 件', per:10, def:10},
+  {key:'material', pay:'gem',  name:'强化材料', rate:'1 钻石 / 件',  per:1,  def:10},
+  {key:'exp',      pay:'gold', name:'经验',     rate:'1 金币 / 点',  per:1,  def:100},
+  {key:'exp',      pay:'gem',  name:'经验',     rate:'1 钻石 / 10 点', per:0.1, def:100}
+];
+// 钻石兑经验 1:10，必须按 10 的倍数；其余商品按整数件/点
+function shopNormQty(it, v){
+  const n=Math.max(0,Math.floor(Number(v)||0));
+  if(it.key==='exp'&&it.pay==='gem') return Math.max(10,Math.round(n/10)*10);
+  return n;
+}
+function shopCostOf(it, qty){
+  return (it.key==='exp'&&it.pay==='gem') ? qty/10 : qty*it.per;
+}
+function renderShop(){
+  $('panelTitle').textContent='商店';
+  $('panelSub').textContent='金币/钻石兑换强化材料与经验 · 数量自填';
+  const c=(state&&state.core)||{};
+  const cards=SHOP_ITEMS.map(it=>{
+    const id='sq_'+it.key+'_'+it.pay;
+    const have=(it.pay==='gold'?c.gold:c.gem)||0;
+    const own=(it.key==='material'?c.material:c.exp)||0;
+    return `<div class="shop-card">
+      <div class="sc-head"><span class="sc-name">${it.name}</span><span class="sc-rate">${it.rate}</span></div>
+      <div class="sc-have">持有 <b style="color:#f0d590">${fmt(have)}</b> ${it.pay==='gold'?'金币':'钻石'} · 现有${it.key==='material'?'材料':'经验'} ${fmt(own)}</div>
+      <div class="sc-buy">
+        <input id="${id}" type="number" min="1" max="1000000" step="${it.key==='exp'&&it.pay==='gem'?10:1}" value="${it.def}" inputmode="numeric">
+        <button data-shop="${it.key}|${it.pay}">兑换</button>
+      </div>
+      <div class="sc-cost" id="${id}_cost"></div>
+    </div>`;
+  }).join('');
+  $('panelBody').innerHTML=`<div class="sec-title">兑换商店</div>
+    <div class="sec-sub" style="margin-bottom:6px">材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）</div>
+    <div class="shop-grid">${cards}</div>
+    <div class="shop-tip">兑换即时到账：强化材料计入角色材料数（强化/升品时消耗）；经验直接加到当前等级进度，攒够会自动升级。</div>`;
+  SHOP_ITEMS.forEach(it=>{
+    const id='sq_'+it.key+'_'+it.pay;
+    const inp=$(id), costEl=$(id+'_cost'), btn=inp&&inp.parentElement.querySelector('button');
+    if(!inp||!costEl||!btn) return;
+    const upd=()=>{
+      const qty=shopNormQty(it, inp.value), cost=shopCostOf(it, qty);
+      const have=(it.pay==='gold'?c.gold:c.gem)||0;
+      costEl.innerHTML=`消耗 <b>${fmt(cost)}</b> ${it.pay==='gold'?'金币':'钻石'} · 可得 <b>${fmt(qty)}</b> ${it.key==='material'?'材料':'经验'}`;
+      btn.disabled=!(qty>0)||cost>have;
+    };
+    inp.oninput=upd;
+    inp.onchange=()=>{ if(it.key==='exp'&&it.pay==='gem') inp.value=shopNormQty(it,inp.value); upd(); };
+    btn.onclick=()=>shopBuy(it, inp);
+    upd();
+  });
+}
+async function shopBuy(it, inp){
+  const qty=shopNormQty(it, inp.value);
+  if(!(qty>0)){ toastModal('兑换失败','请输入大于 0 的兑换数量'); return; }
+  inp.value=qty;
+  try{
+    // 服务端权威：比例、扣费、入账都在后端算，前端只报商品/货币/数量
+    const r=await api('/api/player/action',{userId:uid(),action:'shop_exchange',shopItem:it.key,payWith:it.pay,qty});
+    if(r.state) state=r.state;
+    window.SFX&&SFX.coin();
+    syncHud();
+    await refreshStats();
+    renderShop();
+    toastModal('兑换成功',`消耗 ${fmt(r.cost)} ${it.pay==='gold'?'金币':'钻石'} → ${it.key==='material'?'强化材料':'经验'} +${fmt(r.got)}`);
+  }catch(e){
+    window.SFX&&SFX.fail();
+    toastModal('兑换失败', (e&&e.message)||String(e));
+  }
 }
 
 /* ---- 家园页（v1.6）：聚合 仓库 + 挂机 两个二级入口 ---- */
