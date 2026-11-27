@@ -65,7 +65,7 @@ func (p *PlayerState) autoDecomposeWorse(equips []game.EquipItem) (kept []game.E
 
 // ApplyBattleReport 把权威战报的奖励并入存档，返回事件日志。
 // 战斗结果由服务端结算，客户端只上传意图，因此这里只做"入账"。
-func ApplyBattleReport(p *PlayerState, rep game.BattleReport) []string {
+func ApplyBattleReport(p *PlayerState, rep *game.BattleReport) []string {
 	logs := []string{}
 	// v1.9.27 全局血量：战斗结束血量写回存档（战败保底 1 已在战报层兜底）
 	if rep.HeroHPEnd > 0 {
@@ -80,7 +80,14 @@ func ApplyBattleReport(p *PlayerState, rep game.BattleReport) []string {
 	logs = append(logs, fmt.Sprintf("战斗胜利：经验+%d 金币+%d（剩余血量 %.0f）", rep.Exp, rep.Gold, p.Core.HP))
 
 	// v1.9.46：低于同部位穿戴中战力的装备直接分解成金币+材料，不占背包
-	drops, dGold, dMat, _, dLogs := p.autoDecomposeWorse(rep.Drops)
+	// v1.9.54：分解结果回写进战报——被分解的不再出现在结算列表里，改由汇总行展示
+	drops, dGold, dMat, dN, dLogs := p.autoDecomposeWorse(rep.Drops)
+	rep.Drops = drops
+	if dN > 0 {
+		rep.DecomposedCount = dN
+		rep.DecomposedGold = dGold
+		rep.DecomposedMat = dMat
+	}
 	p.Core.Gold += dGold
 	p.Core.Material += dMat
 	logs = append(logs, dLogs...)

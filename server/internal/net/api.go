@@ -465,7 +465,7 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 	// v1.9.53 推进进度以存档为准（不接受客户端传值）：首领强度据此缩放
 	req.Progress = playerProgress(p)
 	rep := game.ResolveBattle(req)
-	logs := store.ApplyBattleReport(p, rep)
+	logs := store.ApplyBattleReport(p, &rep)
 	// v1.9.31 战败回家园：大世界战败后送回家园休整（记录来源世界，出门可返回）
 	if rep.Result != "win" && p.World.WorldID != "HOME" {
 		p.World.LastWorldID = p.World.WorldID

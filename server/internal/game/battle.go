@@ -54,6 +54,11 @@ type BattleReport struct {
 	Exp        int           `json:"exp"`
 	Gold       int           `json:"gold"`
 	Drops      []EquipItem   `json:"drops"`
+	// v1.9.54 低于同部位在穿战力的掉落已在入包前分解，不再出现在 drops 里；
+	// 这里只带汇总，前端据此显示"自动分解 N 件 · 金币 +X · 材料 +Y"。
+	DecomposedCount int `json:"decomposedCount,omitempty"`
+	DecomposedGold  int `json:"decomposedGold,omitempty"`
+	DecomposedMat   int `json:"decomposedMat,omitempty"`
 	Seconds    float64       `json:"seconds"`
 	Log        string        `json:"log"`
 	HeroHPStart float64      `json:"heroHpStart"` // v1.9.27 战斗开局血量（全局血量不回满）

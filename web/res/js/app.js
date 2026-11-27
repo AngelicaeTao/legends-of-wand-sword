@@ -2399,14 +2399,18 @@ function showBattleResult(rep,mon){
   if(win&&window.Quest)Quest.progress('kill',1);
   const slotCN={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
   // v1.9.53 装备掉落改为小格子（原每件一行，10 件以上会把结算弹窗撑出屏幕、领取按钮点不到）
+  // v1.9.54 按部位出图标（不再是通用背包图标）+ 完整名称；低于在穿战力已被服务端分解，只留汇总行
   const QUALCN=['普通','精良','稀有','史诗','传说','彩虹','暗影','混沌'];
+  const SLOTICON={weapon:ICON.sword,helmet:ICON.helmet,armor:ICON.armor,trinket:ICON.ring};
   const dl=rep.drops||[];
   const drops=dl.length?`<div class="drop-wrap"><div class="loot-title">装备掉落 · ${dl.length} 件</div><div class="loot-grid drop-grid">${dl.map(d=>{
     const q=Math.min(7,d.quality==null?0:d.quality), qc=QCOLOR[q], qn=QUALCN[q], sn=slotCN[d.slot]||d.slot;
-    return `<div class="loot-cell loot-eq" style="border-color:${qc}" title="${sn} · ${qn}${d.enhance?' +'+d.enhance:''}"><div class="loot-ico" style="background:${qc}">${ICON.bag(18,'#2a1c08')}</div><div class="loot-nm">${sn}</div><div class="loot-q" style="color:${qc}">${qn}</div></div>`;
+    const ic=(SLOTICON[d.slot]||ICON.bag)(24,qc);
+    return `<div class="loot-cell loot-eq" style="border-color:${qc}" title="${sn} · ${qn}${d.enhance?' +'+d.enhance:''}"><div class="loot-ico" style="border-color:${qc}">${ic}</div><div class="loot-nm">${sn}</div><div class="loot-q" style="color:${qc}">${qn}</div></div>`;
   }).join('')}</div></div>`:'';
+  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备）</i></span><em>金币 +${fmt(rep.decomposedGold||0)} · 材料 +${fmt(rep.decomposedMat||0)}</em></div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
-  const hpRow=(maxHp2>0)?('<div class="reward-row"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'（不自动回满 · 用回血药水/采草药恢复）</span></div>'):'';
+  const hpRow=(maxHp2>0)?('<div class="reward-row" title="不自动回满 · 用回血药水或采草药恢复"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
     <div class="msub">${win?'击败':'被击败于'} ${mon.name} · 用时 ${rep.seconds||0} 秒</div>
     <div class="divider"></div>
@@ -2415,6 +2419,7 @@ function showBattleResult(rep,mon){
       <div class="reward-row"><span class="rk">${ICON.book(14,'#8fb6e0')}<em>经验</em></span><span class="rv">+${fmt(rep.exp)}</span></div>
       <div class="reward-row"><span class="rk">${ICON.gold(14,'#f0c040')}<em>金币</em></span><span class="rv">+${fmt(rep.gold)}</span></div>
       ${drops}
+      ${decomp}
       <button class="big-btn goldbtn" id="resBtn">领取奖励 · 返回大世界</button>`:`
       ${(()=>{
         const last=(rep.rounds||[])[(rep.rounds||[]).length-1]||{};
