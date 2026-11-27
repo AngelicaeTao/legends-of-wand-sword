@@ -125,6 +125,7 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 
 	// 世界/点位/宝箱权威接口
 	mux.HandleFunc("/api/chest/open", chestOpen)
+	mux.HandleFunc("/api/chest/drop", chestDrop) // v1.9.45 怪物掉落宝箱登记（服务端掷档）
 	mux.HandleFunc("/api/potion/pick", potionPick) // v1.9.27 采集地图草药（回血药水）
 	mux.HandleFunc("/api/monster/kill", monsterKill)
 	mux.HandleFunc("/api/guild/list", guildList)

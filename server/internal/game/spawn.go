@@ -281,13 +281,15 @@ func (m *SpawnManager) EnsureChest(userID, worldID, nodeID string, tier int, x, 
 func (m *SpawnManager) OpenChest(userID, worldID, nodeID string) (SpotState, bool) {
 	m.mu.Lock(); defer m.mu.Unlock()
 	key := userID + "/" + worldID + "/" + nodeID
+	isDrop := strings.HasPrefix(nodeID, "drop_")
 	s, ok := m.chests[key]
 	if !ok {
-		// v1.9.25 兜底：此前两类合法开箱会被误判"冷却中"——
-		// ① 服务端重启后内存实例被清空，而客户端仍渲染着重启前的宝箱点位；
-		// ② 打怪掉落的宝箱（nodeId 为 drop_ 前缀，由客户端物理落袋生成，不在配置表里）。
-		// 仅当 nodeId 属于配置内宝箱点位或为掉落宝箱时按需创建（防伪造任意 ID 刷箱）。
-		if !m.configHasChest(worldID, nodeID) && !strings.HasPrefix(nodeID, "drop_") {
+		// v1.9.45：掉落箱必须先在 /api/chest/drop 登记（服务端掷档）；未登记一律拒绝，
+		// 避免客户端伪造 drop_ 前缀任意刷箱、或重复 roll 赌高价值档。
+		if isDrop {
+			return SpotState{}, false
+		}
+		if !m.configHasChest(worldID, nodeID) {
 			return SpotState{}, false
 		}
 		tier := m.rollContent("CHEST", key)
@@ -302,7 +304,55 @@ func (m *SpawnManager) OpenChest(userID, worldID, nodeID string) (SpotState, boo
 	}
 	s.Active = false
 	s.ReadyAt = ServerNow() + m.cooldownFor("CHEST")
+	out := *s
+	// v1.9.45：掉落箱一次性——开完即销毁，同名 nodeId 不可重复开启
+	if isDrop { delete(m.chests, key) }
+	return out, true
+}
+
+// RegisterDropChest 怪物掉落宝箱登记（v1.9.45）。
+// 服务端按 economy.drop.monsterChest 权重权威掷档位并建实例，客户端不再参与概率；
+// 同一 nodeId 只允许登记一次（防重复 roll 赌档），同玩家未开启的掉落箱上限 12 个（防批量刷箱）。
+func (m *SpawnManager) RegisterDropChest(userID, worldID, nodeID string, boss bool) (SpotState, bool) {
+	m.mu.Lock(); defer m.mu.Unlock()
+	key := userID + "/" + worldID + "/" + nodeID
+	if _, exists := m.chests[key]; exists { return SpotState{}, false }
+	n := 0
+	for k, st := range m.chests {
+		if strings.HasPrefix(k, userID+"/") && st.Active && strings.HasPrefix(st.NodeID, "drop_") { n++ }
+		if n >= 12 { return SpotState{}, false }
+	}
+	s := &SpotState{NodeID: nodeID, Type: "CHEST", Tier: m.rollDropTier(boss), Active: true,
+		ReadyAt: ServerNow(), ContentID: "chest"}
+	m.chests[key] = s
 	return *s, true
+}
+
+// rollDropTier 按 monsterChest 权重掷档位（1木 2银 3金 4钻石 5水晶）。
+// 保底（rollContent 的 8 次计数）对掉落箱不适用：每次掉落都是独立的一次抽取。
+func (m *SpawnManager) rollDropTier(boss bool) int {
+	prof := "normal"
+	if boss { prof = "boss" }
+	raw, _ := C().Economy.Drop["monsterChest"].(map[string]any)
+	w, _ := raw[prof].(map[string]any)
+	names := []string{"wood", "silver", "gold", "diamond", "crystal"}
+	vals := make([]float64, len(names))
+	total := 0.0
+	for i, n := range names {
+		vals[i] = numOf(w, n, 0)
+		total += vals[i]
+	}
+	if total <= 0 { // 配置缺失兜底：普通怪木箱、BOSS 金箱
+		if boss { return 3 }
+		return 1
+	}
+	r := m.rand.Float64() * total
+	acc := 0.0
+	for i, v := range vals {
+		acc += v
+		if r < acc { return i + 1 }
+	}
+	return 1
 }
 
 // configHasChest 判断该世界配置里是否存在指定 ID 的宝箱点位。
