@@ -2,7 +2,7 @@
 
 服务端权威的 Web 放置手游（Playable 原型）：Go 单二进制权威服务 + 原生 Canvas 部件动画前端，单端口同源部署，支持多端接入。
 
-当前最新代码归档版本：**v1.9.50**（`code/v1.9.50`，仓库批量勾选模式 + 工坊显示身上装备；含此前六职业 192 帧程序动画 + HUD 修复 + 服务端权威掷箱；美术最新为 assets/v1.9.44；历史归档分支保留，按需拉取）。
+当前最新代码归档版本：**v1.9.50**（`code/v1.9.50`，仓库批量勾选模式 + 工坊显示身上装备；含此前六职业 192 帧程序动画 + HUD 修复 + 服务端权威掷箱；美术最新为 `assets/v1.9.48-integrated` 清理版；历史归档分支保留，按需拉取）。
 
 ## 分支说明
 
@@ -77,7 +77,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 # 游戏内容与数值设计 · 逐字段完整总结（v2 · 2026-11-26 编纂）
 
 > 本节把游戏**每一个系统、每一个字段、每一条数值**逐项摊开写，不再概括。分两部分：
-> **Part A · 已上线实际版本**——从 `code/v1.9.44` 分支配置逐字段实测提取（含每个职业倍率、每个技能 CD/威力、每个怪物基础值、每个世界点位坐标）；
+> **Part A · 已上线实际版本**——从 `code/v1.9.50` 分支配置逐字段实测提取（含每个职业倍率、每个技能 CD/威力、每个怪物基础值、每个世界点位坐标）；
 > **Part B · 设计档案**——需求/地图/角色/动画/宝箱文档的决策、公式、验证路径与 rationale。
 >
 > **数值纪律**：配置表里的值均可在 `configs/*.json` 改，但除标注「设计决策 / 已核实」外，其余为 **[PLACEHOLDER]**——未经 playtest 经济闭环验证，不作最终手感。改配置后服务端重启或热重载生效，不改代码。
@@ -97,7 +97,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 >
 > 本版 A2/A3/A4/A6/A7/A8/A9 已全部按权威 `configs/` 与服务端 Go 代码重写，每处与旧稿差异均就地标注。客户端副本不参与权威结算，仅展示用——配置同步失效是已知部署风险，部署时 `-config` 必须指向 `configs/`。
 
-## Part A · 已上线实际版本（code/v1.9.44 实测）
+## Part A · 已上线实际版本（code/v1.9.50 实测；数值配置自 v1.9.48 起未变）
 
 ### A1. 产品定位、技术栈与运行形态
 
@@ -111,7 +111,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | 存档 | standalone 落 `data/saves/<userId>.json`（原子写 tmp+rename）；生产对应 Nakama Storage + 关系库 8 张逻辑表 |
 | 多人 | Nakama Match(world) 服务端权威坐标 + 限速校验 + 40 人/线；10Hz 快照广播 |
 | 渲染性能 | 大世界视口裁剪（±1 屏）+ 分块异步建块 + LRU；部件图 NEAREST 整数倍缩放；目标 60fps |
-| 配置驱动 | 6 个 JSON 全部数值外置，服务端与客户端各有同步副本；改配置即改游戏 |
+| 配置驱动 | 8 个 JSON 全部数值外置（`configs/` 下 classes/skills/equipment/monsters/economy/worlds/creator/anim_manifest），服务端权威、客户端有同步副本；改配置即改游戏 |
 
 **两种运行模式**：
 
@@ -237,6 +237,25 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 > ⚠️ **与旧稿差异（本次核对修正）**：权威版品质是 **8 档**（旧稿主表写 5 档，把 5~7 档拆到附注）；强化成本 `1200×1.35^n` → **`800×1.25^n`**（v1.9.41 下调）；新增 `weaponClasses` 武器分系与 `weaponNames` 命名表。
 
+
+### A4.5 角色创建与换装（creator.json · 逐字段，服务端已加载）
+
+权威 `configs/creator.json`（`config.go` 的 `Creator` 字段，`load("creator.json", &c.Creator)`），format=`creator_parts_v2`，逻辑画布 `64×96`、`scaleRoot=2`（屏幕显示 128×192 不变）。
+
+| 槽位 | label | 叠放模式 | 选项数 | 选项 id |
+|---|---|---|--:|---|
+| face | 脸型 | grid | 4 | face_01..04 |
+| hair | 发型 | grid | 4 | hair_01..04 |
+| hat | 帽子 | crop | 4 | hat_01..04 |
+| top | 上衣 | crop | 4 | top_01..04 |
+| pants | 裤子 | crop | 4 | pants_01..04 |
+| shoes | 鞋子 | crop | 4 | shoes_01..04 |
+
+叠放顺序 `overlay_order`：`face → hair → hat → top → pants → shoes`；face/hair 用 grid 对齐模式叠放（同一网格坐标系切分，中心天然对齐），其余 crop。自由组合 `4^6 = 4096`，颜色锁定 16 色板。
+
+**服务端权威创角**（`store/appearance.go`）：`CreateCharacter(classID, look, name, skills)` 校验职业合法性（`classes.json` 存在）、look 六槽（缺省用配置默认补、非法值拒绝 `LookSlotValid`）、技能 BD 属于当前职业 initial/advanced 池（4 槽上限），写 `appearance` 表并置 `created=true`。新档 `Created=false` 强制进创建界面；老档补 appearance 不强制重建。存档只存部件 id，图片路径由 creator.json 查得。
+
+> ⚠️ 与 Part B 设计稿的差异：B6 写「职业开局仅战士/法师 2 个」，权威 `classes.json` 中 `warrior/mage` 为 tier 1（初始），`fighter/knight/sage/warlock` 为 tier 2（转职解锁，Lv44 + 2 世界），设计稿口径成立。
 
 ### A5. 怪物系统（monsters.json · 逐字段）
 
@@ -519,6 +538,10 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 防刷约束：同一 nodeId 只登记一次（重复返回 409）；同玩家未开启掉落箱上限 **12** 个；未登记的 `drop_` ID 开箱一律拒绝；掉落箱开箱即销毁（一次性），登记存内存、服务端重启后未开箱失效。实测：普通怪 2000 次采样 木47.4/银30.6/金7.3/钻12.1/水晶2.6；BOSS 1000 次 金50.5/钻28.3/水晶21.2；档位与实发不一致 0 次。
 
+**六职业程序动画帧（v1.9.49 接入，`configs/anim_manifest.json` + StandeeActor）**：format `proc_anim_v1`，精灵 `64×96`、脚底锚点 `footY=94`。6 职业（战士/法师/骑士/拳师/祭祀/术士）× 8 动作（idle/walk/attack/cast/hit/death/victory/celebrate）× 4 帧 = **192 帧 PNG**。每职业含 base 图、`pivot`、`bright` 闪白色与逐动作帧名表；`server/configs_shared/anim_manifest.json` 为副本。前端 `StandeeActor.js:30-45` 检测 actions.json 某 state 带 `frames` 字段时优先用逐帧序列（`die` 映射 `death`），默认 fps=3。
+
+> ⚠️ 能力边界（manifest note 原文）：程序变换帧是 root 整体变换，**做不出肢体动作**（真挥剑/搓法球需 AI 逐帧）；全部动作数值 `[PLACEHOLDER]` 未经 playtest。帧资源位于 `web/res/characters/parts/<职业>/frames/`。
+
 ### A9. 通信协议与存档分表
 
 **协议信封（设计契约，protocol.md）**：`{ "type": "...", "seq": 7, "v": 1, "data": {...} }`；错误带 `code` + `msg`；协议版本 `v=1` 向前兼容。
@@ -539,7 +562,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 
 > ⚠️ **契约 vs 实现（本次核对发现）**：服务端 `ws.go` 实际只处理 3 个 type——`heartbeat` / `match_join` / `player_move`；`login`/`submit_bd`/`engage`/`battle_report`/`state_snapshot`/`claim_idle`/`match_req` 这些是 Cocos 客户端契约层定义，在 standalone 模式下多数走 HTTP API 而非 WS。两套并存，协议文档是目标契约、ws.go 是多人同步最小实现。
 
-**standalone HTTP API（api.go 实测 30 个端点）**：
+**standalone HTTP API（api.go 实测 32 个 `HandleFunc`）**：
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -574,12 +597,13 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | POST | /api/idle/finalize | 离线结算 + 入账 + 推进 lastSeen + 落库 |
 | POST | /api/transfer | 转职 + 装备换算 + 落库 |
 | WS | /ws | WebSocket 多人同步 |
+| GET | / | 前端静态托管（HandlerWithWeb 同源） |
 
-> ⚠️ 旧稿只列 11 个端点，本次按 `api.go` 的 `mux.HandleFunc` 实测补全到 30 个。
+> ⚠️ 旧稿只列 11 个端点，本次按 `api.go` 的 `mux.HandleFunc` 实测为 32 个（上表 31 个业务端点含 `/ws`，另 `/` 为前端静态托管根路径单列于下）。
 
 **权威原则**：战斗结果、离线收益、随机种子全部服务端生成，客户端下发数值一概不采信；`engage.seed` 仅用于复现（>0 采用，=0 服务端随机）；断线重连以 state_snapshot 覆盖本地缓存。
 
-**存档分表（store/state.go 实测 12 张）**：characters（角色核心）、world_progress（世界进度）、warehouse（仓库）、equipment（装备）、skills（技能 slots[4]/unlocked[]）、pets + pet_state（幻兽，2 张，预留无入口）、home（家园）、logs（埋点战报索引）、ext_data（扩展位，新增系统零改表）、schema_meta（表结构元数据）。
+**存档分表（store/state.go 实测 12 张）**：characters（角色核心）、world_progress（世界进度）、warehouse（仓库）、equipment（装备）、skills（技能 slots[4]/unlocked[]）、pets + pet_state（幻兽，2 张，预留无入口）、home（家园）、appearance（角色创建与换装：created 标志 + homeLook 六槽 + face 永久脸型）、logs（埋点战报索引）、ext_data（扩展位，新增系统零改表）、schema_meta（表结构元数据）。
 
 > ⚠️ 旧稿写"8 张逻辑表"，本次按 `store/state.go` 的 `tableNames` 实测为 12 张（pets/pet_state 拆 2 张、新增 ext_data/schema_meta）。
 
@@ -627,7 +651,8 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 | v1.9.44 | 装备升品质入口移入强化工坊 |
 | v1.9.45 | 怪物掉落箱服务端权威掷档（POST /api/chest/drop，钻+水 8%→15%，防刷箱） |
 | v1.9.48 | HUD 精简 / 任务栏折叠 / 按钮统一 / 弹窗层级修复 + 整合服务端（code/v1.9.48-integrated） |
-| v1.9.49 | 六职业 192 帧程序动画（idle/walk/attack/cast/hit/death/victory/celebrate），3fps，StandeeActor 帧播放（当前最新，code/v1.9.49-integrated） |
+| v1.9.49 | 六职业 192 帧程序动画（idle/walk/attack/cast/hit/death/victory/celebrate），3fps，StandeeActor 帧播放（code/v1.9.49-integrated） |
+| v1.9.50 | 仓库批量勾选模式 + 工坊显示身上装备（当前最新，code/v1.9.50） |
 
 ---
 
