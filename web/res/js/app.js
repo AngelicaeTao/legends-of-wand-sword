@@ -615,7 +615,7 @@ const CLASS_BUNDLES={warrior:'char_warrior',mage:'char_mage',knight:'char_knight
 // v1.9.57 更正：v1.9.49 重绘后的六个职业立绘**全部朝右**（法杖/武器在后方手、光球/盾牌在朝前手），
 // 原表把 mage/knight/sage 标成朝左——这三个职业走路反向（法师首当其冲）。
 // 未知职业同样按朝右处理；将来某职业改朝左，在此单独标 false。
-const ART_FACES_RIGHT={warrior:true,mage:true,knight:true,fighter:true,sage:true,warlock:true};
+const ART_FACES_RIGHT={warrior:false,mage:true,knight:false,fighter:true,sage:true,warlock:true};
 function artFacesRight(classId){ return ART_FACES_RIGHT[classId]!==false; }
 function heroBundleOf(classId){ return CLASS_BUNDLES[classId]||'char_warrior'; }
 function applyHeroLook(){
