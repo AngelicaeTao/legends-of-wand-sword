@@ -609,7 +609,11 @@ async function doDeviceLogin(){
 function switchAccount(){ setSession(null); $('authUser').value=''; $('authPwd').value=''; state=null; closeWS(); refreshLoginView(); }
 
 // 职业 → 整体立绘 bundle（探索/战斗同一套职业装备装，交付包 §4.2）
-const CLASS_BUNDLES={warrior:'char_warrior',mage:'char_mage',knight:'char_knight',fighter:'char_fighter',sage:'char_sage',warlock:'char_warlock'};
+// v1.9.65 战士/骑士立绘素材互换了：parts.json 里 char_warrior 写的是"钢甲红披"、
+// char_knight 写的是"银白重甲蓝羽"，但两个文件夹里的图正好相反（warrior 里是灰钢甲、
+// knight 里是红甲）。游戏里表现为"战士显示成骑士、骑士显示成战士"，这里把映射对调。
+const CLASS_BUNDLES={warrior:'char_knight',mage:'char_mage',knight:'char_warrior',fighter:'char_fighter',sage:'char_sage',warlock:'char_warlock'};
+window.CLASS_BUNDLES=CLASS_BUNDLES;   // 供 creator.js / worldmap.js 共用同一张表
 // v1.9.27 立绘美术默认朝向（对照 standee 素材逐个确认）：战士/拳师/术士面向右，
 // 法师/骑士/祭祀面向左。渲染时按"移动方向 ⊕ 美术朝向"决定翻转，行走不再反向。
 // v1.9.57 更正：v1.9.49 重绘后的六个职业立绘**全部朝右**（法杖/武器在后方手、光球/盾牌在朝前手），

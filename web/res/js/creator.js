@@ -9,6 +9,8 @@
  */
 (function (global) {
   'use strict';
+  // v1.9.65 职业→立绘 bundle：统一走 app.js 下发的 window.CLASS_BUNDLES（战士/骑士素材对调过）
+  const cbOf = (id) => (global.CLASS_BUNDLES && global.CLASS_BUNDLES[id]) || ('char_' + id);
 
   const $id = (i) => document.getElementById(i);
   const SLOT_ORDER = ['face', 'hair', 'top', 'pants', 'shoes', 'hat'];
@@ -106,7 +108,7 @@
         };
         const stats = `<span class="cr-stats">${stat('hp', '生命')}${stat('atk', '攻击')}${stat('def', '防御')}${stat('crit', '暴击')}</span>`;
         return `<button class="cr-class ${cls === id ? 'on' : ''}" data-cls="${id}">
-          <span class="cc-pic"><img src="/res/characters/parts/char_${id}/char_${id}_standee.png" alt=""></span>
+          <span class="cc-pic"><img src="/res/characters/parts/${cbOf(id)}/${cbOf(id)}_standee.png" alt=""></span>
           <span class="cc-txt">
             <b>${c.name || p.name}</b>
             <em>${c.desc || ''}</em>
@@ -121,7 +123,7 @@
       body.querySelectorAll('.cr-class').forEach(el => el.onclick = () => {
         cls = el.dataset.cls;
         o.sfx && o.sfx.tab();
-        actor = new global.StandeeActor('char_' + cls);
+        actor = new global.StandeeActor(cbOf(cls));
         actor.init().then(() => actor.play('idle'));
         renderPanel(); renderHead(); updateName();
       });
@@ -250,7 +252,7 @@
     name = opts.name || '';
     slot = 'face';
     $id('createView').classList.remove('hidden');
-    actor = new global.StandeeActor('char_' + cls);
+    actor = new global.StandeeActor(cbOf(cls));
     actor.init().then(() => actor.play('idle'));
     global.Look.preloadAll().then(kick);
     renderAll();

@@ -1352,7 +1352,9 @@ WMap.prototype.applySnapshot=function(players,selfId){
     if(Math.abs(p.x-hx)>rx||Math.abs(p.y-hy)>ry)continue; // 视野外不渲染
     seen[p.id]=true;
     if(!this.remote[p.id]){
-      const rb='char_'+((p.classId&&['warrior','mage','knight','fighter','sage','warlock'].indexOf(p.classId)>=0)?p.classId:'warrior');
+      // v1.9.65 远端角色同样走 CLASS_BUNDLES（战士/骑士素材对调过，不能直接拼 'char_'+classId）
+      const cid=(p.classId&&['warrior','mage','knight','fighter','sage','warlock'].indexOf(p.classId)>=0)?p.classId:'warrior';
+      const rb=(window.CLASS_BUNDLES&&window.CLASS_BUNDLES[cid])||('char_'+cid);
       const actor=new this.StandeeActor(rb);
       actor.init().then(()=>actor.play('idle'));
       this.remote[p.id]={x:p.x,y:p.y,name:p.name,userId:p.userId||'',actor,faceRight:true};
