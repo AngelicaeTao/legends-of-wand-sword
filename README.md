@@ -12,13 +12,13 @@
 |---|---|---|---:|
 | `code/v1.9.50` | **最新代码**：仓库批量存入/取出/分解改勾选模式（贴图打勾、再点取消、严格检测退出）+ 工坊显示身上装备（可强化/升品），Go 服务端、Web 前端、配置、脚本、交付文档 | ✅ 有效·最新 | 约 13 MB |
 | `code/v1.9.49-integrated` | 上一版：整合 v1.9.48 HUD 修复 + v1.9.45 服务端权威掷箱（含 merge 整合提交），六职业 192 帧程序动画 | 📦 历史归档 | — |
-| `assets/v1.9.44` | **最新美术**：按用途分类（地图 / 精灵 / 背景 / 卡面 / 图标 / 特效 / 旧版素材），含 v1.9.37 三怪部件包 + v1.9.42 钻石/水晶箱部件包 | ✅ 有效·最新 | 约 7.8 MB |
+| `assets/v1.9.48-integrated` | **最新美术·清理版**：按用途分类，已删 91 个被 v3 部件动画取代的旧逐帧资源（195 文件）。原 `assets/v1.9.44` 保留为历史归档 | ✅ 有效·最新 | 约 7 MB |
 | `code/v1.9.45` | v1.9.45 服务端权威掷箱主分支 | 📦 历史归档 | — |
 | `code/v1.7.5`…`code/v1.9.44` | 历史代码归档（含 code/v1.9.40 ~ code/v1.9.44 增量版本；v1.9.44 为 Part A 配置实测基准，tip 提交信息误写为 v1.9.45，内容无误） | 📦 历史归档 | — |
-| `assets/v1.7.5`…`assets/v1.9.39` | 历史美术归档 | 📦 历史归档 | — |
+| `assets/v1.7.5`…`assets/v1.9.44` | 历史美术归档（v1.9.44 为清理前母版，按需回滚） | 📦 历史归档 | — |
 | `main` | 仓库说明与分支导航（本页） | ✅ 有效 | — |
 
-> **已清理的冗余分支**：`feat/v1.9.45-monster-chest-...`（与 `code/v1.9.45` 同一提交 7d05c62）、`code/v1.9.48-hud-and-layer-fixes`（代码已被 integrated 完整包含，仅差文档提交）已删除。历史归档分支有意保留，不做删除。
+> **已清理的冗余分支**：`feat/v1.9.45-monster-chest-...`（与 `code/v1.9.45` 同一提交 7d05c62）、`code/v1.9.48-hud-and-layer-fixes`（代码已被 integrated 完整包含，仅差文档提交）已删除。资源分支已整合为 `assets/v1.9.48-integrated`（清理 91 个旧逐帧资源）。历史归档分支有意保留，不做删除。
 
 ### 拉取方式
 
@@ -27,7 +27,7 @@
 git clone -b code/v1.9.50 https://github.com/AngelicaeTao/legends-of-wand-sword.git
 
 # 资源（放入同一工作目录，按 assets 分支 README 的回填映射还原）
-git clone -b assets/v1.9.44 https://github.com/AngelicaeTao/legends-of-wand-sword.git assets
+git clone -b assets/v1.9.48-integrated https://github.com/AngelicaeTao/legends-of-wand-sword.git assets
 ```
 
 ## 快速开始
@@ -38,7 +38,7 @@ cd .. && ./data/zjcs-server -addr :3000 -config configs -web web/index.html -res
 # 打开 http://localhost:3000
 ```
 
-资源需从 `assets/v1.9.44` 回填到 `web/res/`，映射表见 assets 分支的 `README.md`。
+资源需从 `assets/v1.9.48-integrated` 回填到 `web/res/`，映射表见该分支的 `README.md`。
 
 ## 技术概览
 
