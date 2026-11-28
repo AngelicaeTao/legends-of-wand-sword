@@ -94,7 +94,7 @@ async function preload(){
   const jobs=[], add=(p,key)=>jobs.push(loadImg(p).then(im=>{IMG[key]=im;}));
   for(const b of ['grassland','forest','desert','snow','cave']) add(`${RES}v3/backgrounds/bg_explore_${b}.png`,'bg_'+b);
   add(`${RES}v3/backgrounds/bg_battle_arena.png`,'bg_arena');
-  for(const c of ['warrior','mage','fighter','knight','sage','warlock']) add(`${RES}v3/characters/cards/ui_card_${c}.png`,'card_'+c);
+  for(const c of ['warrior','mage','fighter','knight','sage','warlock']) add(`${RES}v3/characters/cards/ui_card_${c}.png?v=1.9.96`,'card_'+c);
   for(const ic of ['bag','coin','guild','hero','map','potion','quest','skill','storage','sword']) add(`${RES}v3/icons/icon_${ic}.png`,'icon_'+ic);
   // 预载部件动画 bundle（角色+怪物+宝箱）
   const parts=['char_hero_mage','mon_slime','mon_skeleton','mon_bat','mon_boss_beetle','item_chest_wood','item_chest_silver','item_chest_gold','item_chest_diamond','item_chest_crystal'];
@@ -735,7 +735,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.95';
+const BUILD_VER='v1.9.96';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -849,12 +849,10 @@ function switchAccount(){ setSession(null); stopInviteWatch(); $('authUser').val
 // knight 里是红甲）。游戏里表现为"战士显示成骑士、骑士显示成战士"，这里把映射对调。
 const CLASS_BUNDLES={warrior:'char_knight',mage:'char_mage',knight:'char_warrior',fighter:'char_fighter',sage:'char_sage',warlock:'char_warlock'};
 window.CLASS_BUNDLES=CLASS_BUNDLES;   // 供 creator.js / worldmap.js 共用同一张表
-// v1.9.27 立绘美术默认朝向（对照 standee 素材逐个确认）：战士/拳师/术士面向右，
-// 法师/骑士/祭祀面向左。渲染时按"移动方向 ⊕ 美术朝向"决定翻转，行走不再反向。
-// v1.9.57 更正：v1.9.49 重绘后的六个职业立绘**全部朝右**（法杖/武器在后方手、光球/盾牌在朝前手），
-// 原表把 mage/knight/sage 标成朝左——这三个职业走路反向（法师首当其冲）。
-// 未知职业同样按朝右处理；将来某职业改朝左，在此单独标 false。
-const ART_FACES_RIGHT={warrior:false,mage:true,knight:false,fighter:true,sage:true,warlock:true};
+// v2.0.0 六职业立绘统一面向右（本轮新贴图逐个核对立绘：面部/武器均朝画面右侧）。
+// 渲染时按"移动方向 ⊕ 美术朝向"决定翻转；未知职业同样按朝右处理。
+// 将来某职业改朝左，在此单独标 false。
+const ART_FACES_RIGHT={warrior:true,mage:true,knight:true,fighter:true,sage:true,warlock:true};
 function artFacesRight(classId){ return ART_FACES_RIGHT[classId]!==false; }
 function heroBundleOf(classId){ return CLASS_BUNDLES[classId]||'char_warrior'; }
 function applyHeroLook(){
@@ -1923,7 +1921,7 @@ function renderRole(){
     const need=expNeeded(c.level), exp=Math.max(0,c.exp||0), pct=Math.min(100,need>0?exp/need*100:0);
     html+=`
       <div class="hero-card">
-        <div class="hero-portrait"><img src="${RES}v3/characters/cards/${(cdef&&cdef.icon)||'ui_card_mage.png'}" alt=""></div>
+        <div class="hero-portrait"><img src="${RES}v3/characters/cards/${(cdef&&cdef.icon)||'ui_card_mage.png'}?v=1.9.96" alt=""></div>
         <div class="hero-brief">
           <div class="hb-name">${esc(c.name||'英雄')}<em>${cdef?cdef.name:c.classId}</em></div>
           <div class="hb-lv">Lv.${c.level}<span>已装备 ${done}/4</span></div>
@@ -3721,6 +3719,7 @@ async function playPartyBattle(rep){
   partySlots=heroes.map((h,i)=>({
     name:h.name, classId:h.classId, x:xs[i]||420,
     hpMax:h.hpStart||1, hpNow:h.hpStart||1, actor:null,
+    faceR:artFacesRight(h.classId),   // 朝向与单人战斗一致，避免队友被镜像
   }));
   const SA=window.StandeeActor;
   await Promise.all(partySlots.map(async s=>{

@@ -36,7 +36,7 @@
     const im = new Image();
     im._ready = false;
     im.onload = () => { im._ready = true; };
-    im.src = BASE + file;
+    im.src = BASE + file + '?v=1.9.96';
     imgs.set(file, im);
     return im;
   }

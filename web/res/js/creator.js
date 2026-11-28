@@ -110,7 +110,7 @@
         };
         const stats = `<span class="cr-stats">${stat('hp', '生命')}${stat('atk', '攻击')}${stat('def', '防御')}${stat('crit', '暴击')}</span>`;
         return `<button class="cr-class ${cls === id ? 'on' : ''}" data-cls="${id}">
-          <span class="cc-pic"><img src="/res/characters/parts/${cbOf(id)}/${cbOf(id)}_standee.png" alt=""></span>
+          <span class="cc-pic"><img src="/res/characters/parts/${cbOf(id)}/${cbOf(id)}_standee.png?v=1.9.96" alt=""></span>
           <span class="cc-txt">
             <b>${esc(c.name || p.name)}</b>
             <em>${esc(c.desc || '')}</em>

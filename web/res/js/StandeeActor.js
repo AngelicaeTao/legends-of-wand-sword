@@ -16,13 +16,15 @@
   'use strict';
 
   const BASE = '/res/characters/parts/';
+  // 资源版本：Cloudflare 会把图片重写成 4h 缓存，改版必须换 URL 才能避免新旧贴图来回切换
+  const AV = '?v=1.9.96';
   const cache = new Map(); // bundle -> {ready, parts, actions, img, tint, frames}
 
   function loadBundle(bundle) {
     if (cache.has(bundle)) return cache.get(bundle);
     const entry = { bundle, ready: null, img: null, tint: null, frames: {} };
-    const p = fetch(BASE + bundle + '/parts.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
-    const a = fetch(BASE + bundle + '/actions.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+    const p = fetch(BASE + bundle + '/parts.json' + AV).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    const a = fetch(BASE + bundle + '/actions.json' + AV).then(r => (r.ok ? r.json() : null)).catch(() => null);
     entry.ready = Promise.all([p, a]).then(([parts, actions]) => {
       entry.parts = parts || {};
       entry.actions = actions || { states: {} };
@@ -33,7 +35,7 @@
         const im = new Image();
         im.onload = () => { entry.img = im; res(); };
         im.onerror = () => { entry.img = null; res(); };
-        im.src = BASE + bundle + '/' + file;
+        im.src = BASE + bundle + '/' + file + AV;
       })];
       for (const st of Object.values(states)) {
         if (!st.frames) continue;
@@ -42,7 +44,7 @@
             const im = new Image();
             im.onload = () => { entry.frames[fn] = im; res(); };
             im.onerror = () => { res(); };
-            im.src = BASE + bundle + '/frames/' + fn;
+            im.src = BASE + bundle + '/frames/' + fn + AV;
           }));
         }
       }
