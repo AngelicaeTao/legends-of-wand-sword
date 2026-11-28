@@ -71,26 +71,26 @@
         "秘银":     { "weight": 5,  "qty": [1, 1] }
       },
       "monster": {
-        "_note": "打怪掉落：普通怪 8% 触发 1 次 roll；精英 30% 触发 2 次；首领必掉 2 次。首领判定优先于精英（elite=boss 或 mon.isBoss 都按首领算）。",
-        "chanceNormal": 0.08, "rollsNormal": 1,
-        "chanceElite": 0.30, "rollsElite": 2,
+        "_note": "打怪掉落：普通怪 25% 触发 1 次 roll；精英 60% 触发 2 次；首领必掉 2 次。首领判定优先于精英（elite=boss 或 mon.isBoss 都按首领算）。",
+        "chanceNormal": 0.25, "rollsNormal": 1,
+        "chanceElite": 0.60, "rollsElite": 2,
         "chanceBoss": 1.0, "rollsBoss": 2
       },
       "chest": {
-        "_note": "开箱掉落：按宝箱档位给触发概率与 roll 次数。木箱也留 12%，保证新手第一小时就能见到具名材料。",
-        "wood":    { "chance": 0.12, "rolls": 1 },
-        "silver":  { "chance": 0.22, "rolls": 1 },
-        "gold":    { "chance": 0.40, "rolls": 1 },
-        "diamond": { "chance": 0.65, "rolls": 2 },
-        "crystal": { "chance": 0.90, "rolls": 2 }
+        "_note": "开箱掉落：按宝箱档位给触发概率与 roll 次数。木箱 35%，开两三个必见一次具名材料。",
+        "wood":    { "chance": 0.35, "rolls": 1 },
+        "silver":  { "chance": 0.50, "rolls": 1 },
+        "gold":    { "chance": 0.65, "rolls": 1 },
+        "diamond": { "chance": 0.85, "rolls": 2 },
+        "crystal": { "chance": 1.00, "rolls": 2 }
       },
       "guildPack": {
         "_note": "公会材料包（150 公会币）：除固定 +30 强化材料外，随机再给 2 份具名材料（必给）。",
         "rolls": 2
       },
       "partyDungeon": {
-        "_note": "组队副本通关：每位队员 60% 获得 2 份具名材料。单人副本走 /api/battle/fight，由 monster 段覆盖，不重复计。",
-        "chance": 0.6, "rolls": 2
+        "_note": "组队副本通关：每位队员 80% 获得 2 份具名材料。单人副本走 /api/battle/fight，由 monster 段覆盖，不重复计。",
+        "chance": 0.8, "rolls": 2
       }
     },
     "equipChanceNormal": 0.45,
