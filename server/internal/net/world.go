@@ -180,11 +180,15 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 	if wm > 1 && potions > 0 {
 		potions = int(float64(potions)*wm + 0.5)
 	}
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var equips []game.EquipItem
-	if e, ok := game.RollChestEquip(p.Core.ClassID, q.Tier, rand.New(rand.NewSource(time.Now().UnixNano()))); ok {
+	if e, ok := game.RollChestEquip(p.Core.ClassID, q.Tier, rng); ok {
 		equips = []game.EquipItem{e}
 	}
-	logs, items := store.ApplyChestReward(p, exp, gold, gem, mat, potions, equips)
+	// v1.9.93 具名材料：按档位概率 roll（木箱 12% / 银 22% / 金 40% / 钻石 65% / 水晶 90%），
+	// 与装备共用一个 rng，掉落明细随 items 回给前端开箱弹窗。
+	mats := game.RollChestMaterials(q.Tier, rng)
+	logs, items := store.ApplyChestReward(p, exp, gold, gem, mat, potions, equips, mats)
 	advanceDailyQuest(p, "chest", game.ServerNow()) // v1.9.93 每日「今日寻宝」：成功开箱才计数
 	if err := disk.Save(uid, p); err != nil {
 		internalErr(w, err)

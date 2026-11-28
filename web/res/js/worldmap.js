@@ -129,7 +129,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   } else {
     const base=RES+'maps/'+worldId+'_';
     const loadImg=(src)=>new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('地形加载失败:'+src));im.src=src;});
-    const maskImg=await loadImg(base+'mask_half.png?v=2.0.1');
+    const maskImg=await loadImg(base+'mask_half.png?v=1.9.95');
     const mc=document.createElement('canvas');mc.width=MASK_W;mc.height=MASK_H;
     const mg=mc.getContext('2d',{willReadFrequently:true});mg.drawImage(maskImg,0,0);
     this.maskData=mg.getImageData(0,0,MASK_W,MASK_H).data;
@@ -150,7 +150,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   this.groundBmp=null;this.ground=null;
   // 全图：仅当前世界持有。优先 fetch→createImageBitmap：
   // 解码与后续按块裁剪均在浏览器解码线程完成，主线程零大图采样（消除预热期掉帧）
-  const url=RES+'maps/'+worldId+'_full_half.webp?v=2.0.1';
+  const url=RES+'maps/'+worldId+'_full_half.webp?v=1.9.95';
   try{
     const resp=await fetch(url,{cache:'force-cache'});
     const blob=await resp.blob();
@@ -1709,7 +1709,7 @@ WMap.prototype.openMapModal=function(){
     if(this.worldId==='HOME'&&this.groundHome){ this._mapThumbFallback=this.groundHome; }
     else{
       const img=new Image();
-      img.src=RES+'maps/'+this.worldId+'_thumb.webp?v=2.0.1';
+      img.src=RES+'maps/'+this.worldId+'_thumb.webp?v=1.9.95';
       this._mapThumbFallback=img;
     }
   }

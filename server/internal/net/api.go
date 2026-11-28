@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -1242,6 +1243,11 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 			p.Core.Gem += 60
 		case "material_pack":
 			p.Core.Material += 30
+			// v1.9.93 材料包不再只给强化材料计数器：额外随机 2 份具名材料（秘银/蓝宝石/精铁/钢锭/皮革/布料），
+			// 明细回给前端，兑换弹窗里直接写清"这一包开出了什么"。
+			mats := game.RollGuildPackMaterials(rand.New(rand.NewSource(time.Now().UnixNano())))
+			store.AddNamedMaterials(p, mats)
+			extra["materials"] = mats
 		case "skill_book":
 			p.Core.Gem += 30
 			p.GainExp(300)

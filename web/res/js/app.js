@@ -323,7 +323,88 @@ function fireMagicShot(sp,fx){
                    start:performance.now(),dur:165,color});
   if(magicShots.length>8) magicShots.shift();   // 防止极端连击堆积
 }
-function clearBattleFx(){heroLunge=null;magicShots=[];lastHeroX=420;}
+/* ===== v1.9.92 打击感：命中冻结 / 震屏 / 受击白闪 / 击退形变 / 火花粒子 =====
+   目标：一次命中要"顿、震、白、退、溅"五件事同时发生，且轻击/重击强度分明。
+   全部在渲染层实现，不碰服务端战报，也不改资源包（现有 hit 动作只有部件微位移）。 */
+let hitStopUntil=0;                 // 命中冻结终点：此时间前画面定格
+let hitFreezeAt=0;                  // 命中瞬间的时间戳（冻结期间用它+45ms 作为定格画面）
+let hitFrozenOnce=false;            // 冻结窗口内是否已画出那一帧定格
+let shakeFx={amp:0,dur:0,t0:-1e9};  // 震屏：amp 峰值像素，按 (1-u)² 衰减
+const MON_HIT_MS=340;               // 单只怪受击表现总时长（白闪/击退/形变共用一条时间轴）
+const monHitFx=[];                  // [{t0,power,crit}]，索引与 battleMonActors 对齐
+const sparks=[];                    // 火花粒子：{x,y,vx,vy,life,born,size,color}
+
+// 震屏：连续命中时取更强的一次，不互相打断成"轻抖"
+function shakeScreen(amp,dur){
+  const now=performance.now();
+  if(now-shakeFx.t0<shakeFx.dur&&shakeFx.amp>amp){
+    shakeFx.t0=now;shakeFx.dur=Math.max(dur,shakeFx.dur*0.62);
+    return;
+  }
+  shakeFx={amp,dur,t0:now};
+}
+// 火花：从命中点向左上方迸射（怪物在右侧、被打向左边），带重力下坠与淡出
+// 分两类：细碎火星（多、快、小）与"核心火花"（少、大、慢，带十字光），合起来才像打击
+function spawnSparks(x,y,n,color,power){
+  const now=performance.now();
+  const p=Math.max(0.2,Math.min(1,power));
+  for(let i=0;i<n;i++){
+    const a=Math.PI+(-0.78+Math.random()*1.56)*0.92;    // 以"向左"为主方向扇形散开
+    const sp=(3.0+Math.random()*7.2)*(0.72+p*0.6);
+    const big=(i%5===0);                                 // 每 5 颗出一个大核心火星
+    sparks.push({
+      x:x+(Math.random()-0.5)*34, y:y+(Math.random()-0.5)*50,
+      vx:Math.cos(a)*sp*(big?0.62:1), vy:Math.sin(a)*sp*(big?0.62:1)-(1.2+Math.random()*2.6),
+      life:(big?300:200)+Math.random()*300, born:now,
+      size:big?(4.0+Math.random()*3.0):(2.3+Math.random()*2.4),
+      color:color, glow:big
+    });
+  }
+  if(sparks.length>320)sparks.splice(0,sparks.length-320);
+}
+function triggerMonHit(i,power,crit){
+  monHitFx[i|0]={t0:performance.now(),power:Math.max(0.2,Math.min(1,power)),crit:!!crit};
+}
+function monHitOf(i,now){
+  const h=monHitFx[i|0];
+  if(!h)return null;
+  const u=(now-h.t0)/MON_HIT_MS;
+  if(u>=1){ monHitFx[i|0]=null; return null; }
+  return {u:u<0?0:u,h};
+}
+/* 命中总反馈：冻结 + 震屏 + 火花。
+   power 0..1（伤害占最大血比例换算），crit 决定"猛震 + 长冻结"。 */
+function hitImpact(x,y,power,crit){
+  const p=Math.max(0.2,Math.min(1,power));
+  const ms=crit?110:(p>0.55?88:66);
+  const t=performance.now();
+  hitFreezeAt=t;hitFrozenOnce=false;               // 定格基准：命中瞬间
+  hitStopUntil=Math.max(hitStopUntil,t+ms);
+  shakeScreen(crit?12:(p>0.55?7:3.4),crit?290:(p>0.55?215:155));
+  spawnSparks(x,y,crit?42:(p>0.55?32:24),crit?'#ffb347':'#ffd24a',p);
+}
+// 伤害 → power：8% 血量约 0.26，30% 血量约 1（再用暴击额外加成）
+function dmgPower(dmg,maxHp,crit){
+  const r=maxHp>0?dmg/maxHp:0.1;
+  return Math.max(0.2,Math.min(1,r*3.2*(crit?1.35:1)));
+}
+/* 受击白闪：整只怪"变白"要按像素形状染色。
+   PartActor 自带的 flash 是在部件矩形内 fillRect（会出白方块），
+   这里改成传 flashK 给 PartActor，由它叠一层同形状的白色剪影（见 whiteOf）。 */
+function drawMonsterFx(a,x,y,sc,whiteK,kx,sx,sy){
+  const plain=whiteK<0.02&&Math.abs(kx)<0.4&&Math.abs(sx-1)<0.004&&Math.abs(sy-1)<0.004;
+  if(plain){ a.render(cvb,x,y,sc,{dir:-1}); return; }
+  cvb.save();
+  cvb.translate(x+kx,y);     // 击退：整体被推离，脚底跟着走
+  cvb.scale(sx,sy);          // 形变：以脚底为锚点压扁/拉长，脚不离地
+  a.render(cvb,0,0,sc,{dir:-1,flashK:whiteK});
+  cvb.restore();
+}
+function clearBattleFx(){
+  heroLunge=null;magicShots=[];lastHeroX=420;
+  hitStopUntil=0;hitFreezeAt=0;sparks.length=0;monHitFx.length=0;
+  shakeFx={amp:0,dur:0,t0:-1e9};
+}
 // 准备战斗部件 actor（英雄固定法师，怪物按战报阵容逐只建独立 actor，动画互不干扰）
 function ensureBattleActors(monInfos){
   const hb=(state&&state.core)?heroBundleOf(state.core.classId):'char_warrior';
@@ -345,6 +426,7 @@ function ensureBattleActors(monInfos){
       return a;
     });
     battleMonState=list.map(()=>({state:'idle',until:0,start:0}));
+    monHitFx.length=0;   // v1.9.92 换阵容时受击表现按新索引重来，避免旧状态错位
   }
 }
 let battleMonSig='';
@@ -456,6 +538,14 @@ function drawBattleBg(key,t){
   }
 }
 function drawBattle(t,now){
+  // v1.9.92 震屏：整帧平移；先铺一层底色，避免震出画布边时露出上一帧残影
+  const shk=shakeFx.dur>0?1-(now-shakeFx.t0)/shakeFx.dur:0;
+  let shx=0,shy=0;
+  // 用确定性正弦而非 Math.random：命中冻结期间 now 固定 → 偏移固定，画面真的静止
+  if(shk>0){ const a=shakeFx.amp*shk*shk; shx=Math.sin(now*0.115)*a; shy=Math.cos(now*0.157)*a*0.72; }
+  cvb.fillStyle='#0a0e14';cvb.fillRect(0,0,1280,720);
+  cvb.save();
+  if(shx||shy)cvb.translate(shx,shy);
   const key=(worldMap&&worldMap.themeKey)||'grassland';
   drawBattleBg(key,t);
   ensureBattleActors(battleMonInfos.length?battleMonInfos:null);
@@ -499,10 +589,41 @@ function drawBattle(t,now){
     const isBossOnly=battleMonActors.length===1&&battleMonInfos[0]&&battleMonInfos[0].isBoss;
     const sc=isBossOnly?3.8:(battleMonActors.length>1?(i===0?2.8:slot.s):slot.s);
     const fade=monDie>=0?Math.max(0,1-monDie/380):1;
-    // 阴影（淡出随死亡）
+    // v1.9.92 受击：白闪 + 向左击退 + 横向拉长/纵向压扁，三者同一条 340ms 时间轴
+    const hf=monHitOf(i,now);
+    let whiteK=0,kx=0,msx=1,msy=1;
+    if(hf){
+      const u=hf.u,p=hf.h.power;
+      whiteK=Math.pow(1-u,1.7)*(0.30+0.30*p);                  // 前段近全白，尾段退干净
+      const amp=(13+20*p)*(hf.h.crit?1.6:1);                   // 暴击推得更远
+      kx=Math.sin(Math.PI*Math.pow(u,0.62))*(-amp);            // 先被推离，再弹回原位
+      const w=Math.sin(Math.PI*u)*p;
+      msx=1+0.26*w;msy=1-0.20*w;                               // 受击瞬间"扁一下"
+    }
+    // 阴影（淡出随死亡；击退时跟着怪一起挪，避免脱脚）
     cvb.fillStyle='rgba(0,0,0,'+(0.34*fade).toFixed(3)+')';
-    cvb.beginPath();cvb.ellipse(slot.x,slot.y+8,58*(sc/3.2),15,0,0,7);cvb.fill();
-    if(fade>0.02)a.render(cvb,slot.x,slot.y,sc,{dir:-1});
+    cvb.beginPath();cvb.ellipse(slot.x+kx,slot.y+8,58*(sc/3.2),15,0,0,7);cvb.fill();
+    if(fade>0.02)drawMonsterFx(a,slot.x,slot.y,sc,whiteK,kx,msx,msy);
+    // 命中闪光：最初 ~140ms 一团叠加白光；重击再加一道扫过的斩击弧
+    if(hf&&hf.u<0.42){
+      const k=hf.u/0.42,p=hf.h.power;
+      const cx=slot.x+kx,cy=slot.y-70;
+      cvb.save();
+      cvb.globalCompositeOperation='lighter';
+      const R=(24+64*k)*(0.60+p*0.60);
+      const gr=cvb.createRadialGradient(cx,cy,2,cx,cy,R);
+      gr.addColorStop(0,'rgba(255,255,255,'+(0.55*(1-k)).toFixed(3)+')');
+      gr.addColorStop(0.45,'rgba(255,238,176,'+(0.40*(1-k)).toFixed(3)+')');
+      gr.addColorStop(1,'rgba(255,190,110,0)');
+      cvb.fillStyle=gr;cvb.beginPath();cvb.arc(cx,cy,R,0,7);cvb.fill();
+      if(p>0.5){
+        cvb.globalAlpha=(1-k)*0.85;
+        cvb.strokeStyle='#fff8e0';cvb.lineWidth=5*(1-k)+1.5;
+        cvb.beginPath();cvb.arc(cx,cy,R*0.92,-2.35+k*0.9,-0.45+k*0.9);cvb.stroke();
+        cvb.globalAlpha=1;
+      }
+      cvb.restore();
+    }
     if(monDie>=0&&fade<1){
       // 塌陷收尾：贴地尘团扩散 + 淡出
       const e=monDie/700;
@@ -513,6 +634,32 @@ function drawBattle(t,now){
       }
     }
   });
+  // v1.9.92 火花粒子：命中点迸射 → 重力下坠 → 淡出（叠亮混合，火星才有"灼"的感觉）
+  if(sparks.length){
+    cvb.save();
+    cvb.globalCompositeOperation='lighter';
+    for(let i=sparks.length-1;i>=0;i--){
+      const s=sparks[i],age=now-s.born;
+      if(age>=s.life){ sparks.splice(i,1); continue; }
+      const u=age/s.life,tf=age/16.7;
+      const px=s.x+s.vx*tf, py=s.y+s.vy*tf+0.0175*tf*tf;
+      const al=1-u*u;
+      cvb.fillStyle=s.color;
+      if(u<0.5){                       // 前段带一截拖尾，速度感更足
+        cvb.globalAlpha=al*0.42;
+        cvb.fillRect(px-s.vx*1.05,py-s.vy*1.05,s.size*0.75,s.size*0.75);
+      }
+      cvb.globalAlpha=al*0.92;
+      cvb.fillRect(px,py,s.size,s.size);
+      if(s.glow){                      // 核心火星：加一层十字光晕
+        cvb.globalAlpha=al*0.5;
+        cvb.fillRect(px-s.size*1.7,py+s.size*0.36,s.size*4.4,s.size*0.28);
+        cvb.fillRect(px+s.size*0.36,py-s.size*1.7,s.size*0.28,s.size*4.4);
+      }
+    }
+    cvb.globalAlpha=1;
+    cvb.restore();
+  }
   // v1.9.51 法球投射：飞行段（拖尾+光晕+核心）→ 命中爆裂段（放射线+冲击环）
   if(magicShots.length){
     cvb.save();
@@ -561,6 +708,7 @@ function drawBattle(t,now){
     cvb.fillStyle=f.color||'#ff6b6b';cvb.fillText(f.text,f.x,f.y-50*age);
     cvb.restore();
   }
+  cvb.restore();   // v1.9.92 震屏 translate 收尾
 }
 function renderLoop(now){
   const t=now/1000;
@@ -575,11 +723,19 @@ function renderLoop(now){
       updateInteractHint();
     }
   }
-  else if(view==='battle') drawBattle(t,now);
+  // v1.9.92 命中冻结：这段时间把动画时间钉在"命中后 45ms"反复重绘同一帧 ——
+  // 既保证玩家看到的是打击感最强的那一瞬（白闪/击退/火花全在），又真的静止不动
+  else if(view==='battle'){
+    if(performance.now()<hitStopUntil){
+      // 先画一帧"命中后 45ms"的定格（白闪/击退/火花都在峰值），之后整段不再重绘 = 真停顿
+      if(!hitFrozenOnce){ const fz=hitFreezeAt+45; drawBattle(fz/1000,fz); hitFrozenOnce=true; }
+    }
+    else drawBattle(t,now);
+  }
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.93';
+const BUILD_VER='v1.9.95';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1545,7 +1701,7 @@ function renderBag(){
 /* ---- 公会页（v1.9.2）：捐献 / 公会商店 / 成员，服务端权威 ---- */
 const GUILD_SHOP=[
   {id:'gem_pack',      name:'钻石礼包 ×60',  price:200, ico:'gem'},
-  {id:'material_pack', name:'材料包 ×30',    price:150, ico:'bag'},
+  {id:'material_pack', name:'材料包 ×30 + 随机材料', price:150, ico:'bag'},
   {id:'skill_book',    name:'奥义书（经验+300）', price:300, ico:'book'}
 ];
 // 公会（v1.9.39 大改）：分流服务端权威化 —— /api/guild/list 返回 my（我所在公会）。
@@ -1639,7 +1795,9 @@ async function renderGuild(){
         const r=await api('/api/player/action',{userId:uid(),action:'guild_buy',itemId:b.dataset.item});
         if(r.state){state=r.state;await applyStats(r.stats);}
         window.SFX&&SFX.buy();
-        toastModal('兑换成功',GUILD_SHOP.find(x=>x.id===b.dataset.item).name);
+        // v1.9.93 材料包会随机开出具名材料（秘银/蓝宝石等），把这一包的内容写进提示里
+        const mats=(r.materials||[]).map(m=>`${m.name||m.id} x${m.qty}`).join(' · ');
+        toastModal('兑换成功',GUILD_SHOP.find(x=>x.id===b.dataset.item).name+(mats?`（随机材料：${mats}）`:''));
         renderGuild();
       }catch(e){ window.SFX&&SFX.fail(); toastModal('兑换失败',e.message); }
     };
@@ -2769,6 +2927,11 @@ async function onChestOpened(chest){
     const cells=items.map(it=>{
       if(it.kind==='decompose')return `<div class="loot-cell"><div class="loot-ico" style="background:#6a5a3a">${ICON.crystal(22,'#f0d590')}</div><div class="loot-nm">${it.name||'低战力装备分解'}</div><div class="loot-qty">x${it.qty||1}</div></div>`;
       if(it.kind==='material')return `<div class="loot-cell"><div class="loot-ico" style="background:#8892a4">${ICON.crystal(22,'#2a1c08')}</div><div class="loot-nm">${it.name||'材料'}</div><div class="loot-qty">x${it.qty}</div></div>`;
+      // v1.9.93 具名材料（秘银/蓝宝石/精铁/钢锭/皮革/布料）：稀有材料给专属边框，与强化材料计数器区分
+      if(it.kind==='mat'){
+        const rc=({ '秘银':'#b07cf0','蓝宝石':'#6aa8f0' })[it.id]||'#8892a4';
+        return `<div class="loot-cell loot-eq" style="border-color:${rc}"><div class="loot-ico" style="background:${rc}">${ICON.crystal(22,'#2a1c08')}</div><div class="loot-nm">${it.name||it.id}</div><div class="loot-qty">x${it.qty}</div></div>`;
+      }
       if(it.kind==='potion')return `<div class="loot-cell"><div class="loot-ico" style="background:#2e5c3f">${ICON.crystal(22,'#5fd38a')}</div><div class="loot-nm">${it.name||'回血药水'}</div><div class="loot-qty">x${it.qty}</div></div>`;
       const qc=qColor[Math.min(7,it.quality||0)];   // v1.9.46 品质 8 档，原先截断到 5 档
       return `<div class="loot-cell loot-eq" style="border-color:${qc}"><div class="loot-ico" style="background:${qc}">${ICON.bag(22,'#2a1c08')}</div><div class="loot-nm">${it.name||(it.slot||'装备')}</div><div class="loot-qty">x${it.qty||1}</div></div>`;
@@ -2833,6 +2996,14 @@ function showBattleResult(rep,mon){
     return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 强化材料 +${fmt(d.mat||0)}</span></div>`;
   }).join('');
   const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 强化材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
+  // v1.9.93 具名材料掉落（秘银/蓝宝石/精铁/钢锭/皮革/布料）：与「强化材料」计数器分开列，
+  // 稀有材料给专属边框色，玩家一眼能看出这趟是不是出了好东西；已由服务端入包，无需再领。
+  const matRare={'秘银':'#b07cf0','蓝宝石':'#6aa8f0'};
+  const matList=rep.materials||[];
+  const mats=matList.length?`<div class="drop-wrap"><div class="loot-title">材料掉落 · ${matList.length} 种</div><div class="loot-grid drop-grid">${matList.map(m=>{
+    const rc=matRare[m.id]||'#8892a4';
+    return `<div class="loot-cell loot-eq" style="border-color:${rc}" title="${esc(m.name||m.id)} x${m.qty}"><div class="loot-ico" style="background:${rc}">${ICON.crystal(22,'#2a1c08')}</div><div class="loot-nm">${esc(m.name||m.id)}</div><div class="loot-qty">x${m.qty}</div></div>`;
+  }).join('')}</div></div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row" title="不自动回满 · 用回血药水或采草药恢复"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
@@ -2843,6 +3014,7 @@ function showBattleResult(rep,mon){
       <div class="reward-row"><span class="rk">${ICON.book(14,'#8fb6e0')}<em>经验</em></span><span class="rv">+${fmt(rep.exp)}</span></div>
       <div class="reward-row"><span class="rk">${ICON.gold(14,'#f0c040')}<em>金币</em></span><span class="rv">+${fmt(rep.gold)}</span></div>
       ${drops}
+      ${mats}
       ${decomp}
       <button class="big-btn goldbtn" id="resBtn">领取奖励 · 返回大世界</button>`:`
       ${(()=>{
@@ -3083,6 +3255,9 @@ async function playBattle(rep,mon,bd){
         if(r.damage>0){
           setMonAnim(tiT,'hit',300);
           spawnFx('-'+Math.round(r.damage),slotOf(tiT).x,430,'#8ec6f5');
+          // v1.9.92 被动反伤同样有打击感（不播英雄出手，但受击反馈一致）
+          triggerMonHit(tiT,dmgPower(r.damage,bHp.monMax,false),false);
+          hitImpact(slotOf(tiT).x,436,dmgPower(r.damage,bHp.monMax,false),false);
           window.SFX&&SFX.hit();
           logLine('hero',`R${r.n} ${r.skillName} → ${tgtNameT} -${Math.round(r.damage)}`);
         }
@@ -3111,6 +3286,11 @@ async function playBattle(rep,mon,bd){
         setMonAnim(ti,'hit',300);
         // v1.9.82 召唤物协战：紫色浮字，不播英雄出手动画
         spawnFx('-'+Math.round(r.damage),sp.x,430,r.action==='summonHit'?'#c08bff':'#ff6b6b');
+        // v1.9.92 打击感：顿（hit-stop）+ 震屏 + 怪物白闪/击退/形变 + 火花
+        const _crit=r.fx==='fx_dmg_crit';
+        const _pw=dmgPower(r.damage,bHp.monMax,_crit);
+        triggerMonHit(ti,_pw,_crit);
+        hitImpact(sp.x,436,_pw,_crit);
         if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${r.skillName} → ${tgtName} -${Math.round(r.damage)}`);
         // v1.9.82 吸取：同回合伤害 + 回血一起显示
@@ -3136,6 +3316,8 @@ async function playBattle(rep,mon,bd){
       setMonAnim(mi,'attack',420);await sleep(150);
       setBAnim('hero','hit',300);
       spawnFx('-'+Math.round(r.damage),420,430,'#ff6b6b');
+      // v1.9.92 英雄挨打给轻震（不冻结画面，避免打断玩家操作节奏）
+      shakeScreen(3.6,150);
       window.SFX&&SFX.hurt();
       // v1.9.40 格挡姿态：显示减伤比例
       logLine('mon',`R${r.n} ${r.skillName} → 英雄 -${Math.round(r.damage)}${r.dr>0?`（格挡减伤 ${Math.round(r.dr*100)}%）`:''}`);
@@ -3609,7 +3791,13 @@ async function playPartyBattle(rep){
       if(r.damage>0){
         const mi=Math.max(0,(r.monIdx||0)|0);
         setMonAnim(mi,'hit',300);
-        spawnFx('-'+Math.round(r.damage), (MON_SLOT[Math.min(mi,MON_SLOT.length-1)]||{x:bossX}).x, 430, r.action==='summonHit'?'#c08bff':'#ff6b6b');
+        const _mpx=(MON_SLOT[Math.min(mi,MON_SLOT.length-1)]||{x:bossX}).x;
+        spawnFx('-'+Math.round(r.damage), _mpx, 430, r.action==='summonHit'?'#c08bff':'#ff6b6b');
+        // v1.9.92 打击感：与单人战斗同口径（顿 + 震屏 + 白闪/击退/形变 + 火花）
+        const _crit=r.fx==='fx_dmg_crit';
+        const _pw=dmgPower(r.damage,bHp.monMax,_crit);
+        triggerMonHit(mi,_pw,_crit);
+        hitImpact(_mpx,436,_pw,_crit);
         if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${rep.bossName||'BOSS'} -${Math.round(r.damage)}`);
         // v1.9.82 吸取：同回合伤害 + 回血一起显示
@@ -3641,6 +3829,7 @@ async function playPartyBattle(rep){
       await sleep(150);
       if(si===meIdx) setBAnim('hero','hit',300);
       spawnFx('-'+Math.round(r.damage||0), s?s.x:420, 440, '#ff6b6b');
+      shakeScreen(3.6,150);   // v1.9.92 队友挨打也震（同上，不冻结）
       window.SFX&&SFX.hurt();
       logLine('mon',`R${r.n} ${rep.bossName||'BOSS'} → ${s?s.name:'队友'} -${Math.round(r.damage||0)}`);
     }
@@ -3674,6 +3863,7 @@ async function playPartyBattle(rep){
     <div class="sec-title">成员结算</div>${rows}
     <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(rep.exp||0)}</span></div>
     <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(rep.gold||0)}</span></div>
+    ${(()=>{ const ml=rep.materials||[]; return ml.length?('<div class="reward-row"><span class="rk">材料</span><span class="rv">'+ml.map(m=>esc(m.name||m.id)+' x'+m.qty).join(' · ')+'</span></div>'):''; })()}
     <div class="enc-btns"><button class="big-btn goldbtn" id="partyOk">收下</button></div>`);
   $('partyOk').onclick=async()=>{
     hideModal(); partyClear(); showView('world');

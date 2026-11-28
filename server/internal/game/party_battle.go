@@ -96,6 +96,8 @@ type PartyBattleReport struct {
 	Gold      int               `json:"gold"`
 	PartyMult float64           `json:"partyMult"`
 	Log       string            `json:"log"`
+	// v1.9.93 具名材料掉落：全队共一份（每位队员各得相同一份），前端结算面板直接展示
+	Materials []NamedMaterialDrop `json:"materials,omitempty"`
 }
 
 type partyUnit struct {
@@ -653,6 +655,8 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 		lvMult := 1 + 0.2*float64(lvSum/maxInt(len(waves), 1)-1)
 		rep.Exp = int(expSum * lvMult * mult)
 		rep.Gold = int(goldSum * lvMult * mult)
+		// v1.9.93 组队副本通关同样产出具名材料（全队掷一次，每位队员各得一份）
+		rep.Materials = RollPartyDungeonMaterials(rng)
 		rep.Log = "组队副本：三波全通"
 	} else {
 		rep.Exp, rep.Gold = 0, 0
