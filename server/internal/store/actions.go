@@ -235,6 +235,36 @@ func (p *PlayerState) ShopExchange(item, pay string, qty int) (cost, got int, er
 		return 0, 0, fmt.Errorf("单次最多兑换 %d", max)
 	}
 	switch item {
+	// v1.9.68 强化材料兑回货币：每 1 件强化材料 = 10 金币 或 1 钻石（与买入互为镜像）。
+	// 这里 pay 固定为 "material"（消耗的是强化材料计数器），提前独立结算后直接返回。
+	case "materialToGold", "materialToGem":
+		if pay != "material" {
+			return 0, 0, fmt.Errorf("兑回金币/钻石需消耗强化材料（payWith=material）")
+		}
+		per := shopInt("materialOut", "goldPerUnit", 10)
+		if item == "materialToGem" {
+			per = shopInt("materialOut", "gemPerUnit", 1)
+		}
+		if per <= 0 {
+			if item == "materialToGem" {
+				per = 1
+			} else {
+				per = 10
+			}
+		}
+		if p.Core.Material < qty {
+			return 0, 0, fmt.Errorf("强化材料不足（需 %d，持有 %d）", qty, p.Core.Material)
+		}
+		p.Core.Material -= qty
+		got = qty * per
+		if item == "materialToGold" {
+			p.Core.Gold += got
+			p.appendLogs([]string{fmt.Sprintf("商店兑换：强化材料 -%d → 金币 +%d", qty, got)})
+		} else {
+			p.Core.Gem += got
+			p.appendLogs([]string{fmt.Sprintf("商店兑换：强化材料 -%d → 钻石 +%d", qty, got)})
+		}
+		return qty, got, nil
 	case "material":
 		switch pay {
 		case "gold":
