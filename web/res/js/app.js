@@ -467,7 +467,9 @@ function drawBattle(t,now){
     }
   }
   lastHeroX=heroX;
-  if(battleHeroActor)battleHeroActor.render(cvb,heroX,560,1.6,{dir:heroFacesR?1:-1});
+  // v1.9.71 组队副本：多英雄模式下由 drawPartyHeroes 画全队，不再画单人立绘
+  if(!partySlots&&battleHeroActor)battleHeroActor.render(cvb,heroX,560,1.6,{dir:heroFacesR?1:-1});
+  if(partySlots)drawPartyHeroes(t,now);
   // v1.9.27 怪物死亡：die 动画 500ms 内压扁 → 380ms 后收掉 actor 用塌陷尘团替代（群怪每只独立）
   const monDie=(bAnim.mon==='die')?(now-(bAnim.monStart||now)):-1;
   battleMonActors.forEach((a,i)=>{
@@ -3135,71 +3137,122 @@ async function openPartyInvite(){
   });
 }
 
-/* 多人战斗演出：三个角色各带独立血量，血条画在头顶 */
-function playPartyBattle(rep){
-  if(!rep){ return; }
-  const W=920,H=470;
-  showModal(`<canvas id="partyCv" width="${W}" height="${H}" style="width:100%;max-width:920px;border-radius:12px;background:#0e141d"></canvas>
-    <div class="pd-rs" style="margin-top:8px">${rep.result==='win'?'战斗胜利':'战斗失败'} · ${rep.partyMult}x 人数加成 · 经验 +${fmt(rep.exp)} · 金币 +${fmt(rep.gold)}</div>
+/* ===== v1.9.71 组队副本战斗：复用打小怪的战斗场景，三个角色各自头顶血条 ===== */
+let partySlots=null;          // [{name,classId,x,hpMax,hpNow,actor}]
+let partyRunCtl=null;         // 取消令牌（离开战斗时中断）
+
+function partyClear(){
+  partySlots=null;
+  if(partyRunCtl){ partyRunCtl.dead=true; partyRunCtl=null; }
+}
+
+// 在 drawBattle 里被调用：把队友好几个立绘画出来 + 头顶血条
+function drawPartyHeroes(t,now){
+  if(!partySlots) return;
+  partySlots.forEach((s,i)=>{
+    if(!s.actor) return;
+    const dead = s.hpNow<=0;
+    // 影子
+    cvb.fillStyle='rgba(0,0,0,'+(dead?0.12:0.3)+')';
+    cvb.beginPath();cvb.ellipse(s.x,566,42,12,0,0,Math.PI*2);cvb.fill();
+    s.actor.render(cvb,s.x,560,1.6,{dir:(s.faceR?1:-1),alpha:dead?0.45:1});
+    // 头顶血条
+    const w=88,h=9,bx=s.x-w/2,by=470;
+    cvb.fillStyle='rgba(0,0,0,.62)';cvb.fillRect(bx-1,by-1,w+2,h+2);
+    cvb.fillStyle='#2a3a2a';cvb.fillRect(bx,by,w,h);
+    const pct=Math.max(0,Math.min(1,s.hpNow/Math.max(1,s.hpMax)));
+    cvb.fillStyle=dead?'#5a5f66':(pct>0.5?'#5fd38a':pct>0.25?'#ffd76b':'#ff8a8a');
+    cvb.fillRect(bx,by,w*pct,h);
+    cvb.strokeStyle='rgba(255,255,255,.35)';cvb.lineWidth=1;cvb.strokeRect(bx+.5,by+.5,w-1,h-1);
+    // 名字 + 数字
+    cvb.font='bold 12px "Microsoft YaHei",sans-serif';cvb.textAlign='center';
+    cvb.fillStyle='#e6eefc';cvb.fillText(s.name||'', s.x, by-6);
+    cvb.font='11px "Microsoft YaHei",sans-serif';cvb.fillStyle='#cfe0f5';
+    cvb.fillText(Math.max(0,Math.round(s.hpNow))+' / '+Math.round(s.hpMax), s.x, by+h+12);
+    cvb.textAlign='left';
+  });
+}
+
+async function playPartyBattle(rep){
+  if(!rep) return;
+  const heroes=rep.heroes||[];
+  partyClear();
+  const ctl={dead:false}; partyRunCtl=ctl;
+  // 1) 复用正式战斗场景
+  showView('battle');
+  battlePlaying=true; paused=false;
+  battleMonInfos=[{sprite:'boss_beetle',name:rep.bossName||'幽影主宰',isBoss:true,lv:30,elite:false}];
+  battleMonActors=[]; battleMonState=[];
+  ensureBattleActors(battleMonInfos);
+  const mMax=rep.bossMaxHp||1;
+  bHp={hero:1,heroMax:1,mon:mMax,monMax:mMax};
+  updateHp();
+  $('roundVal')&&($('roundVal').textContent='组队副本');
+  $('battleLog')&&($('battleLog').innerHTML='');
+  logLine('sys',`组队副本 · ${heroes.length} 人 · 服务端权威结算`);
+  // 2) 三个立绘
+  const BUNDLES=window.CLASS_BUNDLES||{};
+  const xs=heroes.length===1?[420]:heroes.length===2?[380,520]:[330,450,570];
+  partySlots=heroes.map((h,i)=>({
+    name:h.name, classId:h.classId, x:xs[i]||420,
+    hpMax:h.hpStart||1, hpNow:h.hpStart||1, faceR:true, actor:null,
+  }));
+  const SA=window.StandeeActor;
+  await Promise.all(partySlots.map(async s=>{
+    if(!SA) return;
+    try{
+      const a=new SA(BUNDLES[s.classId]||'char_warrior');
+      await a.init(); a.play('idle');
+      s.actor=a;
+    }catch(e){ /* 立绘加载失败就用血条兜底 */ }
+  }));
+  if(ctl.dead) return;
+  // 3) 逐回合演出
+  const rounds=rep.rounds||[];
+  const per=Math.max(110,Math.min(300,7000/Math.max(1,rounds.length)));
+  for(const r of rounds){
+    if(ctl.dead||view!=='battle') return;
+    if(r.heroHp) r.heroHp.forEach((hp,i)=>{ if(partySlots[i]) partySlots[i].hpNow=hp; });
+    if(r.bossHp!=null){ bHp.mon=r.bossHp; updateHp(); }
+    if(r.actor==='hero'){
+      const s=partySlots[r.heroIdx];
+      if(s&&s.actor){ setBAnim('hero','attack',320); }
+      if(s) s.faceR=true;
+      if(r.damage>0){ setMonAnim(0,'hit',260); spawnFx('-'+Math.round(r.damage),760,430,'#ff6b6b'); }
+      if(r.heal>0){ spawnFx('+'+Math.round(r.heal), s?s.x:420, 440,'#7fe0a0'); }
+    }else{
+      const s=partySlots[r.heroIdx];
+      setMonAnim(0,'attack',320);
+      if(s){ s.faceR=false; }
+      if(r.damage>0) spawnFx('-'+Math.round(r.damage), s?s.x:420, 440,'#ff6b6b');
+    }
+    const who=r.actor==='boss'?'BOSS':(partySlots[r.heroIdx]||{}).name||'队友';
+    if(r.damage>0) logLine(r.actor==='boss'?'mon':'hero',`${who} → ${r.actor==='boss'?'-':'-'}${Math.round(r.damage)}`);
+    else if(r.heal>0) logLine('hero',`${who} → 恢复 +${Math.round(r.heal)}`);
+    if(r.bossHp<=0){ setMonAnim(0,'die',1600); }
+    await new Promise(res=>setTimeout(res,per));
+  }
+  if(ctl.dead) return;
+  // 4) 结算
+  battlePlaying=false;
+  window.SFX&&(rep.result==='win'?SFX.victory():SFX.death());
+  const win=rep.result==='win';
+  const t=document.createElement('div');
+  t.className='toast-win'+(win?'':' lose');t.textContent=win?'战 斗 胜 利':'战 斗 失 败';
+  $('fxLayer').appendChild(t);setTimeout(()=>t.remove(),1200);
+  await new Promise(res=>setTimeout(res,900));
+  const rows=(rep.heroes||[]).map(h=>`<div class="pd-m"><span class="pd-dot"></span><b>${h.name}</b>
+      <em>${h.alive?'存活':'倒下'} · 剩余 ${Math.round(h.hpEnd)} · 输出 ${fmt(Math.round(h.damage||0))}</em></div>`).join('');
+  showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
+    <div class="msub">${rep.bossName||'幽影主宰'} · ${rep.rounds.length} 步 · ${rep.partyMult}x 人数加成</div>
+    <div class="sec-title">成员结算</div>${rows}
+    <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(rep.exp||0)}</span></div>
+    <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(rep.gold||0)}</span></div>
     <div class="enc-btns"><button class="big-btn goldbtn" id="partyOk">收下</button></div>`);
-  $('partyOk').onclick=()=>{ hideModal(); };
-  const cv=$('partyCv'), g=cv.getContext('2d');
-  // v1.9.70 去掉对不存在函数 heroClassOf 的引用（踩了就整段演出抛异常、只看到报错弹窗）
-  const heroes=(rep.heroes||[]).map((h,i)=>({...h, x:170+i*130, y:400}));
-  const boss={ x:720, y:400, name:rep.bossName||'BOSS', max:rep.bossMaxHp||1, hp:rep.bossMaxHp||1 };
-  let idx=0;
-  const drawBar=(x,y,w,h,pct,color)=>{
-    g.fillStyle='rgba(0,0,0,.55)'; g.fillRect(x,y,w,h);
-    g.fillStyle=color; g.fillRect(x+1,y+1,Math.max(0,(w-2)*pct),h-2);
-    g.strokeStyle='rgba(255,255,255,.25)'; g.lineWidth=1; g.strokeRect(x+.5,y+.5,w-1,h-1);
+  $('partyOk').onclick=async()=>{
+    hideModal(); partyClear(); showView('world');
+    await reloadPlayerState();
   };
-  const frame=()=>{
-    g.clearRect(0,0,W,H);
-    g.fillStyle='#101823'; g.fillRect(0,0,W,H);
-    // 地面
-    g.fillStyle='#18232f'; g.fillRect(0,410,W,60);
-    // BOSS
-    g.fillStyle='#3b1f24'; g.beginPath(); g.ellipse(boss.x,432,74,18,0,0,Math.PI*2); g.fill();
-    g.fillStyle='#8c3a44'; g.beginPath(); g.roundRect(boss.x-52,250,104,170,16); g.fill();
-    g.fillStyle='#f0d590'; g.font='bold 14px "Microsoft YaHei",sans-serif'; g.textAlign='center';
-    g.fillText(boss.name,boss.x,236);
-    drawBar(boss.x-80,206,160,12,boss.hp/boss.max,'#e05a5a');
-    // 英雄
-    heroes.forEach((h,i)=>{
-      const alive=(h.hpNow==null?h.hpEnd:h.hpNow)>0;
-      g.globalAlpha=alive?1:0.38;
-      g.fillStyle='rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(h.x,432,36,11,0,0,Math.PI*2); g.fill();
-      g.fillStyle=['#4f6b8f','#6b4f8f','#4f8f6b'][i%3];
-      g.beginPath(); g.roundRect(h.x-26,286,52,144,12); g.fill();
-      g.globalAlpha=1;
-      g.fillStyle='#cfe0f5'; g.font='12px "Microsoft YaHei",sans-serif';
-      g.fillText(h.name||'', h.x, 272);
-      drawBar(h.x-44,244,88,10,(h.hpNow==null?h.hpEnd:h.hpNow)/Math.max(1,h.hpStart),'#5fd38a');
-      g.fillStyle='#9fb0c8'; g.font='11px "Microsoft YaHei",sans-serif';
-      g.fillText(Math.round(h.hpNow==null?h.hpEnd:h.hpNow)+' / '+Math.round(h.hpStart), h.x, 258);
-    });
-  };
-  const step=()=>{
-    if(idx>=(rep.rounds||[]).length){ frame(); return; }
-    const r=rep.rounds[idx++];
-    (r.heroHp||[]).forEach((hp,i)=>{ if(heroes[i]) heroes[i].hpNow=hp; });
-    if(r.bossHp!=null) boss.hp=r.bossHp;
-    frame();
-    // 伤害浮字
-    if(r.damage>0){
-      g.fillStyle=r.actor==='boss'?'#ff8a8a':'#ffd76b';
-      g.font='bold 16px "Microsoft YaHei",sans-serif';
-      const tx=r.actor==='boss'?(heroes[r.heroIdx]||heroes[0]).x:boss.x;
-      g.fillText('-'+Math.round(r.damage), tx, 232);
-    }
-    if(r.heal>0){
-      g.fillStyle='#7fe0a0'; g.font='bold 16px "Microsoft YaHei",sans-serif';
-      g.fillText('+'+Math.round(r.heal), (heroes[r.heroIdx]||heroes[0]).x, 232);
-    }
-    setTimeout(step, Math.max(120, Math.min(320, 6000/(rep.rounds.length||1))));
-  };
-  frame();
-  setTimeout(step, 250);
 }
 
 /* 邀请接收：未在队伍中时轻量轮询（8s），有邀请就弹窗 */

@@ -46,6 +46,7 @@ type PartyRound struct {
 type PartyHeroResult struct {
 	UserID string  `json:"userId"`
 	Name   string  `json:"name"`
+	ClassID string `json:"classId"`
 	HPStart float64 `json:"hpStart"`
 	HPEnd   float64 `json:"hpEnd"`
 	Alive   bool    `json:"alive"`
@@ -178,7 +179,7 @@ func ResolvePartyBattle(dgID, bossID string, bossLv int, bossHpMult float64, her
 		Rounds: []PartyRound{}, Heroes: make([]PartyHeroResult, len(units)),
 	}
 	for i, u := range units {
-		rep.Heroes[i] = PartyHeroResult{UserID: u.hero.UserID, Name: u.hero.Name, HPStart: round2(u.stats.HP)}
+		rep.Heroes[i] = PartyHeroResult{UserID: u.hero.UserID, Name: u.hero.Name, ClassID: u.hero.ClassID, HPStart: round2(u.stats.HP)}
 	}
 
 	n := 0
