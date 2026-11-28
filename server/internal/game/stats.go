@@ -26,9 +26,13 @@ type EquipItem struct {
 // WeaponClassFor 职业 → 所属武器系（v1.9.38）。未配置/未知职业归战士系。
 func WeaponClassFor(classID string) string {
 	for wc, ids := range C().Equipment.WeaponClasses {
-		if wc == "_note" { continue }
+		if wc == "_note" {
+			continue
+		}
 		for _, id := range ids {
-			if id == classID { return wc }
+			if id == classID {
+				return wc
+			}
 		}
 	}
 	return "warrior"
@@ -36,17 +40,27 @@ func WeaponClassFor(classID string) string {
 
 // WeaponName 武器按系+品质取名（v1.9.38）；非武器或未配置回退品质+槽位名。
 func WeaponName(classID string, quality int, slot string) string {
-	if slot != "weapon" || classID == "" { return "" }
+	if slot != "weapon" || classID == "" {
+		return ""
+	}
 	names, ok := C().Equipment.WeaponNames[classID]
-	if !ok || len(names) == 0 { return "" }
-	if quality < 0 { quality = 0 }
-	if quality >= len(names) { quality = len(names) - 1 }
+	if !ok || len(names) == 0 {
+		return ""
+	}
+	if quality < 0 {
+		quality = 0
+	}
+	if quality >= len(names) {
+		quality = len(names) - 1
+	}
 	return names[quality]
 }
 
 // WeaponClassCN 武器系中文名。
 func WeaponClassCN(wc string) string {
-	if wc == "mage" { return "法师" }
+	if wc == "mage" {
+		return "法师"
+	}
 	return "战士"
 }
 
@@ -65,6 +79,9 @@ type Avatar struct {
 	// SkillLv = 技能 id → 等级（缺省/0 按 1 级）。不传则技能战力为 0（兼容老客户端）。
 	Skills  []string       `json:"skills,omitempty"`
 	SkillLv map[string]int `json:"skillLv,omitempty"`
+	// v1.9.89 已装配的被动技能 id（最多 PassiveSlotMax 个，转职后才有）。
+	// 被动同时影响属性与战力：属性走 applyPassives，战力按固定档位分单独计量。
+	Passives []string `json:"passives,omitempty"`
 }
 
 // CalcStats 按 职业系数 × 等级成长 × 装备 计算最终属性。
@@ -98,8 +115,59 @@ func CalcStats(a Avatar) Stats {
 	for _, it := range a.Equip {
 		applyEquip(&st, c, classID2EquipParams{coef: coef, gainPerLv: gainPerLv, qualities: qualities}, it)
 	}
-	st.Power = PowerOf(st) + SkillPowerSum(a.Skills, a.SkillLv)
+
+	// v1.9.89 战力口径：被动只按 powerRule.base.passive 的固定档位分计量，
+	// 它带来的属性增幅**不再**二次计入战力（否则同一个被动既涨属性又涨分，战力会虚高）。
+	// 所以先按「不含被动」的属性结算基础战力，再叠加技能分与被动分。
+	basePower := PowerOf(st)
+	applyPassives(&st, c, a.Passives, a.SkillLv)
+
+	st.Power = basePower + SkillPowerSum(a.Skills, a.SkillLv) + PassivePowerSum(a.Passives, a.SkillLv)
 	return st
+}
+
+// applyPassives 把已装配被动的属性型效果叠加到 st 上（v1.9.89）。
+// 百分比字段按乘法叠加（多个被动依次相乘，天然避免线性膨胀）；
+// 等级加成复用 SkillEffectMult，与主动技能同步（每级 +8%）。
+// 战斗特效型效果（吸血/减伤/反伤等）不在这里，见 passive.go 的 CalcPassiveBonus。
+func applyPassives(st *Stats, c *Config, ids []string, levels map[string]int) {
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		s, ok := c.SkillByID(id)
+		if !ok || s.Kind != "passive" {
+			continue // 脏数据（主动技能塞进被动槽）直接忽略，不参与属性计算
+		}
+		m := SkillEffectMult(levels[id])
+		if s.HPPct != 0 {
+			st.HP *= 1 + s.HPPct*m
+		}
+		if s.ATKPct != 0 {
+			st.ATK *= 1 + s.ATKPct*m
+		}
+		if s.DEFPct != 0 {
+			st.DEF *= 1 + s.DEFPct*m
+		}
+		if s.CritAdd != 0 {
+			st.Crit += s.CritAdd * m
+		}
+		if s.SpdAdd != 0 {
+			st.Spd += s.SpdAdd * m
+		}
+	}
+	// 生命/攻击/防御兜底：极端负面被动（如虚空之躯）叠加后不允许归零或为负
+	if st.HP < 1 {
+		st.HP = 1
+	}
+	if st.ATK < 1 {
+		st.ATK = 1
+	}
+	if st.DEF < 0 {
+		st.DEF = 0
+	}
 }
 
 // SkillPower 单个已装备技能的战力贡献（v1.9.85）。
@@ -161,11 +229,49 @@ func SkillPowers(ids []string, levels map[string]int) []SkillPowerEntry {
 	return out
 }
 
+// PassivePowerSum 已装配被动的战力合计（v1.9.89，去重后四舍五入）。
+// 口径与主动技能一致：base[passive] × kindWeight[passive] × SkillEffectMult(等级)；
+// 但这里会额外过滤 kind != passive 的 id，避免脏存档把主动技能当被动重复计分。
+func PassivePowerSum(ids []string, levels map[string]int) float64 {
+	c := C()
+	sum := 0.0
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if s, ok := c.SkillByID(id); ok && s.Kind == "passive" {
+			sum += SkillPower(id, levels[id])
+		}
+	}
+	return math.Round(sum)
+}
+
+// PassivePowers 逐被动战力明细（顺序与装配顺序一致，去重、跳过非被动）。
+func PassivePowers(ids []string, levels map[string]int) []SkillPowerEntry {
+	c := C()
+	out := make([]SkillPowerEntry, 0, len(ids))
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if s, ok := c.SkillByID(id); ok && s.Kind == "passive" {
+			if pw := SkillPower(id, levels[id]); pw > 0 {
+				out = append(out, SkillPowerEntry{ID: id, Power: math.Round(pw)})
+			}
+		}
+	}
+	return out
+}
+
 // equipParams 抽出装备折算所需的配置快照，供 CalcStats 与 EquipContribution 共用。
 type classID2EquipParams struct {
-	coef       map[string]any
-	gainPerLv  float64
-	qualities  []QualityDef
+	coef      map[string]any
+	gainPerLv float64
+	qualities []QualityDef
 }
 
 // applyEquip 把一件装备的属性贡献累加到 st 上（品质/强化/职业系数全套规则）。

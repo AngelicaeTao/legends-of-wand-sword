@@ -83,7 +83,9 @@ func playerProfile(w http.ResponseWriter, r *http.Request) {
 	equips := []map[string]any{}
 	worn := make([]game.EquipItem, 0, 4)
 	for _, e := range p.Equip {
-		if !e.Equipped { continue }
+		if !e.Equipped {
+			continue
+		}
 		gi := game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats, ClassID: e.ClassID}
 		worn = append(worn, gi)
 		equips = append(equips, map[string]any{
@@ -92,7 +94,9 @@ func playerProfile(w http.ResponseWriter, r *http.Request) {
 			"power": int(game.EquipContribution(p.Core.ClassID, gi)), // v1.9.61 单件战力
 		})
 	}
-	st := game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn})
+	// v1.9.89 与 /api/stats/calc 同口径：带技能与被动，避免面板战力与属性接口对不上
+	st := game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn,
+		Skills: p.Skills.Slots, SkillLv: p.Skills.Levels, Passives: p.Skills.Passives})
 	gname, grole := "", ""
 	if g, role := store.Guilds().GuildByUser(uid); g != nil {
 		gname, grole = g.Name, role
@@ -490,9 +494,10 @@ type calcStatsReq struct {
 	Equip   []calcEquipItem  `json:"equip"`
 	Avatar  *game.Avatar     `json:"avatar"` // 旧格式兼容
 	Items   []game.EquipItem `json:"items"`  // 旧格式兼容
-	// v1.9.85 未登录纯计算时可用；登录用户以存档为准，这两个字段被忽略
-	Skills  []string       `json:"skills"`
-	SkillLv map[string]int `json:"skillLv"`
+	// v1.9.85 未登录纯计算时可用；登录用户以存档为准，这三个字段被忽略
+	Skills   []string       `json:"skills"`
+	SkillLv  map[string]int `json:"skillLv"`
+	Passives []string       `json:"passives"` // v1.9.89 被动技能
 }
 
 // calcStatsResp 总属性（扁平字段）+ 每件装备战力 + 技能战力明细（v1.9.85）。
@@ -501,6 +506,9 @@ type calcStatsResp struct {
 	EquipPowers []game.EquipPower      `json:"equipPowers"`
 	SkillPowers []game.SkillPowerEntry `json:"skillPowers,omitempty"`
 	SkillPower  float64                `json:"skillPower,omitempty"`
+	// v1.9.89 被动技能战力：按 powerRule.base.passive 固定档位计分，与属性增幅不重复计算
+	PassivePowers []game.SkillPowerEntry `json:"passivePowers,omitempty"`
+	PassivePower  float64                `json:"passivePower,omitempty"`
 }
 
 // playerStats 用存档直接算属性，口径与 /api/stats/calc 一致。
@@ -528,14 +536,17 @@ func playerStats(p *store.PlayerState) map[string]any {
 	st := game.CalcStats(game.Avatar{
 		Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn,
 		Skills: p.Skills.Slots, SkillLv: p.Skills.Levels,
+		Passives: p.Skills.Passives, // v1.9.89 被动属性 + 固定战力分
 	})
 	// v1.9.85 技能与技能等级计入战力：逐技能明细供面板显示，skillPower 为合计
 	skillPowers := game.SkillPowers(p.Skills.Slots, p.Skills.Levels)
 	return map[string]any{
 		"hp": st.HP, "atk": st.ATK, "def": st.DEF, "crit": st.Crit, "spd": st.Spd, "power": st.Power,
-		"equipPowers": powers,
-		"skillPowers": skillPowers,
-		"skillPower":  game.SkillPowerSum(p.Skills.Slots, p.Skills.Levels),
+		"equipPowers":   powers,
+		"skillPowers":   skillPowers,
+		"skillPower":    game.SkillPowerSum(p.Skills.Slots, p.Skills.Levels),
+		"passivePowers": game.PassivePowers(p.Skills.Passives, p.Skills.Levels),
+		"passivePower":  game.PassivePowerSum(p.Skills.Passives, p.Skills.Levels),
 	}
 }
 
@@ -576,10 +587,16 @@ func calcStats(w http.ResponseWriter, r *http.Request) {
 		if p, err := disk.Load(uid); err == nil && p != nil {
 			a.Skills = p.Skills.Slots
 			a.SkillLv = p.Skills.Levels
+			a.Passives = p.Skills.Passives // v1.9.89 被动以存档为准
 		}
-	} else if len(a.Skills) == 0 && len(q.Skills) > 0 {
-		a.Skills = q.Skills
-		a.SkillLv = q.SkillLv
+	} else {
+		if len(a.Skills) == 0 && len(q.Skills) > 0 {
+			a.Skills = q.Skills
+			a.SkillLv = q.SkillLv
+		}
+		if len(a.Passives) == 0 && len(q.Passives) > 0 {
+			a.Passives = q.Passives
+		}
 	}
 	st := game.CalcStats(a)
 
@@ -600,7 +617,7 @@ func calcStats(w http.ResponseWriter, r *http.Request) {
 				worn = append(worn, it.EquipItem)
 			}
 		}
-		st2 := game.CalcStats(game.Avatar{Level: a.Level, ClassID: a.ClassID, Equip: worn, Skills: a.Skills, SkillLv: a.SkillLv})
+		st2 := game.CalcStats(game.Avatar{Level: a.Level, ClassID: a.ClassID, Equip: worn, Skills: a.Skills, SkillLv: a.SkillLv, Passives: a.Passives})
 		resp.Stats = st2
 	} else {
 		for _, it := range a.Equip {
@@ -610,6 +627,8 @@ func calcStats(w http.ResponseWriter, r *http.Request) {
 	// v1.9.85 技能战力明细（已装备技能 × 等级）
 	resp.SkillPowers = game.SkillPowers(a.Skills, a.SkillLv)
 	resp.SkillPower = game.SkillPowerSum(a.Skills, a.SkillLv)
+	resp.PassivePowers = game.PassivePowers(a.Passives, a.SkillLv)
+	resp.PassivePower = game.PassivePowerSum(a.Passives, a.SkillLv)
 	jsonOut(w, resp)
 }
 
@@ -694,7 +713,8 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 	// 武器解封 + 职业池校验：等级不足/跨职业的技能自动剔除（服务端裁定）
 	bd := filterBD(p, q.BD)
 	req := game.BattleRequest{
-		UserID: q.UserID, Avatar: game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip},
+		UserID: q.UserID, Avatar: game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip,
+			Passives: p.Skills.Passives}, // v1.9.89 被动特效以存档为准，不接受客户端传参
 		BD: bd, MonsterID: q.MonsterID, MonsterLv: q.MonsterLv, Elite: q.Elite,
 		StartHP: p.Core.HP,       // v1.9.27 全局血量：以当前血量开局，战斗后余量写回存档
 		SkillLv: p.Skills.Levels, // v1.9.56 技能等级：每级效果 +8%，以存档为准
@@ -786,12 +806,13 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 	var q struct {
 		UserID   string            `json:"userId"`
 		Action   string            `json:"action"`
-		Slots    []string          `json:"slots"`   // submit_bd
-		SkillID  string            `json:"skillId"` // unlock_skill
-		ItemID   string            `json:"itemId"`  // equip/unequip/deposit/withdraw/storage_decompose
-		All      bool              `json:"all"`     // storage_decompose 批量分解全部
-		Qty      int               `json:"qty"`     // deposit/withdraw
-		Slot     string            `json:"slot"`    // enhance
+		Slots    []string          `json:"slots"`    // submit_bd
+		Passives []string          `json:"passives"` // save_passives
+		SkillID  string            `json:"skillId"`  // unlock_skill
+		ItemID   string            `json:"itemId"`   // equip/unequip/deposit/withdraw/storage_decompose
+		All      bool              `json:"all"`      // storage_decompose 批量分解全部
+		Qty      int               `json:"qty"`      // deposit/withdraw
+		Slot     string            `json:"slot"`     // enhance
 		DGID     string            `json:"dungeonId"`
 		QuestID  string            `json:"questId"`
 		HomeLook map[string]string `json:"homeLook"` // update_look
@@ -823,6 +844,14 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		extra["slots"] = slots
+	case "save_passives":
+		// v1.9.89 被动装配（最多 2 个，转职后才有池）：服务端权威校验后落库并重算战力
+		ps, e := p.SavePassives(q.Passives)
+		if e != nil {
+			http.Error(w, e.Error(), 400)
+			return
+		}
+		extra["passives"] = ps
 	case "update_look":
 		// 家园换装（服务端权威：只改 appearance，不碰职业/装备/技能）
 		look, e := p.UpdateLook(q.HomeLook)
@@ -1333,7 +1362,10 @@ func maxHpOf(p *store.PlayerState) float64 {
 			equip = append(equip, game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats})
 		}
 	}
-	return game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip}).HP
+	// v1.9.89 必须带被动：+生命百分比的被动要提升血量上限，否则战斗里 CalcStats 的 HP
+	// 会大于这里的上限，回血被封顶、面板血量条也会溢出
+	return game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip,
+		Skills: p.Skills.Slots, SkillLv: p.Skills.Levels, Passives: p.Skills.Passives}).HP
 }
 
 // filterBD 服务端二次校验：只保留当前职业技能池内、且已解锁的技能（防客户端篡改）。

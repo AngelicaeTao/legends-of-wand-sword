@@ -61,6 +61,48 @@ func containsStr(ss []string, s string) bool {
 	return false
 }
 
+// SavePassives 提交被动技能装配（v1.9.89，最多 game.PassiveSlotMax() 个）。
+// 与 SubmitBD 的区别：被动不需要解锁（转职即全部获得），但仍做三重权威校验：
+//  1. 必须是 passive 类技能（防止把主动技能塞进被动槽重复计分）；
+//  2. 必须属于当前职业的被动池（跨职业/转职前的被动不允许残留）；
+//  3. 不超过槽位上限、不重复。
+//
+// 传空数组表示清空被动槽，允许。
+func (p *PlayerState) SavePassives(passives []string) ([]string, error) {
+	c := game.C()
+	if len(passives) > game.PassiveSlotMax() {
+		return nil, fmt.Errorf("被动槽最多 %d 个", game.PassiveSlotMax())
+	}
+	out := []string{}
+	for _, id := range passives {
+		if id == "" {
+			continue
+		}
+		sk, ok := c.SkillByID(id)
+		if !ok {
+			return nil, fmt.Errorf("被动技能不存在：%s", id)
+		}
+		if sk.Kind != "passive" {
+			return nil, fmt.Errorf("%s 不是被动技能", sk.Name)
+		}
+		if !c.InPassivePool(p.Core.ClassID, id) {
+			return nil, fmt.Errorf("该被动不属于当前职业：%s", sk.Name)
+		}
+		if containsStr(out, id) {
+			continue
+		}
+		out = append(out, id)
+	}
+	p.Skills.Passives = out
+	p.refreshPower() // 被动计入战力：装配变动实时重算
+	if len(out) == 0 {
+		p.appendLogs([]string{"清空被动技能"})
+	} else {
+		p.appendLogs([]string{fmt.Sprintf("更新被动技能：%d 个", len(out))})
+	}
+	return out, nil
+}
+
 // UnlockSkill 解锁技能（供成长/转职解锁，演示用：花钻石），服务端权威扣费。
 func (p *PlayerState) UnlockSkill(id string, gemCost int) (bool, error) {
 	c := game.C()

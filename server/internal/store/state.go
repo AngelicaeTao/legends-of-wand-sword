@@ -73,6 +73,9 @@ type Skills struct {
 	Unlocked []string `json:"unlocked"`
 	// v1.9.56 技能等级（技能id→等级，1 级起，缺省视为 1）。老存档没有该字段时按 1 级处理。
 	Levels map[string]int `json:"levels,omitempty"`
+	// v1.9.89 已装配的被动技能（最多 game.PassiveSlotMax 个）。
+	// 被动不需要解锁：转职后职业池里的 4 个被动直接全部可用，玩家只挑 2 个装上。
+	Passives []string `json:"passives,omitempty"`
 }
 type Pets struct {
 	Owned  []string `json:"owned"`

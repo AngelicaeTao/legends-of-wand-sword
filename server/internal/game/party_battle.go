@@ -47,29 +47,29 @@ type PartyMonster struct {
 
 // PartyRound 是组队战报的一步。
 type PartyRound struct {
-	N        int       `json:"n"`
-	Wave     int       `json:"wave"` // 1 起
-	Actor    string    `json:"actor"` // hero / boss
-	HeroIdx  int       `json:"heroIdx,omitempty"`
-	MonIdx   int       `json:"monIdx,omitempty"`
-	TargetIdx int      `json:"targetIdx,omitempty"` // v1.9.79 治疗/格挡的目标队友
-	Action   string    `json:"action,omitempty"`
-	SkillName string   `json:"skillName,omitempty"`
-	Damage   float64   `json:"damage,omitempty"`
-	Heal     float64   `json:"heal,omitempty"`
-	MonHP    []float64 `json:"monHp"`  // 本波各怪当前血量
-	HeroHP   []float64 `json:"heroHp"`
-	HeroDead []bool    `json:"heroDead,omitempty"`
-	MonDead  []bool    `json:"monDead,omitempty"`
+	N         int       `json:"n"`
+	Wave      int       `json:"wave"`  // 1 起
+	Actor     string    `json:"actor"` // hero / boss
+	HeroIdx   int       `json:"heroIdx,omitempty"`
+	MonIdx    int       `json:"monIdx,omitempty"`
+	TargetIdx int       `json:"targetIdx,omitempty"` // v1.9.79 治疗/格挡的目标队友
+	Action    string    `json:"action,omitempty"`
+	SkillName string    `json:"skillName,omitempty"`
+	Damage    float64   `json:"damage,omitempty"`
+	Heal      float64   `json:"heal,omitempty"`
+	MonHP     []float64 `json:"monHp"` // 本波各怪当前血量
+	HeroHP    []float64 `json:"heroHp"`
+	HeroDead  []bool    `json:"heroDead,omitempty"`
+	MonDead   []bool    `json:"monDead,omitempty"`
 }
 
 // PartyWaveResult 单波结算
 type PartyWaveResult struct {
-	Index    int             `json:"index"`
-	Rounds   int             `json:"rounds"`
-	Result   string          `json:"result"`
-	Monsters []PartyMonster  `json:"monsters"`
-	HeroHP   []float64       `json:"heroHp"`
+	Index    int            `json:"index"`
+	Rounds   int            `json:"rounds"`
+	Result   string         `json:"result"`
+	Monsters []PartyMonster `json:"monsters"`
+	HeroHP   []float64      `json:"heroHp"`
 }
 
 type PartyHeroResult struct {
@@ -115,6 +115,9 @@ type partyUnit struct {
 	summonLeft  int
 	summonPower float64
 	summonName  string
+	// v1.9.89 被动特效快照与本单位的英雄回合序号（「每 N 回合」类被动按它计时）
+	pb   PassiveBonus
+	turn int
 }
 
 type partySkill struct {
@@ -147,9 +150,26 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 		if h.StartHP > 0 && h.StartHP < hp {
 			hp = h.StartHP
 		}
-		u := &partyUnit{hero: h, stats: st, hp: hp}
+		// v1.9.89 每个队员的被动特效各自独立结算（与单人 battle.go 同一套 CalcPassiveBonus）
+		pb := CalcPassiveBonus(h.Avatar.Passives, h.Avatar.SkillLv)
+		u := &partyUnit{hero: h, stats: st, hp: hp, pb: pb, shield: st.ATK * pb.OpenShield}
 		for _, sid := range h.BD {
 			if s, ok := c.SkillByID(sid); ok {
+				// v1.9.89 补上技能等级加成（与单人 battle.go 同口径）：此前组队完全没吃
+				// skillUpgrade 的 +8%/级，队员升技能在组队里毫无收益。
+				if m := SkillEffectMult(h.Avatar.SkillLv[sid]); m > 1 {
+					s.Power *= m
+					s.HotPer *= m
+					if s.SummonPower > 0 {
+						s.SummonPower *= m
+					}
+					if s.DRPct > 0 {
+						s.DRPct *= m
+						if s.DRPct > 0.85 {
+							s.DRPct = 0.85
+						}
+					}
+				}
 				u.queue = append(u.queue, partySkill{def: s})
 			}
 		}
@@ -283,6 +303,23 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 				if u.hp <= 0 || aliveMons() == 0 {
 					continue
 				}
+				u.turn++
+				// v1.9.89 被动周期回复（庇护圣所）：每 N 个本人回合回一口，独立战报行
+				if u.pb.RegenEvery > 0 && u.pb.RegenPct > 0 && u.turn%u.pb.RegenEvery == 0 && u.hp > 0 && u.hp < u.stats.HP {
+					heal := u.stats.HP * u.pb.RegenPct
+					if room := u.stats.HP - u.hp; heal > room {
+						heal = room
+					}
+					if heal > 0 {
+						u.hp += heal
+						n++
+						rep.Rounds = append(rep.Rounds, PartyRound{
+							N: n, Wave: wi + 1, Actor: "hero", HeroIdx: idx, Action: "passiveRegen",
+							SkillName: "被动·回复", Heal: round2(heal),
+							MonHP: monHP(), HeroHP: heroHP(), HeroDead: heroDead(), MonDead: monDead(),
+						})
+					}
+				}
 				// HoT
 				if u.hotLeft > 0 {
 					u.hotLeft--
@@ -356,7 +393,12 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 				var act SkillDef
 				if chosen >= 0 {
 					act = u.queue[chosen].def
-					u.queue[chosen].remain = act.CD
+					// v1.9.89 被动冷却缩减：下限 1 秒
+					cd := act.CD * (1 - u.pb.CDR)
+					if cd < 1 {
+						cd = 1
+					}
+					u.queue[chosen].remain = cd
 				} else {
 					act = c.Skills.BasicAttack
 				}
@@ -387,6 +429,13 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					}
 					tgt := mons[mi]
 					dmg := u.stats.ATK * (1 + u.atkBuff) * mult * (1 - tgt.mdef/(tgt.mdef+100))
+					// v1.9.89 被动增伤：按技能类型 + 低血狂暴（与单人同口径）
+					if v := u.pb.KindDmgOf(act.Kind); v > 0 {
+						dmg *= 1 + v
+					}
+					if u.pb.LowHPDmg > 0 {
+						dmg *= u.pb.LowHPMult(u.hp, u.stats.HP)
+					}
 					dmg *= 0.9 + rng.Float64()*0.2
 					if dmg > tgt.hp {
 						dmg = tgt.hp
@@ -396,8 +445,10 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					rd.MonIdx = mi
 					rd.Damage = round2(dmg)
 					// v1.9.82 吸取：命中回复本次伤害的 lifesteal（按目标剩余血量计，防溢出）
-					if act.Lifesteal > 0 && dmg > 0 {
-						heal := dmg * act.Lifesteal
+					// v1.9.89 技能自带吸血 + 被动附加吸血合并结算
+					ls := act.Lifesteal + u.pb.Lifesteal
+					if ls > 0 && dmg > 0 {
+						heal := dmg * ls
 						if room := u.stats.HP - u.hp; heal > room {
 							heal = room
 						}
@@ -415,7 +466,8 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					}
 					if act.HotRounds > 0 {
 						tu.hotLeft = act.HotRounds
-						tu.hotPer = tu.stats.HP * act.HotPer
+						// v1.9.89 治疗增幅按施放者的被动算（恩泽属于祭祀自己）
+						tu.hotPer = tu.stats.HP * act.HotPer * (1 + u.pb.HealBoost)
 						tu.hotName = act.Name
 						jump := tu.hotPer
 						if healed := tu.stats.HP - tu.hp; jump > healed {
@@ -426,7 +478,7 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 							rd.Heal = round2(jump)
 						}
 					} else {
-						heal := tu.stats.HP * act.Power
+						heal := tu.stats.HP * act.Power * (1 + u.pb.HealBoost)
 						if room := tu.stats.HP - tu.hp; heal > room {
 							heal = room
 						}
@@ -444,14 +496,16 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 						tu.drLeft = act.DRRounds
 						tu.drPct = act.DRPct
 					} else {
-						tu.shield += u.stats.ATK * act.Power
+						// v1.9.89 护盾增幅按施放者的被动算（圣盾精通属于骑士自己）
+						tu.shield += u.stats.ATK * act.Power * (1 + u.pb.ShieldBoost)
 					}
 					rd.TargetIdx = tgtAlly
 				case "buff":
 					u.atkBuff = act.Power
 				case "debuff":
 					// v1.9.87 减益：power=伤害系数（0 则纯降攻不出手），atkDown=怪物攻击降低比例
-					monAtkDebuff = act.AtkDown
+					// v1.9.89 被动降攻强化，上限 90%
+					monAtkDebuff = math.Min(0.9, act.AtkDown*(1+u.pb.DebuffBoost))
 					if act.Power > 0 {
 						dealDamage(act.Power)
 					}
@@ -470,6 +524,29 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 				rd.HeroDead = heroDead()
 				rd.MonDead = monDead()
 				rep.Rounds = append(rep.Rounds, rd)
+				// v1.9.89 被动追击（疾风步）：每 N 个本人回合在技能之后追加一击
+				if u.pb.ExtraEvery > 0 && u.pb.ExtraPower > 0 && u.turn%u.pb.ExtraEvery == 0 && u.hp > 0 && aliveMons() > 0 {
+					if mi := firstAliveMon(); mi >= 0 {
+						tgt := mons[mi]
+						xd := u.stats.ATK * u.pb.ExtraPower * (1 - tgt.mdef/(tgt.mdef+100))
+						xd *= u.pb.LowHPMult(u.hp, u.stats.HP)
+						xd *= 0.9 + rng.Float64()*0.2
+						if xd > tgt.hp {
+							xd = tgt.hp
+						}
+						if xd < 0 {
+							xd = 0
+						}
+						tgt.hp -= xd
+						u.dealt += xd
+						n++
+						rep.Rounds = append(rep.Rounds, PartyRound{
+							N: n, Wave: wi + 1, Actor: "hero", HeroIdx: idx, Action: "passiveExtra",
+							SkillName: "被动·追击", Damage: round2(xd), MonIdx: mi,
+							MonHP: monHP(), HeroHP: heroHP(), HeroDead: heroDead(), MonDead: monDead(),
+						})
+					}
+				}
 			}
 			if aliveHeroes() == 0 || aliveMons() == 0 {
 				break
@@ -496,6 +573,9 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					dmg *= 1 - tu.drPct
 					tu.drLeft--
 				}
+				if tu.pb.DR > 0 {
+					dmg *= 1 - tu.pb.DR
+				} // v1.9.89 被动常驻受伤减免
 				dmg *= 0.9 + rng.Float64()*0.2
 				if tu.shield > 0 {
 					absorbed := math.Min(tu.shield, dmg)
@@ -508,6 +588,19 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					N: n, Wave: wi + 1, Actor: "boss", HeroIdx: ti, SkillName: m.def.Name, Damage: round2(dmg),
 					MonHP: monHP(), HeroHP: heroHP(), HeroDead: heroDead(), MonDead: monDead(),
 				})
+				// v1.9.89 被动反伤（荆棘之甲）：按实际受到的伤害反弹给攻击者，同回合战报行
+				if tu.pb.Thorns > 0 && dmg > 0 && m.hp > 0 {
+					rf := dmg * tu.pb.Thorns
+					if rf > m.hp {
+						rf = m.hp
+					}
+					m.hp -= rf
+					rep.Rounds = append(rep.Rounds, PartyRound{
+						N: n, Wave: wi + 1, Actor: "hero", HeroIdx: ti, Action: "passiveThorns",
+						SkillName: "被动·反伤", Damage: round2(rf),
+						MonHP: monHP(), HeroHP: heroHP(), HeroDead: heroDead(), MonDead: monDead(),
+					})
+				}
 				if aliveHeroes() == 0 {
 					break
 				}

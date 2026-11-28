@@ -1,11 +1,12 @@
 {
-  "_readme": "技能配置（v1.9.7：按《角色创建与换装-完整交付包》配置/skills.json 的 6 职业 + 职业过滤规则重写；v1.9.86 撤销 v1.9.85 的「吸取并入火球」，恢复术士「吸取」wl_drain、火球术回归纯输出，现 6 职业 16 技能）。power 为系数（交付包 100 制 → 本表 1.0 制，已 /100）。",
+  "_readme": "技能配置（v1.9.7：按《角色创建与换装-完整交付包》配置/skills.json 的 6 职业 + 职业过滤规则重写；v1.9.86 撤销 v1.9.85 的「吸取并入火球」，恢复术士「吸取」wl_drain、火球术回归纯输出，现 6 职业 16 主动技能 + 4 个转职职业各 4 个被动技能，共 32 技能）。power 为系数（交付包 100 制 → 本表 1.0 制，已 /100）。",
   "_bdRule": "技能库显示 = unlocked[] ∩ (当前 classId 的 initial ∪ advanced)；不显示跨职业技能；转职后原职业技能自动卸下。",
-  "_balanceNote": "全部数值来自交付包 [PLACEHOLDER]，PT-2 验证后只改本表，不改代码。 v1.9.40：m_heal 改持续回血（hotRounds/hotPer），w_guard 改持续减伤（drRounds/drPct）。",
+  "_balanceNote": "全部数值来自交付包 [PLACEHOLDER]，PT-2 验证后只改本表，不改代码。 v1.9.40：m_heal 改持续回血（hotRounds/hotPer），w_guard 改持续减伤（drRounds/drPct）。 v1.9.89：m_heal 每跳改 5%（原 15%）；新增 kind=passive 被动技能——转职职业各 4 个、转职后可装配 2 个，效果含属性与战斗特效，战力按 powerRule.base.passive 固定档位计分。",
   "slots": 4,
+  "passiveSlots": 2,
   "powerRule": {
     "_note": "v1.9.85 技能战力：已装备技能每格基础分 base[技能档位] × kindWeight[技能类型] × 等级系数，四舍五入后累加进总战力（与装备战力同口径）。等级系数复用技能升级的 skillUpgrade.perLevel（economy.json，每级 +8%），两处始终同源；未列出的档位/类型按 initial / 1.0 兜底",
-    "base": { "initial": 60, "advanced": 120 },
+    "base": { "initial": 60, "advanced": 120, "passive": 80 },
     "kindWeight": {
       "physical": 1.0,
       "magic": 1.0,
@@ -13,7 +14,8 @@
       "shield": 0.85,
       "buff": 0.7,
       "debuff": 0.7,
-      "summon": 1.0
+      "summon": 1.0,
+      "passive": 1.0
     }
   },
   "basicAttack": {
@@ -34,7 +36,8 @@
         "w_slash",
         "w_guard"
       ],
-      "advanced": []
+      "advanced": [],
+      "passives": []
     },
     "mage": {
       "name": "法师",
@@ -43,7 +46,8 @@
         "m_fireball",
         "m_heal"
       ],
-      "advanced": []
+      "advanced": [],
+      "passives": []
     },
     "knight": {
       "name": "骑士",
@@ -59,6 +63,12 @@
         "k_aegis",
         "k_taunt",
         "k_holy_strike"
+      ],
+      "passives": [
+        "kp_bulwark",
+        "kp_thorns",
+        "kp_aegis_master",
+        "kp_guardian"
       ]
     },
     "fighter": {
@@ -75,6 +85,12 @@
         "f_combo",
         "f_berserk",
         "f_iron_body"
+      ],
+      "passives": [
+        "fp_swift",
+        "fp_frenzy",
+        "fp_bloodlust",
+        "fp_ironfist"
       ]
     },
     "sage": {
@@ -91,6 +107,12 @@
         "s_bless",
         "s_revive",
         "s_purify"
+      ],
+      "passives": [
+        "sp_grace",
+        "sp_faith",
+        "sp_haste",
+        "sp_sanctuary"
       ]
     },
     "warlock": {
@@ -107,6 +129,12 @@
         "wl_curse",
         "wl_summon",
         "wl_drain"
+      ],
+      "passives": [
+        "wp_bloodpact",
+        "wp_darkness",
+        "wp_frailty",
+        "wp_void"
       ]
     }
   },
@@ -153,15 +181,15 @@
       "id": "m_heal",
       "name": "治疗术",
       "kind": "heal",
-      "power": 0.15,
+      "power": 0.05,
       "cd": 6,
       "element": "none",
       "fx": "fx_heal",
       "classId": "mage",
       "tier": "initial",
-      "desc": "治疗术：立即回复 15% 最大生命，之后每回合再回 15%（持续 3 回合）",
+      "desc": "治疗术：立即回复 5% 最大生命，之后每回合再回 5%（持续 3 回合）",
       "hotRounds": 3,
-      "hotPer": 0.15
+      "hotPer": 0.05
     },
     {
       "id": "k_aegis",
@@ -311,6 +339,229 @@
       "tier": "advanced",
       "desc": "吸取：造成 1.4× 攻击的暗系伤害，并回复本次伤害的 50%",
       "lifesteal": 0.5
+    },
+    {
+      "id": "fp_swift",
+      "name": "疾风步",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "fighter",
+      "tier": "passive",
+      "desc": "疾风步：速度 +3；每 3 个英雄回合追加一次 0.6× 攻击的追击",
+      "spdAdd": 3,
+      "extraEvery": 3,
+      "extraPower": 0.6
+    },
+    {
+      "id": "fp_frenzy",
+      "name": "狂怒",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "fighter",
+      "tier": "passive",
+      "desc": "狂怒：生命低于 40% 时，造成的伤害提升 25%",
+      "lowHpThresh": 0.4,
+      "lowHpDmg": 0.25
+    },
+    {
+      "id": "fp_bloodlust",
+      "name": "嗜血",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "fighter",
+      "tier": "passive",
+      "desc": "嗜血：攻击 +6%；所有伤害附带 12% 吸血",
+      "atkPct": 0.06,
+      "lifestealAdd": 0.12
+    },
+    {
+      "id": "fp_ironfist",
+      "name": "铁拳",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "fighter",
+      "tier": "passive",
+      "desc": "铁拳：物理技能伤害提升 18%",
+      "kindDmg": {
+        "physical": 0.18
+      }
+    },
+    {
+      "id": "kp_bulwark",
+      "name": "壁垒",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "knight",
+      "tier": "passive",
+      "desc": "壁垒：受到的伤害降低 12%",
+      "drAdd": 0.12
+    },
+    {
+      "id": "kp_thorns",
+      "name": "荆棘之甲",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "knight",
+      "tier": "passive",
+      "desc": "荆棘之甲：受到伤害时反弹 30% 给攻击者",
+      "thorns": 0.3
+    },
+    {
+      "id": "kp_aegis_master",
+      "name": "圣盾精通",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "knight",
+      "tier": "passive",
+      "desc": "圣盾精通：护盾类技能效果 +35%；战斗开始获得 25% 攻击的护盾",
+      "openShield": 0.25,
+      "shieldBoost": 0.35
+    },
+    {
+      "id": "kp_guardian",
+      "name": "守护誓言",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "knight",
+      "tier": "passive",
+      "desc": "守护誓言：最大生命 +15%，防御 +12%",
+      "hpPct": 0.15,
+      "defPct": 0.12
+    },
+    {
+      "id": "sp_grace",
+      "name": "恩泽",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "sage",
+      "tier": "passive",
+      "desc": "恩泽：治疗类技能回复量提升 30%",
+      "healBoost": 0.3
+    },
+    {
+      "id": "sp_faith",
+      "name": "坚定信仰",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "sage",
+      "tier": "passive",
+      "desc": "坚定信仰：最大生命 +12%，受到的伤害降低 8%",
+      "hpPct": 0.12,
+      "drAdd": 0.08
+    },
+    {
+      "id": "sp_haste",
+      "name": "迅捷祷言",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "sage",
+      "tier": "passive",
+      "desc": "迅捷祷言：所有技能冷却缩短 15%",
+      "cdr": 0.15
+    },
+    {
+      "id": "sp_sanctuary",
+      "name": "庇护圣所",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "sage",
+      "tier": "passive",
+      "desc": "庇护圣所：每 3 个英雄回合回复 6% 最大生命",
+      "regenEvery": 3,
+      "regenPct": 0.06
+    },
+    {
+      "id": "wp_bloodpact",
+      "name": "血契",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "warlock",
+      "tier": "passive",
+      "desc": "血契：所有伤害附带 15% 吸血",
+      "lifestealAdd": 0.15
+    },
+    {
+      "id": "wp_darkness",
+      "name": "暗涌",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "warlock",
+      "tier": "passive",
+      "desc": "暗涌：魔法与减益技能伤害提升 20%",
+      "kindDmg": {
+        "magic": 0.2,
+        "debuff": 0.2
+      }
+    },
+    {
+      "id": "wp_frailty",
+      "name": "虚弱诅咒",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "warlock",
+      "tier": "passive",
+      "desc": "虚弱诅咒：降攻效果额外 +10%；攻击 +8%",
+      "atkPct": 0.08,
+      "debuffBoost": 0.1
+    },
+    {
+      "id": "wp_void",
+      "name": "虚空之躯",
+      "kind": "passive",
+      "power": 0,
+      "cd": 0,
+      "element": "none",
+      "fx": "fx_buff_atk",
+      "classId": "warlock",
+      "tier": "passive",
+      "desc": "虚空之躯：攻击 +18%，最大生命 -10%",
+      "hpPct": -0.1,
+      "atkPct": 0.18
     }
   ]
 }
