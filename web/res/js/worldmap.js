@@ -18,6 +18,8 @@ const MASK_W=960, MASK_H=540, MASK_SCALE=8; // 掩码降采样比例（7680/960�
 const MINI_W=480, MINI_H=270, MINI_SCALE=MW/MINI_W; // 小地图兜底底图（掩码上色）：1px = 16 世界单位
 const THUMB_W=960, THUMB_H=540, THUMB_SCALE=MW/THUMB_W; // 小地图主底图（地形缩略）：1px = 8 世界单位
 const MOVE_SPEED=480; // 场景像素/秒（v1.8：世界折半，速度同比折半保持手感）
+// v1.9.68 旗标到达判定：1 格 = 160 世界单位，取 150 免在"差一步"处抖
+const PIN_ARRIVE_R=150;
 // 安全区出生点：W1 主通道上的开阔点（旧的 7680,4320 落在地形中央蓝色圆内，视觉为水面）
 const SPAWN_X=2560, SPAWN_Y=2176;
 const RES='/res/';
@@ -980,6 +982,13 @@ WMap.prototype.update=function(dt){
   for(const d of this.dust){ d.x+=d.vx*dt; d.y+=d.vy*dt; d.vy+=26*dt; d.life-=dt; }
   this.dust=this.dust.filter(d=>d.life>0);
   this.centerCam();
+  // v1.9.68 走到标记点附近 → 自动取消跟踪（旗标本身保留，玩家可自行清除或重新跟踪）
+  const gp=this.curPin();
+  if(gp&&gp.track&&Math.hypot(gp.x-h.x,gp.y-h.y)<=PIN_ARRIVE_R){
+    gp.track=false; this.savePin();
+    this.pinToast={text:'已到达标记点 · 自动取消跟踪',until:this.time+3.0};
+    if(window.SFX&&SFX.tab)SFX.tab();
+  }
   // 掉落物理
   for(const d of this.drops){
     d.vy+=1400*dt;d.y+=d.vy*dt;
@@ -1131,6 +1140,7 @@ WMap.prototype.render=function(now){
       case 'h':this.drawHero(g,sx,sy,t);break;
     }
   }
+  this.drawPinHud(g,cx,cy,t);
   this.progress=Math.min(20,this.visited.size);
 };
 
@@ -1411,6 +1421,99 @@ WMap.prototype.curPin=function(){
 WMap.prototype.pinDist=function(){
   const p=this.curPin(); if(!p)return 0;
   return Math.round(Math.hypot(p.x-this.hero.x,p.y-this.hero.y)/160);
+};
+
+/* ---------- v1.9.68 主界面旗标方位提示（仅跟踪中） ----------
+   两套画法按"旗标是否在视口内"切换：
+   · 视口内 → 直接在地上画旗（旗杆 + 旗面 + 地面光环 + 向上的渐隐光柱），
+     玩家看见的是"那个点在画面里"，距离贴在旗下沿。
+   · 视口外 → 以角色为圆心、半径 64 画箭头指向目标。不用屏幕边缘箭头，
+     是因为 HUD（小地图 / 任务栏 / 底部导航）都贴边，边缘箭头会被压住，
+     而且窗口越窄越容易撞上；绕角色画在任何分辨率下都不会被遮挡。 */
+WMap.prototype.drawPinLabel=function(g,x,y,text,size){
+  const fs=size||13, padX=Math.round(fs*0.72), h=Math.round(fs+7), r=h/2;
+  g.save();
+  g.font='700 '+fs+'px system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+  g.textAlign='center'; g.textBaseline='middle';
+  const w=g.measureText(text).width+padX*2;
+  const l=x-w/2, tp=y-h/2, rt=x+w/2, bt=y+h/2;
+  g.beginPath();
+  g.moveTo(l+r,tp); g.arcTo(rt,tp,rt,bt,r); g.arcTo(rt,bt,l,bt,r);
+  g.arcTo(l,bt,l,tp,r); g.arcTo(l,tp,rt,tp,r); g.closePath();
+  g.fillStyle='rgba(8,12,20,.86)';
+  g.strokeStyle='rgba(217,180,91,.92)'; g.lineWidth=fs>=16?1.8:1.2;
+  g.fill(); g.stroke();
+  g.fillStyle='#ffd65a'; g.fillText(text,x,y+0.5);
+  g.restore();
+};
+
+WMap.prototype.drawPinHud=function(g,cx,cy,t){
+  const hx=this.hero.x-cx, hy=this.hero.y-cy;
+  // 到达提示：不依赖 track（此刻已置 false），单独画成顶部横幅。
+  // 不放角色头顶是因为 .interact-hint（"点击「xx」交战"）也贴在头顶，
+  // 两者会正好叠在一起；顶部中央在 1280×720 下是空白区，不压小地图/任务栏/底部导航。
+  if(this.pinToast){
+    const left=this.pinToast.until-t;
+    if(left<=0){ this.pinToast=null; }
+    else{
+      const k=Math.max(0,Math.min(1,left/3.0));     // 1 → 0
+      g.save();
+      g.globalAlpha=Math.min(1,k*3.5);               // 最后一段淡出
+      this.drawPinLabel(g,VW/2,VH*0.16+(1-k)*14,this.pinToast.text,17);
+      g.restore();
+    }
+  }
+  const p=this.curPin();
+  if(!p||!p.track)return;                            // 只有跟踪中才提示，未跟踪不制造常驻噪音
+  const px=p.x-cx, py=p.y-cy;
+  const cells=Math.max(0,Math.round(Math.hypot(p.x-this.hero.x,p.y-this.hero.y)/160));
+  const label=cells>0?(cells+' 格'):'就在附近';
+  // ---- 视口内：地标旗（旗杆 + 旗面 + 地面光环 + 渐隐光柱） ----
+  if(px>10&&px<VW-10&&py>34&&py<VH-14){
+    const pul=0.5+0.5*Math.sin(t*3.2), bob=Math.sin(t*2.2)*2;
+    const top=py-62+bob;
+    g.save();
+    // 光柱：先画，让旗杆压在上面
+    const grd=g.createLinearGradient(px,top-26,px,py);
+    grd.addColorStop(0,'rgba(255,214,90,0)');
+    grd.addColorStop(1,'rgba(255,214,90,.34)');
+    g.fillStyle=grd; g.fillRect(px-8,top-26,16,88);
+    // 地面光环：深底 + 金环，保证在土黄/草地/石板上都能看清
+    g.fillStyle='rgba(12,10,4,.20)';
+    g.beginPath(); g.ellipse(px,py,22+pul*7,11+pul*3.5,0,0,Math.PI*2); g.fill();
+    g.strokeStyle='rgba(255,224,120,'+(0.62+0.28*pul).toFixed(3)+')';
+    g.lineWidth=2.6;
+    g.beginPath(); g.ellipse(px,py,22+pul*7,11+pul*3.5,0,0,Math.PI*2); g.stroke();
+    // 旗杆：深色打底 + 金色覆盖，顶端略高
+    g.lineCap='round';
+    g.strokeStyle='#231706'; g.lineWidth=4;
+    g.beginPath(); g.moveTo(px,py); g.lineTo(px,top); g.stroke();
+    g.strokeStyle='#ffd65a'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(px,py); g.lineTo(px,top); g.stroke();
+    // 旗面：朝右的三角，深描边
+    g.lineJoin='round';
+    g.fillStyle='#ffd65a'; g.strokeStyle='#231706'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(px+1,top); g.lineTo(px+38,top+13); g.lineTo(px+1,top+26); g.closePath();
+    g.fill(); g.stroke();
+    g.restore();
+    this.drawPinLabel(g,px,py+33,label);
+    return;
+  }
+  // ---- 视口外：角色周围的圆形徽章箭头（深色圆底，任何地形都不糊） ----
+  const ang=Math.atan2(p.y-this.hero.y,p.x-this.hero.x);
+  const R=78, ax=hx+Math.cos(ang)*R, ay=hy+Math.sin(ang)*R-26;
+  g.save();
+  g.translate(ax,ay);
+  g.fillStyle='rgba(10,14,22,.72)';
+  g.beginPath(); g.arc(0,0,18,0,Math.PI*2); g.fill();
+  g.strokeStyle='rgba(255,214,90,.85)'; g.lineWidth=1.8;
+  g.beginPath(); g.arc(0,0,18,0,Math.PI*2); g.stroke();
+  g.rotate(ang);
+  g.fillStyle='#ffd65a'; g.strokeStyle='rgba(26,16,0,.95)'; g.lineWidth=1.6; g.lineJoin='round';
+  g.beginPath(); g.moveTo(12,0); g.lineTo(-6,-8); g.lineTo(-2.5,0); g.lineTo(-6,8); g.closePath();
+  g.fill(); g.stroke();
+  g.restore();
+  this.drawPinLabel(g,ax+Math.cos(ang)*50,ay+Math.sin(ang)*50,label);
 };
 
 /* ---------- v1.9.29 大地图弹窗（M 键开关 / Esc / ✕ / 遮罩点击关闭） ---------- */
