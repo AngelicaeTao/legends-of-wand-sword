@@ -849,10 +849,9 @@ function switchAccount(){ setSession(null); stopInviteWatch(); $('authUser').val
 // knight 里是红甲）。游戏里表现为"战士显示成骑士、骑士显示成战士"，这里把映射对调。
 const CLASS_BUNDLES={warrior:'char_knight',mage:'char_mage',knight:'char_warrior',fighter:'char_fighter',sage:'char_sage',warlock:'char_warlock'};
 window.CLASS_BUNDLES=CLASS_BUNDLES;   // 供 creator.js / worldmap.js 共用同一张表
-// v2.0.0 六职业立绘统一面向右（本轮新贴图逐个核对立绘：面部/武器均朝画面右侧）。
-// 渲染时按"移动方向 ⊕ 美术朝向"决定翻转；未知职业同样按朝右处理。
-// 将来某职业改朝左，在此单独标 false。
-const ART_FACES_RIGHT={warrior:true,mage:true,knight:true,fighter:true,sage:true,warlock:true};
+// v1.9.27 立绘美术默认朝向（对照 standee 素材逐个确认）：战士/拳师/术士面向右，
+// 法师/骑士/祭祀面向左。渲染时按"移动方向 ⊕ 美术朝向"决定翻转，行走不再反向。
+const ART_FACES_RIGHT={warrior:true,mage:false,knight:false,fighter:true,sage:false,warlock:true};
 function artFacesRight(classId){ return ART_FACES_RIGHT[classId]!==false; }
 function heroBundleOf(classId){ return CLASS_BUNDLES[classId]||'char_warrior'; }
 function applyHeroLook(){

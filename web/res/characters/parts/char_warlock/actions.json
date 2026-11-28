@@ -1,137 +1,207 @@
 {
-  "bundle": "char_warlock",
-  "format": "standee_actions_v2",
-  "note": "原创写实奇幻立绘 + 关节区域连续形变程序帧；150ms 附近到达攻击/施法关键姿态。",
-  "logical_size": [
-    64,
-    96
-  ],
-  "texture_size": [
-    256,
-    384
-  ],
-  "states": {
-    "idle": {
-      "fps": 8,
-      "loop": true,
-      "frames": [
-        "idle_f00.webp",
-        "idle_f01.webp",
-        "idle_f02.webp",
-        "idle_f03.webp",
-        "idle_f04.webp",
-        "idle_f05.webp",
-        "idle_f06.webp",
-        "idle_f07.webp"
-      ],
-      "keys": []
+ "bundle": "char_warlock",
+ "format": "standee_actions_v1",
+ "note": "v1.9.49 六职业程序帧（4帧/动作，64×96→128×192 最近邻放大），frames 字段优先，keys 为老 root 变换回退",
+ "states": {
+  "idle": {
+   "fps": 3,
+   "loop": true,
+   "frames": [
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png"
+   ],
+   "keys": [
+    {
+     "t": 0,
+     "root": {
+      "sy": 1.0
+     }
     },
-    "walk": {
-      "fps": 12,
-      "loop": true,
-      "frames": [
-        "walk_f00.webp",
-        "walk_f01.webp",
-        "walk_f02.webp",
-        "walk_f03.webp",
-        "walk_f04.webp",
-        "walk_f05.webp",
-        "walk_f06.webp",
-        "walk_f07.webp"
-      ],
-      "keys": []
+    {
+     "t": 800,
+     "root": {
+      "sy": 1.03
+     }
     },
-    "attack": {
-      "fps": 20,
-      "loop": false,
-      "frames": [
-        "attack_f00.webp",
-        "attack_f01.webp",
-        "attack_f02.webp",
-        "attack_f03.webp",
-        "attack_f04.webp",
-        "attack_f05.webp",
-        "attack_f06.webp",
-        "attack_f07.webp"
-      ],
-      "keys": []
-    },
-    "cast": {
-      "fps": 20,
-      "loop": false,
-      "frames": [
-        "cast_f00.webp",
-        "cast_f01.webp",
-        "cast_f02.webp",
-        "cast_f03.webp",
-        "cast_f04.webp",
-        "cast_f05.webp",
-        "cast_f06.webp",
-        "cast_f07.webp"
-      ],
-      "keys": []
-    },
-    "hit": {
-      "fps": 20,
-      "loop": false,
-      "frames": [
-        "hit_f00.webp",
-        "hit_f01.webp",
-        "hit_f02.webp",
-        "hit_f03.webp",
-        "hit_f04.webp",
-        "hit_f05.webp"
-      ],
-      "keys": []
-    },
-    "die": {
-      "fps": 20,
-      "loop": false,
-      "frames": [
-        "die_f00.webp",
-        "die_f01.webp",
-        "die_f02.webp",
-        "die_f03.webp",
-        "die_f04.webp",
-        "die_f05.webp",
-        "die_f06.webp",
-        "die_f07.webp",
-        "die_f08.webp",
-        "die_f09.webp",
-        "die_f10.webp",
-        "die_f11.webp"
-      ],
-      "keys": []
-    },
-    "victory": {
-      "fps": 12,
-      "loop": false,
-      "frames": [
-        "victory_f00.webp",
-        "victory_f01.webp",
-        "victory_f02.webp",
-        "victory_f03.webp",
-        "victory_f04.webp",
-        "victory_f05.webp",
-        "victory_f06.webp",
-        "victory_f07.webp"
-      ],
-      "keys": []
-    },
-    "celebrate": {
-      "fps": 12,
-      "loop": true,
-      "frames": [
-        "celebrate_f00.webp",
-        "celebrate_f01.webp",
-        "celebrate_f02.webp",
-        "celebrate_f03.webp",
-        "celebrate_f04.webp",
-        "celebrate_f05.webp",
-        "celebrate_f06.webp",
-        "celebrate_f07.webp"
-      ],
-      "keys": []
+    {
+     "t": 1600,
+     "root": {
+      "sy": 1.0
+     }
     }
+   ]
+  },
+  "walk": {
+   "fps": 3,
+   "loop": true,
+   "frames": [
+    "walk_f00.png",
+    "walk_f01.png",
+    "walk_f02.png",
+    "walk_f03.png"
+   ],
+   "keys": [
+    {
+     "t": 0,
+     "root": {
+      "dy": 0,
+      "rot": -2
+     }
+    },
+    {
+     "t": 250,
+     "root": {
+      "dy": 2
+     }
+    },
+    {
+     "t": 500,
+     "root": {
+      "dy": 0,
+      "rot": 2
+     }
+    }
+   ]
+  },
+  "attack": {
+   "fps": 3,
+   "loop": false,
+   "frames": [
+    "attack_f00.png",
+    "attack_f01.png",
+    "attack_f02.png",
+    "attack_f03.png"
+   ],
+   "keys": [
+    {
+     "t": 0,
+     "root": {
+      "dx": 0,
+      "rot": 0
+     }
+    },
+    {
+     "t": 120,
+     "root": {
+      "dx": 10,
+      "rot": 5
+     }
+    },
+    {
+     "t": 260,
+     "root": {
+      "dx": -3,
+      "rot": -3
+     }
+    },
+    {
+     "t": 400,
+     "root": {
+      "dx": 0,
+      "rot": 0
+     }
+    }
+   ]
+  },
+  "cast": {
+   "fps": 3,
+   "loop": false,
+   "frames": [
+    "cast_f00.png",
+    "cast_f01.png",
+    "cast_f02.png",
+    "cast_f03.png"
+   ],
+   "keys": []
+  },
+  "hit": {
+   "fps": 3,
+   "loop": false,
+   "frames": [
+    "hit_f00.png",
+    "hit_f01.png",
+    "hit_f02.png",
+    "hit_f03.png"
+   ],
+   "keys": [
+    {
+     "t": 0,
+     "root": {
+      "dx": 0,
+      "_flash": 0
+     }
+    },
+    {
+     "t": 100,
+     "root": {
+      "dx": -5,
+      "_flash": 1
+     }
+    },
+    {
+     "t": 250,
+     "root": {
+      "dx": 0,
+      "_flash": 0
+     }
+    }
+   ]
+  },
+  "die": {
+   "fps": 3,
+   "loop": false,
+   "frames": [
+    "die_f00.png",
+    "die_f01.png",
+    "die_f02.png",
+    "die_f03.png"
+   ],
+   "keys": [
+    {
+     "t": 0,
+     "root": {
+      "rot": 0,
+      "_alpha": 1
+     }
+    },
+    {
+     "t": 400,
+     "root": {
+      "rot": 60
+     }
+    },
+    {
+     "t": 700,
+     "root": {
+      "rot": 90,
+      "_alpha": 0
+     }
+    }
+   ]
+  },
+  "victory": {
+   "fps": 3,
+   "loop": false,
+   "frames": [
+    "victory_f00.png",
+    "victory_f01.png",
+    "victory_f02.png",
+    "victory_f03.png"
+   ],
+   "keys": []
+  },
+  "celebrate": {
+   "fps": 3,
+   "loop": false,
+   "frames": [
+    "celebrate_f00.png",
+    "celebrate_f01.png",
+    "celebrate_f02.png",
+    "celebrate_f03.png"
+   ],
+   "keys": []
   }
+ }
 }

@@ -19,7 +19,7 @@
 
   const BASE = '/res/characters/parts/';
   // 资源版本：Cloudflare 会把图片重写成 4h 缓存，改版必须换 URL 才能避免新旧贴图来回切换
-  const AV = '?v=1.9.97';
+  const AV = '?v=1.9.98';
   const cache = new Map(); // bundle -> {ready, parts, actions, img, tint, frames}
 
   // v1.9.97 懒加载：某状态的动作帧首次需要时才下载（同一状态并发只发一次）

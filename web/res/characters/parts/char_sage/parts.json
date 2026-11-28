@@ -1,42 +1,47 @@
 {
   "bundle": "char_sage",
-  "format": "standee_sprite_v2",
-  "source": "original_ai_master_procedural_rig_v2",
+  "format": "standee_sprite_v1",
+  "source": "ai_precision_pixel",
   "kind": "sage",
-  "note": "祭祀-原创写实奇幻装备与材质",
+  "note": "祭祀-白金圣袍日轮",
   "character_size": [
     64,
     96
   ],
-  "texture_size": [
-    256,
-    384
-  ],
-  "scaleRoot": 4,
+  "scaleRoot": 2,
   "screen_size": [
-    256,
-    384
+    128,
+    192
   ],
   "sprite": {
-    "file": "char_sage_standee.webp",
+    "file": "char_sage_standee.png",
     "size": [
-      256,
-      384
+      128,
+      192
     ],
     "anchor": "feet-center, 图像底部中心=角色脚底",
     "pivot": [
-      128,
-      384
+      64,
+      96
     ]
   },
   "palette": [
-    "#26231e",
-    "#746b59",
-    "#d1c6aa",
-    "#a88b4f",
-    "#f0dfac"
+    "#262234",
+    "#282c46",
+    "#304e98",
+    "#4e76cd",
+    "#693e26",
+    "#786296",
+    "#78a0f0",
+    "#96603a",
+    "#9e6a3a",
+    "#bcc6d4",
+    "#be9632",
+    "#c84648",
+    "#e1aa7d",
+    "#fafafc",
+    "#ffd2a5"
   ],
-  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
-  "generator": "scripts/charactergen/generate.py",
-  "seed": 20261128
+  "color_count": 15,
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)"
 }
