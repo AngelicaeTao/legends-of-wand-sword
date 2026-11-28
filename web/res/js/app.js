@@ -3030,7 +3030,9 @@ async function soloPartyRun(dgId){
     try{ await api('/api/party/leave',{userId:uid()}); }catch(e){}
     hideModal();
     await reloadPlayerState();
-    playPartyBattle(r.report);
+    // v1.9.70 演出与结算解耦：战斗在服务端已完成，渲染出错不能误报成"挑战失败"
+    try{ playPartyBattle(r.report); }
+    catch(e2){ console.error(e2); toastModal('演出异常','战斗已结算，奖励已到账'); }
   }catch(e){
     try{ await api('/api/party/leave',{userId:uid()}); }catch(e2){}
     hideModal(); toastModal('挑战失败',e.message);
@@ -3142,7 +3144,8 @@ function playPartyBattle(rep){
     <div class="enc-btns"><button class="big-btn goldbtn" id="partyOk">收下</button></div>`);
   $('partyOk').onclick=()=>{ hideModal(); };
   const cv=$('partyCv'), g=cv.getContext('2d');
-  const heroes=(rep.heroes||[]).map((h,i)=>({...h, x:170+i*130, y:400, cls:(heroClassOf&&heroClassOf(h))||'warrior'}));
+  // v1.9.70 去掉对不存在函数 heroClassOf 的引用（踩了就整段演出抛异常、只看到报错弹窗）
+  const heroes=(rep.heroes||[]).map((h,i)=>({...h, x:170+i*130, y:400}));
   const boss={ x:720, y:400, name:rep.bossName||'BOSS', max:rep.bossMaxHp||1, hp:rep.bossMaxHp||1 };
   let idx=0;
   const drawBar=(x,y,w,h,pct,color)=>{
