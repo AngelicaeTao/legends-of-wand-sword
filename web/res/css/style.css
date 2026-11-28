@@ -1111,3 +1111,23 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
   .sr-main{grid-area:main}.sr-price{grid-area:price;text-align:left}
   .sell-row input{grid-area:input}
 }
+
+/* ===== v1.9.68 组队副本：战力评估 / 大厅 / 队伍 ===== */
+.pd-pow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+.pd-pow>div{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 4px;text-align:center}
+.pd-pow span{display:block;font-size:11px;color:#93a3b8;margin-bottom:4px}
+.pd-pow b{font-size:16px;color:#f0d590}
+.pd-btns{display:flex;gap:10px;justify-content:center;margin:12px 0 4px;flex-wrap:wrap}
+.pd-list{max-height:300px;overflow:auto;margin:8px 0}
+.pd-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.045);margin-bottom:6px}
+.pd-rl{flex:1;text-align:left}
+.pd-rl b{color:#e6eefc}
+.pd-rl em{font-style:normal;color:#8fa0b8;font-size:11px;margin-left:6px}
+.pd-rs{flex:1;text-align:left;font-size:11.5px;color:#9fb0c8}
+.pd-members{margin:10px 0}
+.pd-m{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:9px;background:rgba(255,255,255,.05);margin-bottom:6px}
+.pd-m.off{opacity:.55}
+.pd-m b{color:#e6eefc}
+.pd-m em{font-style:normal;margin-left:auto;font-size:12px;color:#9fb0c8}
+.pd-dot{width:8px;height:8px;border-radius:50%;background:#5fd38a;box-shadow:0 0 6px #5fd38a}
+.pd-m.off .pd-dot{background:#6b7688;box-shadow:none}

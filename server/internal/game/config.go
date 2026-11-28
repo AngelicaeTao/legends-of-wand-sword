@@ -163,6 +163,10 @@ type DungeonDef struct {
 	Drop   string `json:"drop"`
 	Mon    string `json:"mon"`
 	Elite  bool   `json:"elite"`
+	// v1.9.68 组队副本：推荐战力 + 队伍上限 + BOSS 血量倍率
+	RecPower   int     `json:"recPower"`
+	PartyMax   int     `json:"partyMax"`
+	BossHpMult float64 `json:"bossHpMult"`
 }
 type WorldsConfig struct {
 	Worlds  []WorldDef     `json:"worlds"`

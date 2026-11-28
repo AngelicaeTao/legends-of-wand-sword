@@ -737,6 +737,7 @@ async function finishEnter(){
     $('sfxBtn')&&$('sfxBtn').classList.remove('hidden');
     window.SFX&&SFX.login();
     connectWS();
+    startInviteWatch();   // v1.9.68 组队邀请轮询（登录后启动，未组队时才真正发请求）
     // v1.9.45 任务栏收起/展开：Q 键与右上角箭头共用同一状态
     window.toggleQuestTracker=(force)=>{
       const box=document.getElementById('questTracker');
@@ -2353,7 +2354,8 @@ function renderMap(){
     const diffOf={grass:1,mist:2,flame:3,frost:4};
     dgZone.innerHTML=`
       <div class="dungeon-list">${dungeons.map(d=>{
-        const locked=lv<d.lv, exhausted=(d._remain!=null?d._remain:d.perDay)<=0;
+        const isParty=(d.recPower||0)>0;
+        const locked=lv<d.lv, exhausted=!isParty&&((d._remain!=null?d._remain:d.perDay)<=0);
         const dis=locked||exhausted;
         const diff=diffOf[d.id]||1;
         const stars=Array.from({length:4},(_,i)=>i<diff?ICON.star(11,'#f0d590'):ICON.star(11,'#37414f')).join('');
@@ -2364,7 +2366,7 @@ function renderMap(){
             <div class="di-name">${d.name}<em class="di-star">${stars}</em></div>
             <div class="di-meta">推荐 Lv.${d.lv} · 今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次 · ${d.drop}</div>
           </div>
-          <button class="di-enter${dis?' off':''}" data-dg="${d.id}" ${dis?'disabled':''}>${locked?'等级不足':exhausted?'次数用完':'进入'}</button>
+          <button class="di-enter${dis?' off':''}" data-dg="${d.id}" data-party="${isParty?1:0}" ${dis?'disabled':''}>${locked?'等级不足':(isParty?'组队挑战':exhausted?'次数用完':'进入')}</button>
         </div>`;
       }).join('')}</div>
       <div class="dg-summary">
@@ -2384,6 +2386,8 @@ function renderMap(){
       btn.onclick=async()=>{
         const d=dungeons.find(x=>x.id===btn.dataset.dg);
         if(!d)return;
+        if(btn.dataset.party==='1'){ hideModal(); closePanel(); openPartyDungeon(d.id); return; }
+        if(btn.dataset.party==='1'){ hideModal(); closePanel(); openPartyDungeon(d.id); return; }
         try{
           // 服务端权威校验等级+扣次数
           const r=await api('/api/player/action',{userId:uid(),action:'dungeon_enter',dungeonId:d.id});
@@ -2983,3 +2987,243 @@ async function init(){
 }
 init();
 })();
+
+/* ================= v1.9.68 组队副本（大厅 / 队伍 / 多人战斗演出） ================= */
+let partyPoll=null, partyLastRun=0;
+
+function pdPowColor(my,rec){ const r=rec>0?my/rec:1; return r>=1?'#7fe0a0':r>=0.7?'#ffd76b':'#ff8a8a'; }
+
+async function reloadPlayerState(){
+  try{ const r=await api('/api/state/load',{userId:uid()}); if(r.exists){ state=r.state; await applyStats(r.stats); } }catch(e){}
+}
+
+async function openPartyDungeon(dgId){
+  let info;
+  try{ info=await api('/api/dungeon/party/info',{userId:uid()}); }catch(e){ toastModal('副本',e.message); return; }
+  const list=info.dungeons||[];
+  const d=list.find(x=>x.id===dgId)||list[0];
+  if(!d){ toastModal('副本','未配置组队副本'); return; }
+  const my=info.myPower||0, rec=d.recPower||0, col=pdPowColor(my,rec), ok=my>=rec;
+  showModal(`<h2>${d.name}</h2>
+    <div class="msub">Lv.${d.lv}+ · 最多 ${d.partyMax} 人 · ${d.unlimited?'每日不限次数':'每日限次'}</div>
+    <div class="pd-pow">
+      <div><span>推荐战力</span><b>${fmt(rec)}</b></div>
+      <div><span>我的战力</span><b style="color:${col}">${fmt(my)}</b></div>
+      <div><span>评估</span><b style="color:${col}">${ok?'达标':(my>=rec*0.7?'接近':'差距较大')}</b></div>
+    </div>
+    <div class="sec-sub">${d.drop||''}${ok?'':' · 战力不足时单人很可能打不过，建议组队'}</div>
+    <div class="pd-btns">
+      <button class="big-btn" id="pdSolo">单人挑战</button>
+      <button class="big-btn goldbtn" id="pdParty">组队大厅</button>
+    </div>
+    <div class="enc-btns"><button class="btn-gray" id="pdClose">关闭</button></div>`);
+  $('pdClose').onclick=()=>hideModal();
+  $('pdSolo').onclick=()=>soloPartyRun(d.id);
+  $('pdParty').onclick=()=>openPartyLobby(d.id);
+}
+
+async function soloPartyRun(dgId){
+  window.SFX&&SFX.dungeon();
+  showModal(`<h2>挑战中…</h2><div class="msub">服务端正在结算这场战斗</div>`);
+  try{
+    await api('/api/party/create',{userId:uid(),dgId});
+    const r=await api('/api/party/start',{userId:uid()});
+    try{ await api('/api/party/leave',{userId:uid()}); }catch(e){}
+    hideModal();
+    await reloadPlayerState();
+    playPartyBattle(r.report);
+  }catch(e){
+    try{ await api('/api/party/leave',{userId:uid()}); }catch(e2){}
+    hideModal(); toastModal('挑战失败',e.message);
+  }
+}
+
+async function openPartyLobby(dgId){
+  let r;
+  try{ r=await api('/api/party/list',{userId:uid()}); }catch(e){ toastModal('大厅',e.message); return; }
+  if(r.my){ openPartyRoom(); return; }
+  const ps=(r.parties||[]).filter(p=>!dgId||p.dgId===dgId);
+  const rows=ps.map(p=>{
+    const leader=(p.members||[]).find(m=>m.leader)||{};
+    return `<div class="pd-row">
+      <div class="pd-rl"><b>${p.dgName}</b><em>${p.size}/${p.max} 人</em></div>
+      <div class="pd-rs">队长 ${leader.name||'-'} · 平均战力 ${fmt(p.avgPower)}</div>
+      <button class="btn-gray pd-join" data-id="${p.id}">加入</button></div>`;
+  }).join('')||'<div class="sec-sub">当前没有等待中的队伍，创建一支吧</div>';
+  showModal(`<h2>组队大厅</h2><div class="msub">最多 ${ps.length?ps[0].max:3} 人 · 每日不限次数</div>
+    <div class="pd-list">${rows}</div>
+    <div class="pd-btns"><button class="big-btn goldbtn" id="plCreate">创建队伍</button>
+    <button class="btn-gray" id="plClose">关闭</button></div>`);
+  $('plClose').onclick=()=>hideModal();
+  $('plCreate').onclick=async()=>{
+    try{ await api('/api/party/create',{userId:uid(),dgId}); openPartyRoom(); }
+    catch(e){ toastModal('创建失败',e.message); }
+  };
+  document.querySelectorAll('.pd-join').forEach(b=>b.onclick=async()=>{
+    try{ await api('/api/party/join',{userId:uid(),partyId:b.dataset.id}); openPartyRoom(); }
+    catch(e){ toastModal('加入失败',e.message); }
+  });
+}
+
+async function openPartyRoom(){
+  if(partyPoll){ clearInterval(partyPoll); partyPoll=null; }
+  partyLastRun=0;
+  const paint=async()=>{
+    let r;
+    try{ r=await api('/api/party/status',{userId:uid()}); }catch(e){ return; }
+    if(!r.my){ if(partyPoll){clearInterval(partyPoll);partyPoll=null;} hideModal(); return; }
+    // 队友开战后，其他人轮询到这里也会播同一份战报
+    if(r.run&&r.runAt&&r.runAt>partyLastRun){
+      partyLastRun=r.runAt;
+      if(partyPoll){ clearInterval(partyPoll); partyPoll=null; }
+      await reloadPlayerState();
+      playPartyBattle(r.run);
+      return;
+    }
+    const me=(r.my.members||[]).find(m=>m.userId===uid())||{};
+    const isLeader=!!me.leader;
+    const rows=(r.my.members||[]).map(m=>`<div class="pd-m${m.online?'':' off'}">
+        <span class="pd-dot"></span><b>${m.name}${m.leader?' · 队长':''}</b>
+        <em>Lv.${m.level} · 战力 ${fmt(m.power)}${m.online?'':' · 离线'}</em></div>`).join('');
+    showModal(`<h2>${r.my.dgName}</h2>
+      <div class="msub">${r.my.size}/${r.my.max} 人 · 平均战力 ${fmt(r.my.avgPower)} · 推荐 ${fmt(r.my.recPower)}</div>
+      <div class="pd-members">${rows}</div>
+      <div class="pd-btns">
+        ${isLeader?'<button class="big-btn goldbtn" id="prStart">开始挑战</button>':''}
+        ${isLeader?'<button class="btn-gray" id="prInvite">邀请玩家</button>':''}
+        <button class="btn-gray" id="prLeave">退出队伍</button>
+      </div>`);
+    $('prLeave').onclick=async()=>{
+      try{ await api('/api/party/leave',{userId:uid()}); }catch(e){}
+      if(partyPoll){clearInterval(partyPoll);partyPoll=null;}
+      hideModal();
+    };
+    const st=$('prStart');
+    if(st) st.onclick=async()=>{
+      st.disabled=true; st.textContent='结算中…';
+      try{
+        const rr=await api('/api/party/start',{userId:uid()});
+        if(partyPoll){clearInterval(partyPoll);partyPoll=null;}
+        await reloadPlayerState();
+        playPartyBattle(rr.report);
+      }catch(e){ st.disabled=false; st.textContent='开始挑战'; toastModal('无法开始',e.message); }
+    };
+    const iv=$('prInvite');
+    if(iv) iv.onclick=()=>openPartyInvite();
+  };
+  await paint();
+  partyPoll=setInterval(paint,3000);
+}
+
+async function openPartyInvite(){
+  let r;
+  try{ r=await api('/api/players/online'); }catch(e){ toastModal('邀请',e.message); return; }
+  const me=uid();
+  const ps=(r.players||[]).filter(p=>p.userId&&p.userId!==me);
+  const rows=ps.map(p=>`<div class="pd-row">
+      <div class="pd-rl"><b>${p.name}</b><em>${p.worldId||''}</em></div>
+      <button class="btn-gray pd-inv" data-uid="${p.userId}" data-name="${p.name}">邀请</button></div>`).join('')
+    ||'<div class="sec-sub">当前没有其他玩家在线</div>';
+  showModal(`<h2>邀请玩家</h2><div class="msub">只能邀请在线玩家</div>
+    <div class="pd-list">${rows}</div>
+    <div class="enc-btns"><button class="btn-gray" id="piBack">返回队伍</button></div>`);
+  $('piBack').onclick=()=>openPartyRoom();
+  document.querySelectorAll('.pd-inv').forEach(b=>b.onclick=async()=>{
+    try{ await api('/api/party/invite',{userId:uid(),targetId:b.dataset.uid}); toastModal('已邀请',b.dataset.name+' 会在队伍面板看到邀请提示'); }
+    catch(e){ toastModal('邀请失败',e.message); }
+  });
+}
+
+/* 多人战斗演出：三个角色各带独立血量，血条画在头顶 */
+function playPartyBattle(rep){
+  if(!rep){ return; }
+  const W=920,H=470;
+  showModal(`<canvas id="partyCv" width="${W}" height="${H}" style="width:100%;max-width:920px;border-radius:12px;background:#0e141d"></canvas>
+    <div class="pd-rs" style="margin-top:8px">${rep.result==='win'?'战斗胜利':'战斗失败'} · ${rep.partyMult}x 人数加成 · 经验 +${fmt(rep.exp)} · 金币 +${fmt(rep.gold)}</div>
+    <div class="enc-btns"><button class="big-btn goldbtn" id="partyOk">收下</button></div>`);
+  $('partyOk').onclick=()=>{ hideModal(); };
+  const cv=$('partyCv'), g=cv.getContext('2d');
+  const heroes=(rep.heroes||[]).map((h,i)=>({...h, x:170+i*130, y:400, cls:(heroClassOf&&heroClassOf(h))||'warrior'}));
+  const boss={ x:720, y:400, name:rep.bossName||'BOSS', max:rep.bossMaxHp||1, hp:rep.bossMaxHp||1 };
+  let idx=0;
+  const drawBar=(x,y,w,h,pct,color)=>{
+    g.fillStyle='rgba(0,0,0,.55)'; g.fillRect(x,y,w,h);
+    g.fillStyle=color; g.fillRect(x+1,y+1,Math.max(0,(w-2)*pct),h-2);
+    g.strokeStyle='rgba(255,255,255,.25)'; g.lineWidth=1; g.strokeRect(x+.5,y+.5,w-1,h-1);
+  };
+  const frame=()=>{
+    g.clearRect(0,0,W,H);
+    g.fillStyle='#101823'; g.fillRect(0,0,W,H);
+    // 地面
+    g.fillStyle='#18232f'; g.fillRect(0,410,W,60);
+    // BOSS
+    g.fillStyle='#3b1f24'; g.beginPath(); g.ellipse(boss.x,432,74,18,0,0,Math.PI*2); g.fill();
+    g.fillStyle='#8c3a44'; g.beginPath(); g.roundRect(boss.x-52,250,104,170,16); g.fill();
+    g.fillStyle='#f0d590'; g.font='bold 14px "Microsoft YaHei",sans-serif'; g.textAlign='center';
+    g.fillText(boss.name,boss.x,236);
+    drawBar(boss.x-80,206,160,12,boss.hp/boss.max,'#e05a5a');
+    // 英雄
+    heroes.forEach((h,i)=>{
+      const alive=(h.hpNow==null?h.hpEnd:h.hpNow)>0;
+      g.globalAlpha=alive?1:0.38;
+      g.fillStyle='rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(h.x,432,36,11,0,0,Math.PI*2); g.fill();
+      g.fillStyle=['#4f6b8f','#6b4f8f','#4f8f6b'][i%3];
+      g.beginPath(); g.roundRect(h.x-26,286,52,144,12); g.fill();
+      g.globalAlpha=1;
+      g.fillStyle='#cfe0f5'; g.font='12px "Microsoft YaHei",sans-serif';
+      g.fillText(h.name||'', h.x, 272);
+      drawBar(h.x-44,244,88,10,(h.hpNow==null?h.hpEnd:h.hpNow)/Math.max(1,h.hpStart),'#5fd38a');
+      g.fillStyle='#9fb0c8'; g.font='11px "Microsoft YaHei",sans-serif';
+      g.fillText(Math.round(h.hpNow==null?h.hpEnd:h.hpNow)+' / '+Math.round(h.hpStart), h.x, 258);
+    });
+  };
+  const step=()=>{
+    if(idx>=(rep.rounds||[]).length){ frame(); return; }
+    const r=rep.rounds[idx++];
+    (r.heroHp||[]).forEach((hp,i)=>{ if(heroes[i]) heroes[i].hpNow=hp; });
+    if(r.bossHp!=null) boss.hp=r.bossHp;
+    frame();
+    // 伤害浮字
+    if(r.damage>0){
+      g.fillStyle=r.actor==='boss'?'#ff8a8a':'#ffd76b';
+      g.font='bold 16px "Microsoft YaHei",sans-serif';
+      const tx=r.actor==='boss'?(heroes[r.heroIdx]||heroes[0]).x:boss.x;
+      g.fillText('-'+Math.round(r.damage), tx, 232);
+    }
+    if(r.heal>0){
+      g.fillStyle='#7fe0a0'; g.font='bold 16px "Microsoft YaHei",sans-serif';
+      g.fillText('+'+Math.round(r.heal), (heroes[r.heroIdx]||heroes[0]).x, 232);
+    }
+    setTimeout(step, Math.max(120, Math.min(320, 6000/(rep.rounds.length||1))));
+  };
+  frame();
+  setTimeout(step, 250);
+}
+
+/* 邀请接收：未在队伍中时轻量轮询（8s），有邀请就弹窗 */
+let inviteTimer=null;
+function startInviteWatch(){
+  if(inviteTimer) return;
+  inviteTimer=setInterval(async()=>{
+    if(!state||!state.core) return;
+    if(panel||view!=='world') return;                       // 面板/战斗中不打扰
+    if(!document.getElementById('modalLayer').classList.contains('hidden')) return;
+    let r; try{ r=await api('/api/party/status',{userId:uid()}); }catch(e){ return; }
+    if(r.my||!r.invite) return;
+    const inv=r.invite;
+    showModal(`<h2>组队邀请</h2>
+      <div class="msub"><b style="color:#f0d590">${inv.fromName}</b> 邀请你加入队伍</div>
+      <div class="pd-btns">
+        <button class="big-btn goldbtn" id="invYes">接受</button>
+        <button class="btn-gray" id="invNo">拒绝</button>
+      </div>`);
+    $('invYes').onclick=async()=>{
+      try{ await api('/api/party/accept',{userId:uid()}); hideModal(); openPartyRoom(); }
+      catch(e){ hideModal(); toastModal('接受失败',e.message); }
+    };
+    $('invNo').onclick=async()=>{
+      try{ await api('/api/party/decline',{userId:uid()}); }catch(e){}
+      hideModal();
+    };
+  },8000);
+}

@@ -158,6 +158,18 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 	mux.HandleFunc("/api/world/travel", worldTravel)
 
 	// 实时多人（同端口 WebSocket）
+	// v1.9.68 组队副本：大厅 / 队伍 / 邀请 / 开始
+	mux.HandleFunc("/api/party/list", partyList)
+	mux.HandleFunc("/api/party/create", partyCreate)
+	mux.HandleFunc("/api/party/join", partyJoin)
+	mux.HandleFunc("/api/party/leave", partyLeave)
+	mux.HandleFunc("/api/party/kick", partyKick)
+	mux.HandleFunc("/api/party/invite", partyInvite)
+	mux.HandleFunc("/api/party/accept", partyAccept)
+	mux.HandleFunc("/api/party/decline", partyDecline)
+	mux.HandleFunc("/api/party/status", partyStatus)
+	mux.HandleFunc("/api/party/start", partyStart)
+	mux.HandleFunc("/api/dungeon/party/info", partyDungeonInfo)
 	mux.HandleFunc("/api/players/online", playersOnline) // v1.9.42 在线玩家列表
 	mux.HandleFunc("/api/player/profile", playerProfile) // v1.9.42 他人玩家档案
 	mux.HandleFunc("/ws", wsHandler)

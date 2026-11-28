@@ -247,6 +247,18 @@
       "elite": true
     },
     {
+      "id": "trial",
+      "name": "幽影试炼",
+      "lv": 30,
+      "perDay": 0,
+      "drop": "组队副本 · 经验/金币/强化材料（不限次数）",
+      "mon": "trial_boss",
+      "elite": false,
+      "recPower": 2400,
+      "partyMax": 3,
+      "bossHpMult": 1,
+      "_note": "v1.9.68 组队副本：推荐战力 2400，三人共享一个 BOSS。血量随人数放大（每多一人 +75%，封顶 2.5 倍），奖励固定 + 人数加成（封顶 1.5 倍），每日不限次数。"
+    },    {
       "id": "frost",
       "name": "霜冻之巅",
       "lv": 30,
