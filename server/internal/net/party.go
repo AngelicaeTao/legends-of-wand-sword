@@ -720,6 +720,9 @@ func partyStart(w http.ResponseWriter, r *http.Request) {
 			st.Core.Exp += rep.Exp
 			st.Core.Gold += rep.Gold
 			st.Core.Material += mat
+			// v1.9.93 具名材料由战报权威给出（ResolvePartyBattle 内按 seed roll），
+			// 每位队员各得一份；单人副本走 /api/battle/fight，由战斗结算的 monster 段覆盖。
+			store.AddNamedMaterials(st, rep.Materials)
 			for st.Core.Level < 200 && st.Core.Exp >= game.ExpNeeded(st.Core.Level) {
 				st.Core.Exp -= game.ExpNeeded(st.Core.Level)
 				st.Core.Level++
@@ -736,7 +739,7 @@ func partyStart(w http.ResponseWriter, r *http.Request) {
 	}
 	partyMu.Unlock()
 
-	jsonOut(w, map[string]any{"ok": true, "report": rep, "material": mat})
+	jsonOut(w, map[string]any{"ok": true, "report": rep, "material": mat, "materials": rep.Materials})
 }
 
 // partyDungeonInfo 组队副本入口信息

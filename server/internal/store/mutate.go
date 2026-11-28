@@ -102,6 +102,8 @@ func ApplyBattleReport(p *PlayerState, rep *game.BattleReport) []string {
 		// v1.9.27 日志显示中文名（品质+部位），不再显示内部 ID 乱码
 		logs = append(logs, fmt.Sprintf("获得装备：%s", equipCN(d.Quality, d.Slot, d.ClassID)))
 	}
+	// v1.9.93 具名材料入包（秘银/蓝宝石/精铁/钢锭/皮革/布料）
+	logs = append(logs, AddNamedMaterials(p, rep.Materials)...)
 
 	// 连续升级（服务端判定，防客户端伪造等级）
 	for p.Core.Level < 200 && p.Core.Exp >= game.ExpNeeded(p.Core.Level) {
@@ -156,6 +158,40 @@ func addConsumable(p *PlayerState, id string, qty int) {
 		}
 	}
 	p.Warehouse = append(p.Warehouse, Item{ID: id, Qty: qty, Kind: "consume"})
+}
+
+// AddNamedMaterials 把具名材料（秘银/蓝宝石/精铁/钢锭/皮革/布料）并入 ext.bag，返回日志行。
+//
+// v1.9.93：这些材料此前只有创角一次性发放，掉落链（打怪 / 开箱 / 公会材料包 / 组队副本）
+// 就靠这个函数入包。放在 ext.bag 而不是 Warehouse，是因为：
+//   - 初始「秘银」「金币袋」就在 ext.bag，同处一格，玩家不用在两个面板里找；
+//   - 背包面板「可回收物品」直接读 ext.bag，打到就能看见，不占用仓库格数（车容量有限）；
+//   - 商店回收（ShopSell）本来就合并 Warehouse + ext.bag，回收链路无需改动。
+func AddNamedMaterials(p *PlayerState, drops []game.NamedMaterialDrop) []string {
+	if len(drops) == 0 {
+		return nil
+	}
+	if p.Ext == nil {
+		p.Ext = map[string]any{}
+	}
+	bag, _ := p.Ext["bag"].(map[string]any)
+	if bag == nil {
+		bag = map[string]any{}
+		p.Ext["bag"] = bag
+	}
+	logs := make([]string, 0, len(drops))
+	for _, d := range drops {
+		if d.ID == "" || d.Qty <= 0 {
+			continue
+		}
+		bag[d.ID] = numAny(bag[d.ID]) + float64(d.Qty)
+		name := d.Name
+		if name == "" {
+			name = d.ID
+		}
+		logs = append(logs, fmt.Sprintf("获得材料：%s x%d", name, d.Qty))
+	}
+	return logs
 }
 
 // ApplyPotionPick 地图草药采集奖励入仓（对应 /api/potion/pick）。
@@ -272,7 +308,8 @@ func equipCN(quality int, slot, classID string) string {
 // 奖励数值由服务端按 tier 从 economy.json drop.chest 权威 roll，客户端只传 nodeId。
 // v1.9.35 详细掉落：药水入仓库（consume）、装备实例入背包（Equip 未穿戴），
 // 同时返回结构化 items 明细（供前端开箱结算弹窗格子展示）。
-func ApplyChestReward(p *PlayerState, exp, gold, gem, material, potions int, equips []game.EquipItem) ([]string, []map[string]any) {
+// v1.9.93 mats：按宝箱档位 roll 出的具名材料（秘银/蓝宝石等），写入 ext.bag 并计入 items 明细。
+func ApplyChestReward(p *PlayerState, exp, gold, gem, material, potions int, equips []game.EquipItem, mats []game.NamedMaterialDrop) ([]string, []map[string]any) {
 	logs := []string{}
 	items := []map[string]any{}
 	p.Core.Exp += exp
@@ -283,6 +320,18 @@ func ApplyChestReward(p *PlayerState, exp, gold, gem, material, potions int, equ
 	if material > 0 {
 		items = append(items, map[string]any{"kind": "material", "id": "material", "name": "强化材料", "qty": material})
 	}
+	// v1.9.93 具名材料：与「强化材料」计数器区分开，items 里用 kind=mat，前端按稀有材料单独配色
+	for _, d := range mats {
+		if d.ID == "" || d.Qty <= 0 {
+			continue
+		}
+		name := d.Name
+		if name == "" {
+			name = d.ID
+		}
+		items = append(items, map[string]any{"kind": "mat", "id": d.ID, "name": name, "qty": d.Qty})
+	}
+	logs = append(logs, AddNamedMaterials(p, mats)...)
 	if potions > 0 {
 		addConsumable(p, "potion_s", potions)
 		logs = append(logs, fmt.Sprintf("获得：回血药水 x%d", potions))

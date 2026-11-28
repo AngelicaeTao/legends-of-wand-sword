@@ -569,7 +569,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.92';
+const BUILD_VER='v1.9.93';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1478,7 +1478,7 @@ function renderBag(){
 /* ---- 公会页（v1.9.2）：捐献 / 公会商店 / 成员，服务端权威 ---- */
 const GUILD_SHOP=[
   {id:'gem_pack',      name:'钻石礼包 ×60',  price:200, ico:'gem'},
-  {id:'material_pack', name:'材料包 ×30',    price:150, ico:'bag'},
+  {id:'material_pack', name:'材料包 ×30 + 随机材料', price:150, ico:'bag'},
   {id:'skill_book',    name:'奥义书（经验+300）', price:300, ico:'book'}
 ];
 // 公会（v1.9.39 大改）：分流服务端权威化 —— /api/guild/list 返回 my（我所在公会）。
@@ -1572,7 +1572,9 @@ async function renderGuild(){
         const r=await api('/api/player/action',{userId:uid(),action:'guild_buy',itemId:b.dataset.item});
         if(r.state){state=r.state;await applyStats(r.stats);}
         window.SFX&&SFX.buy();
-        toastModal('兑换成功',GUILD_SHOP.find(x=>x.id===b.dataset.item).name);
+        // v1.9.93 材料包会随机开出具名材料（秘银/蓝宝石等），把这一包的内容写进提示里
+        const mats=(r.materials||[]).map(m=>`${m.name||m.id} x${m.qty}`).join(' · ');
+        toastModal('兑换成功',GUILD_SHOP.find(x=>x.id===b.dataset.item).name+(mats?`（随机材料：${mats}）`:''));
         renderGuild();
       }catch(e){ window.SFX&&SFX.fail(); toastModal('兑换失败',e.message); }
     };
@@ -2698,6 +2700,11 @@ async function onChestOpened(chest){
     const cells=items.map(it=>{
       if(it.kind==='decompose')return `<div class="loot-cell"><div class="loot-ico" style="background:#6a5a3a">${ICON.crystal(22,'#f0d590')}</div><div class="loot-nm">${it.name||'低战力装备分解'}</div><div class="loot-qty">x${it.qty||1}</div></div>`;
       if(it.kind==='material')return `<div class="loot-cell"><div class="loot-ico" style="background:#8892a4">${ICON.crystal(22,'#2a1c08')}</div><div class="loot-nm">${it.name||'材料'}</div><div class="loot-qty">x${it.qty}</div></div>`;
+      // v1.9.93 具名材料（秘银/蓝宝石/精铁/钢锭/皮革/布料）：稀有材料给专属边框，与强化材料计数器区分
+      if(it.kind==='mat'){
+        const rc=({ '秘银':'#b07cf0','蓝宝石':'#6aa8f0' })[it.id]||'#8892a4';
+        return `<div class="loot-cell loot-eq" style="border-color:${rc}"><div class="loot-ico" style="background:${rc}">${ICON.crystal(22,'#2a1c08')}</div><div class="loot-nm">${it.name||it.id}</div><div class="loot-qty">x${it.qty}</div></div>`;
+      }
       if(it.kind==='potion')return `<div class="loot-cell"><div class="loot-ico" style="background:#2e5c3f">${ICON.crystal(22,'#5fd38a')}</div><div class="loot-nm">${it.name||'回血药水'}</div><div class="loot-qty">x${it.qty}</div></div>`;
       const qc=qColor[Math.min(7,it.quality||0)];   // v1.9.46 品质 8 档，原先截断到 5 档
       return `<div class="loot-cell loot-eq" style="border-color:${qc}"><div class="loot-ico" style="background:${qc}">${ICON.bag(22,'#2a1c08')}</div><div class="loot-nm">${it.name||(it.slot||'装备')}</div><div class="loot-qty">x${it.qty||1}</div></div>`;
@@ -2758,6 +2765,14 @@ function showBattleResult(rep,mon){
     return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 强化材料 +${fmt(d.mat||0)}</span></div>`;
   }).join('');
   const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 强化材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
+  // v1.9.93 具名材料掉落（秘银/蓝宝石/精铁/钢锭/皮革/布料）：与「强化材料」计数器分开列，
+  // 稀有材料给专属边框色，玩家一眼能看出这趟是不是出了好东西；已由服务端入包，无需再领。
+  const matRare={'秘银':'#b07cf0','蓝宝石':'#6aa8f0'};
+  const matList=rep.materials||[];
+  const mats=matList.length?`<div class="drop-wrap"><div class="loot-title">材料掉落 · ${matList.length} 种</div><div class="loot-grid drop-grid">${matList.map(m=>{
+    const rc=matRare[m.id]||'#8892a4';
+    return `<div class="loot-cell loot-eq" style="border-color:${rc}" title="${esc(m.name||m.id)} x${m.qty}"><div class="loot-ico" style="background:${rc}">${ICON.crystal(22,'#2a1c08')}</div><div class="loot-nm">${esc(m.name||m.id)}</div><div class="loot-qty">x${m.qty}</div></div>`;
+  }).join('')}</div></div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row" title="不自动回满 · 用回血药水或采草药恢复"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
@@ -2768,6 +2783,7 @@ function showBattleResult(rep,mon){
       <div class="reward-row"><span class="rk">${ICON.book(14,'#8fb6e0')}<em>经验</em></span><span class="rv">+${fmt(rep.exp)}</span></div>
       <div class="reward-row"><span class="rk">${ICON.gold(14,'#f0c040')}<em>金币</em></span><span class="rv">+${fmt(rep.gold)}</span></div>
       ${drops}
+      ${mats}
       ${decomp}
       <button class="big-btn goldbtn" id="resBtn">领取奖励 · 返回大世界</button>`:`
       ${(()=>{
@@ -3597,6 +3613,7 @@ async function playPartyBattle(rep){
     <div class="sec-title">成员结算</div>${rows}
     <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(rep.exp||0)}</span></div>
     <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(rep.gold||0)}</span></div>
+    ${(()=>{ const ml=rep.materials||[]; return ml.length?('<div class="reward-row"><span class="rk">材料</span><span class="rv">'+ml.map(m=>esc(m.name||m.id)+' x'+m.qty).join(' · ')+'</span></div>'):''; })()}
     <div class="enc-btns"><button class="big-btn goldbtn" id="partyOk">收下</button></div>`);
   $('partyOk').onclick=async()=>{
     hideModal(); partyClear(); showView('world');

@@ -79,6 +79,9 @@ type BattleReport struct {
 	HeroHPStart float64      `json:"heroHpStart"` // v1.9.27 战斗开局血量（全局血量不回满）
 	HeroHPEnd   float64      `json:"heroHpEnd"`   // 战斗结束血量（战败保底 1，防软锁）
 	Monsters    []MonInfo    `json:"monsters"`    // v1.9.36 群怪：敌方阵容（单怪时长度 1，贴图与结算一致）
+	// v1.9.93 具名材料掉落（秘银/蓝宝石/精铁/钢锭/皮革/布料）：与装备掉落共用同一个 rng，
+	// 写进战报供前端结算展示，实际入包在 store.ApplyBattleReport（写 ext.bag）。
+	Materials []NamedMaterialDrop `json:"materials,omitempty"`
 }
 
 // ResolveBattle 服务端权威结算。给定相同 seed + 输入必得相同战报（可复现 bug / playtest 回放）。
@@ -571,6 +574,9 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				rep.Drops = append(rep.Drops, rollDrops(req, mems[extra].def, rng)...)
 			}
 		}
+		// v1.9.93 具名材料：按怪物档次给概率与次数（普通 8%/1 次、精英 30%/2 次、首领必掉/2 次），
+		// 与装备掉落共用 rng，同一 seed 可完整复现。
+		rep.Materials = RollMonsterMaterials(req.Elite, mon.IsBoss, rng)
 		rep.Log = "服务端权威结算：胜利，经验/金币/掉落已入账"
 		if oneShot {
 			rep.Log = "一击必杀：怪物血量低于普攻保底伤害，跳过战斗直接结算"

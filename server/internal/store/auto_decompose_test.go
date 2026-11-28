@@ -99,7 +99,7 @@ func TestApplyChestRewardAutoDecompose(t *testing.T) {
 
 	weak := game.EquipItem{ID: "weak_w2", Slot: "weapon", Quality: 0, ClassID: "warrior",
 		Stats: map[string]float64{"atk": 1}}
-	_, items := ApplyChestReward(p, 0, 0, 0, 0, 0, []game.EquipItem{weak})
+	_, items := ApplyChestReward(p, 0, 0, 0, 0, 0, []game.EquipItem{weak}, nil)
 
 	if len(p.Equip) != eq0 {
 		t.Fatalf("低战力装备不应进背包：开箱前 %d 件，开箱后 %d 件", eq0, len(p.Equip))
