@@ -309,6 +309,214 @@
       "drop": "掉落稀有材料",
       "mon": "boss_beetle",
       "elite": true
+    },
+    {
+      "id": "grove",
+      "name": "藤蔓圣所",
+      "lv": 35,
+      "perDay": 0,
+      "drop": "组队副本 · 经验/金币/强化材料",
+      "mon": "boss_golem",
+      "elite": false,
+      "recPower": 3200,
+      "partyMax": 3,
+      "bossHpMult": 1,
+      "rewardMult": 1.7,
+      "matBase": 6,
+      "matRolls": 2,
+      "waves": [
+        {
+          "mon": "slime_toxic",
+          "lv": 37,
+          "count": 3,
+          "hpMult": 2.6,
+          "atkMult": 8.7,
+          "name": "第一波 · 毒沼"
+        },
+        {
+          "mon": "bat_crimson",
+          "lv": 38,
+          "count": 2,
+          "hpMult": 3.6,
+          "atkMult": 5.8,
+          "name": "第二波 · 蝠卫"
+        },
+        {
+          "mon": "boss_golem",
+          "lv": 36,
+          "count": 1,
+          "hpMult": 18.6,
+          "atkMult": 26.7,
+          "name": "第三波 · 藤蔓巨像"
+        }
+      ],
+      "_note": "v1.9.97 承接幽影试炼的第一档：三波结构与幽影试炼一一对应（3 小怪 / 2 精英 / 1 首领），每波血量与单击伤害按 recPower 比 3200/2400=1.33 等比放大，首领血 2.68 万、单击约 1680。rewardMult 1.7 是因为藤蔓巨像基础经验(600)低于幽影主宰(900)，不补系数通关收益会低于上一档。"
+    },
+    {
+      "id": "hive",
+      "name": "蜂巢深渊",
+      "lv": 45,
+      "perDay": 0,
+      "drop": "组队副本 · 高额经验/金币/强化材料",
+      "mon": "boss_queen",
+      "elite": false,
+      "recPower": 4400,
+      "partyMax": 3,
+      "bossHpMult": 1,
+      "rewardMult": 1.7,
+      "matBase": 10,
+      "matRolls": 3,
+      "waves": [
+        {
+          "mon": "bat_crimson",
+          "lv": 46,
+          "count": 3,
+          "hpMult": 2.2,
+          "atkMult": 6.7,
+          "name": "第一波 · 血蝠群"
+        },
+        {
+          "mon": "slime_toxic",
+          "lv": 47,
+          "count": 2,
+          "hpMult": 2.7,
+          "atkMult": 9.7,
+          "name": "第二波 · 腐液"
+        },
+        {
+          "mon": "skeleton",
+          "lv": 48,
+          "count": 2,
+          "hpMult": 2.4,
+          "atkMult": 10.1,
+          "name": "第三波 · 骨骸守卫"
+        },
+        {
+          "mon": "boss_queen",
+          "lv": 46,
+          "count": 1,
+          "hpMult": 31.8,
+          "atkMult": 19.1,
+          "name": "第四波 · 蜂巢女王"
+        }
+      ],
+      "_note": "v1.9.97 四波本（杂兵多一波，首领前压一波精英）。整体按 4400/2400=1.83 倍等比放大，首领血 3.69 万、单击约 2320。蜂巢女王基础血薄(230)，血倍率相应给到 31.8。"
+    },
+    {
+      "id": "blade",
+      "name": "刀锋回廊",
+      "lv": 55,
+      "perDay": 0,
+      "drop": "组队副本 · 高额经验/金币/强化材料",
+      "mon": "boss_mantis",
+      "elite": false,
+      "recPower": 5800,
+      "partyMax": 3,
+      "bossHpMult": 1,
+      "rewardMult": 1.35,
+      "matBase": 15,
+      "matRolls": 4,
+      "waves": [
+        {
+          "mon": "skeleton_archer",
+          "lv": 56,
+          "count": 4,
+          "hpMult": 1.4,
+          "atkMult": 8.2,
+          "name": "第一波 · 射手阵"
+        },
+        {
+          "mon": "skeleton",
+          "lv": 57,
+          "count": 3,
+          "hpMult": 1.5,
+          "atkMult": 11.4,
+          "name": "第二波 · 骨兵"
+        },
+        {
+          "mon": "bat_crimson",
+          "lv": 58,
+          "count": 3,
+          "hpMult": 1.5,
+          "atkMult": 7.2,
+          "name": "第三波 · 蝠袭"
+        },
+        {
+          "mon": "skeleton",
+          "lv": 59,
+          "count": 2,
+          "hpMult": 1.9,
+          "atkMult": 11.1,
+          "name": "第四波 · 精锐"
+        },
+        {
+          "mon": "boss_mantis",
+          "lv": 56,
+          "count": 1,
+          "hpMult": 43,
+          "atkMult": 18.3,
+          "name": "第五波 · 螳螂刀客"
+        }
+      ],
+      "_note": "v1.9.97 五波本，按 5800/2400=2.42 倍等比放大：首领血 4.87 万、单击约 3050。波次等级 56~59 已把 lvMult 抬到 12.2（幽影试炼 7.2），所以 rewardMult 只需 1.35 就能让最终收益落在 2.4 倍档位。"
+    },
+    {
+      "id": "spore",
+      "name": "孢子秘境",
+      "lv": 65,
+      "perDay": 0,
+      "drop": "组队副本 · 顶级经验/金币/强化材料",
+      "mon": "boss_shaman",
+      "elite": false,
+      "recPower": 7600,
+      "partyMax": 3,
+      "bossHpMult": 1,
+      "rewardMult": 1.45,
+      "matBase": 22,
+      "matRolls": 5,
+      "waves": [
+        {
+          "mon": "slime_toxic",
+          "lv": 66,
+          "count": 4,
+          "hpMult": 1.5,
+          "atkMult": 12.3,
+          "name": "第一波 · 孢子潮"
+        },
+        {
+          "mon": "bat_crimson",
+          "lv": 67,
+          "count": 3,
+          "hpMult": 1.9,
+          "atkMult": 8.3,
+          "name": "第二波 · 毒翼"
+        },
+        {
+          "mon": "skeleton_archer",
+          "lv": 68,
+          "count": 3,
+          "hpMult": 1.8,
+          "atkMult": 9,
+          "name": "第三波 · 孢射手"
+        },
+        {
+          "mon": "slime_toxic",
+          "lv": 69,
+          "count": 2,
+          "hpMult": 2.3,
+          "atkMult": 11.8,
+          "name": "第四波 · 巨型孢囊"
+        },
+        {
+          "mon": "boss_shaman",
+          "lv": 66,
+          "count": 1,
+          "hpMult": 44.3,
+          "atkMult": 22.5,
+          "name": "第五波 · 蘑菇术士"
+        }
+      ],
+      "_note": "v1.9.97 最高档，按 7600/2400=3.17 倍等比放大：首领血 6.38 万、单击约 4000。matBase 22 / matRolls 5 为全副本最高产出，经验金币约为幽影试炼的 3 倍。"
     }
   ]
 }

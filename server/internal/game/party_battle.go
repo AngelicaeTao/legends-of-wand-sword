@@ -4,8 +4,19 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"strconv"
 	"time"
 )
+
+// dungeonByID 按 id 取副本配置（v1.9.97 奖励缩放与具名材料次数用）。
+func dungeonByID(id string) (DungeonDef, bool) {
+	for _, d := range C().Economy.Dungeons {
+		if d.ID == id {
+			return d, true
+		}
+	}
+	return DungeonDef{}, false
+}
 
 // v1.9.77 组队副本 · 三波车轮战
 //
@@ -653,11 +664,20 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 			lvSum += maxInt(w.Lv, 1)
 		}
 		lvMult := 1 + 0.2*float64(lvSum/maxInt(len(waves), 1)-1)
-		rep.Exp = int(expSum * lvMult * mult)
-		rep.Gold = int(goldSum * lvMult * mult)
+		// v1.9.97 奖励与难度对齐：按副本配置放大经验/金币（缺省 1 倍 = v1.9.77 行为）
+		rm, matRolls := 1.0, 0
+		if dg, ok := dungeonByID(dgID); ok {
+			if dg.RewardMult > 0 {
+				rm = dg.RewardMult
+			}
+			matRolls = dg.MatRolls
+		}
+		rep.Exp = int(expSum * lvMult * mult * rm)
+		rep.Gold = int(goldSum * lvMult * mult * rm)
 		// v1.9.93 组队副本通关同样产出具名材料（全队掷一次，每位队员各得一份）
-		rep.Materials = RollPartyDungeonMaterials(rng)
-		rep.Log = "组队副本：三波全通"
+		// v1.9.97 高难度副本按 matRolls 多掷几次，掉落量与难度同向
+		rep.Materials = RollPartyDungeonMaterialsN(matRolls, rng)
+		rep.Log = "组队副本：" + strconv.Itoa(len(waves)) + " 波全通"
 	} else {
 		rep.Exp, rep.Gold = 0, 0
 		rep.Log = "组队副本：车轮战失败，无奖励"

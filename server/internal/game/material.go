@@ -207,6 +207,13 @@ func RollGuildPackMaterials(rng *rand.Rand) []NamedMaterialDrop {
 
 // RollPartyDungeonMaterials 组队副本通关掉落：按配置概率触发，一次给 rolls 份。
 func RollPartyDungeonMaterials(rng *rand.Rand) []NamedMaterialDrop {
+	return RollPartyDungeonMaterialsN(0, rng)
+}
+
+// RollPartyDungeonMaterialsN 与 RollPartyDungeonMaterials 同源，但允许调用方指定 roll 次数：
+// v1.9.97 高难度组队副本通过 dungeons[].matRolls 多掷几次，让掉落量与难度同向。
+// rolls <= 0 时回落到 economy.drop.namedMaterial.partyDungeon.rolls（默认 2），即旧行为。
+func RollPartyDungeonMaterialsN(rolls int, rng *rand.Rand) []NamedMaterialDrop {
 	if rng == nil {
 		return nil
 	}
@@ -214,5 +221,8 @@ func RollPartyDungeonMaterials(rng *rand.Rand) []NamedMaterialDrop {
 	if chance := namedNum(cfg, "chance", 0.6); chance <= 0 || rng.Float64() >= chance {
 		return nil
 	}
-	return rollNamedMaterials(int(namedNum(cfg, "rolls", 2)), rng)
+	if rolls <= 0 {
+		rolls = int(namedNum(cfg, "rolls", 2))
+	}
+	return rollNamedMaterials(rolls, rng)
 }

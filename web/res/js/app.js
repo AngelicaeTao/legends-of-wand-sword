@@ -735,7 +735,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.98';
+const BUILD_VER='v1.9.99';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -2654,15 +2654,16 @@ function renderMap(){
   Promise.all(dungeons.map(d=>(d.recPower||0)>0?Promise.resolve({remain:-1}):api('/api/player/action',{userId:uid(),action:'dungeon_remain',dungeonId:d.id}).catch(()=>({remain:d.perDay})))).then(rems=>{
     if(!dgZone||!dgZone.isConnected)return; // 面板已切换
     dungeons.forEach((d,i)=>d._remain=(rems[i]?.remain!=null?rems[i].remain:d.perDay));
-    const diffOf={grass:1,mist:2,flame:3,frost:4};
+    // v1.9.97 难度星级：新增四个组队副本后梯度拉到 8 档（幽影试炼/霜冻之巅同档 4 星）
+    const diffOf={grass:1,mist:2,flame:3,trial:4,frost:4,grove:5,hive:6,blade:7,spore:8};
     dgZone.innerHTML=`
       <div class="dungeon-list">${dungeons.map(d=>{
         const isParty=(d.recPower||0)>0;
         const locked=lv<d.lv, exhausted=!isParty&&((d._remain!=null?d._remain:d.perDay)<=0);
         const dis=locked||exhausted;
         const diff=diffOf[d.id]||1;
-        const stars=Array.from({length:4},(_,i)=>i<diff?ICON.star(11,'#f0d590'):ICON.star(11,'#37414f')).join('');
-        const tint=['#5b8f4a','#4a6b8f','#a2593c','#6f86a8'][diff-1]||'#5b8f4a';
+        const stars=Array.from({length:8},(_,i)=>i<diff?ICON.star(10,'#f0d590'):ICON.star(10,'#37414f')).join('');
+        const tint=['#5b8f4a','#4a6b8f','#a2593c','#6f86a8','#8a6a3a','#7a4a8f','#a03a3a','#b06a20'][diff-1]||'#5b8f4a';
         return `<div class="dungeon-item" style="--dc:${tint}">
           <div class="di-art">${ICON.tent(132)}</div>
           <div class="di-info">

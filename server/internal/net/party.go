@@ -706,9 +706,15 @@ func partyStart(w http.ResponseWriter, r *http.Request) {
 	}
 	rep := game.ResolvePartyBattle(dg.ID, waves, heroes, 0)
 
+	// v1.9.97 强化材料按副本难度给基数（dungeons[].matBase，缺省 3 = 旧行为），
+	// 再乘人数加成：高难度副本一次给得更多，与 exp/gold 同向增长。
+	matBase := dg.MatBase
+	if matBase <= 0 {
+		matBase = 3
+	}
 	mat := 0
 	if rep.Result == "win" {
-		mat = int(3 * rep.PartyMult)
+		mat = int(float64(matBase) * rep.PartyMult)
 	}
 	for _, h := range rep.Heroes {
 		st := saves[h.UserID]

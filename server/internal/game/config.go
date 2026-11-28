@@ -219,6 +219,12 @@ type DungeonDef struct {
 	BossHpMult float64 `json:"bossHpMult"`
 	// v1.9.77 车轮战：按波次配置怪物阵容（3 小怪 / 2 精英 / 1 首领），血量跨波不重置
 	Waves []WaveSpec `json:"waves"`
+	// v1.9.97 奖励与难度对齐：高难度组队副本按倍率放大经验/金币，
+	// 强化材料基数与具名材料 roll 次数同步提升。
+	// 三项缺省（0）时回到 v1.9.77 行为：经验金币不放大、强化材料基数 3、具名材料 2 次。
+	RewardMult float64 `json:"rewardMult"`
+	MatBase    int     `json:"matBase"`
+	MatRolls   int     `json:"matRolls"`
 }
 type WorldsConfig struct {
 	Worlds  []WorldDef     `json:"worlds"`
