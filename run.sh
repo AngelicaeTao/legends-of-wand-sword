@@ -36,8 +36,9 @@ start() {
     exit 0
   fi
   mkdir -p data/saves
-  echo "[start] 监听 :$PORT  配置 configs  前端 web/index.html  资源 web/res"
-  setsid "./$BIN" -addr ":$PORT" -config configs -web web/index.html -res web/res > "$LOG" 2>&1 &
+  # v1.9.91 服务端只允许绑回环地址（上游 a937821 安全加固），这里显式给 127.0.0.1
+  echo "[start] 监听 127.0.0.1:$PORT  配置 configs  前端 web/index.html  资源 web/res"
+  setsid "./$BIN" -addr "127.0.0.1:$PORT" -config configs -web web/index.html -res web/res > "$LOG" 2>&1 &
   echo $! > "$PIDF"
   for _ in $(seq 1 20); do
     sleep 0.5
