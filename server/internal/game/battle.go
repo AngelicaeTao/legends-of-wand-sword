@@ -319,6 +319,39 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				}
 				tgt := &mems[ti]
 				r.MonIdx = ti
+				// v1.9.87 伤害结算抽成闭包：physical/magic 与「带伤害的减益」共用同一套公式
+				// （含处决双倍、±10% 浮动、护盾吸收、吸血回血），避免两处口径漂移
+				dealDamage := func(mult float64) {
+					dmg := hero.ATK * (1 + heroAtkBuff) * mult * (1 - tgt.mdef/(tgt.mdef+100))
+					if act.ID == "execute" && tgt.hp < tgt.def.Base["hp"]*tgt.lvFactor*0.3 {
+						dmg *= 2
+					}
+					dmg *= 0.9 + rng.Float64()*0.2 // ±10% 浮动
+					actual := dmg
+					if shield > 0 {
+						absorbed := math.Min(shield, dmg)
+						shield -= absorbed
+						actual = dmg - absorbed
+					}
+					hpBefore := tgt.hp
+					tgt.hp -= actual
+					r.Damage = round2(actual)
+					// v1.9.82 吸取：命中回复本次实际造成伤害的 lifesteal（按目标剩余血量计，防溢出）
+					if act.Lifesteal > 0 && actual > 0 {
+						effective := actual
+						if hpBefore < effective {
+							effective = hpBefore
+						}
+						heal := effective * act.Lifesteal
+						if room := hero.HP - heroHP; heal > room {
+							heal = room
+						}
+						if heal > 0 {
+							heroHP += heal
+							r.Heal = round2(heal)
+						}
+					}
+				}
 				switch act.Kind {
 				case "heal":
 					if act.HotRounds > 0 {
@@ -351,7 +384,11 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				case "buff":
 					heroAtkBuff = power
 				case "debuff":
-					monAtkDebuff = power
+					// v1.9.87 减益拆成两件事：power=伤害系数（0 则纯减益不出手），atkDown=敌人攻击降低比例
+					monAtkDebuff = act.AtkDown
+					if power > 0 {
+						dealDamage(power)
+					}
 				case "summon":
 					// v1.9.82 召唤：当回合只登场不出手，之后每个英雄回合由召唤物补伤害
 					if act.SummonRounds > 0 {
@@ -360,35 +397,7 @@ func ResolveBattle(req BattleRequest) BattleReport {
 						summonName = act.Name
 					}
 				default: // physical / magic
-					dmg := hero.ATK * (1 + heroAtkBuff) * power * (1 - tgt.mdef/(tgt.mdef+100))
-					if act.ID == "execute" && tgt.hp < tgt.def.Base["hp"]*tgt.lvFactor*0.3 {
-						dmg *= 2
-					}
-					dmg *= 0.9 + rng.Float64()*0.2 // ±10% 浮动
-					actual := dmg
-					if shield > 0 {
-						absorbed := math.Min(shield, dmg)
-						shield -= absorbed
-						actual = dmg - absorbed
-					}
-					hpBefore := tgt.hp
-					tgt.hp -= actual
-					r.Damage = round2(actual)
-					// v1.9.82 吸取：命中回复本次实际造成伤害的 lifesteal（按目标剩余血量计，防溢出）
-					if act.Lifesteal > 0 && actual > 0 {
-						effective := actual
-						if hpBefore < effective {
-							effective = hpBefore
-						}
-						heal := effective * act.Lifesteal
-						if room := hero.HP - heroHP; heal > room {
-							heal = room
-						}
-						if heal > 0 {
-							heroHP += heal
-							r.Heal = round2(heal)
-						}
-					}
+					dealDamage(power)
 				}
 				r.HeroHP = round2(heroHP)
 				r.MonHP = round2(math.Max(0, totalMonHP()))

@@ -572,7 +572,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.87';
+const BUILD_VER='v1.9.88';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1752,10 +1752,9 @@ function renderRole(){
     const color=['sk-fire','sk-ice','sk-heal','sk-shield'];
     const kindDesc=s=>s.kind==='heal'?'恢复生命':s.kind==='shield'?'吸收伤害':s.kind==='buff'?'增益':s.kind==='debuff'?'减益':s.kind==='summon'?'召唤协战':'单体伤害';
     const kindIco={physical:'sword',magic:'bolt',heal:'flask',shield:'shield',buff:'star',debuff:'skull',summon:'skull'};
-    // v1.9.82 技能卡数值行：召唤显示持续回合与每跳倍率，吸血在威力后标注
-    const powerText=s=>s.kind==='summon'
-      ? `召唤 ${s.summonRounds||6} 回合 · 每回合 ${Number(s.summonPower||0).toFixed(1)}×`
-      : `威力 ${Number(s.power||1).toFixed(1)}${s.lifesteal?' · 吸血 '+Math.round(s.lifesteal*100)+'%':''}`;
+    // v1.9.87 技能效果全量展示：数值行与战斗技能栏共用 skEffectText，desc 补机制说明
+    const powerText=skEffectText;
+    const effectDesc=s=>s.desc||kindDesc(s);
     // v1.9.56 技能升级：每级 +8%，消耗钻石随等级递增（数值读 CFG.economy.skillUpgrade）
     const SU=(CFG&&CFG.economy&&CFG.economy.skillUpgrade)||{};
     const suPer=Number(SU.perLevel||0.08), suMax=Number(SU.maxLevel||20),
@@ -1780,7 +1779,8 @@ function renderRole(){
       return `<div class="skill-card ${color[i%4]}" data-slot="${i}" style="cursor:pointer">
         <div class="sk-ico">${ICON[ic]?ICON[ic](24,'#fff3c4'):''}</div>
         <div style="flex:1;min-width:0"><div class="sn">${s.name}</div>
-          <div class="sd">${kindDesc(s)} · ${powerText(s)} · CD ${s.cd||2}s</div></div>
+          <div class="sd">${effectDesc(s)}</div>
+          <div class="sd" style="color:#ffd590">${powerText(s)}</div></div>
         <div class="srm" style="font-size:10px;color:#ffd590">点击卸下</div>
       </div>`;
     }).join('');
@@ -1793,6 +1793,7 @@ function renderRole(){
         <span class="li-name">${s.name}${adv?'<i style="font-style:normal;font-size:9px;color:#b98cf0;margin-left:4px">进阶</i>':''}</span>
         <span class="li-cd">CD ${s.cd||2}s</span>
         ${lock?ICON.lock(12,'#9aa7bd'):''}
+        <span class="li-eff">${skEffectText(s,true)}</span>
       </div>`;
     }).join('');
     html+=`
@@ -2814,13 +2815,42 @@ function logLine(cls,text){
 let skCdMap = {};                 // skillId -> {remain, total}（单位：回合/秒）
 let skLastUse = {};               // skillId -> 最近一次施放时间（用于平滑）
 
+// v1.9.87 技能效果文案（技能面板 / 技能库 / 战斗技能栏共用同一份）：
+// 按 kind 解释 power——不同 kind 的 power 含义不同（伤害系数 / 回血比例 / 护盾倍数 /
+// 攻击加成 / 降攻比例），全部由配置字段生成，改数值不用改前端，也不会与生效逻辑脱节。
+const skPct = v => Math.round(Number(v||0)*100);
+const skMul = v => Number(v||0).toFixed(1);
+function skEffectText(s, noCd){
+  if(!s) return '';
+  const p = Number(s.power||0), parts = [];
+  if(s.kind==='summon'){
+    parts.push(`召唤 ${s.summonRounds||6} 回合`, `每回合 ${skMul(s.summonPower)}×`);
+  }else if(s.kind==='debuff'){
+    if(p>0) parts.push(`伤害 ${skMul(p)}×`);
+    if(Number(s.atkDown)>0) parts.push(`敌人攻击 -${skPct(s.atkDown)}%`);
+  }else if(s.kind==='buff'){
+    parts.push(`攻击 +${skPct(p)}%`);
+  }else if(s.kind==='heal'){
+    if(Number(s.hotRounds)>0) parts.push(`立即回血 ${skPct(s.hotPer)}%`, `每回合 ${skPct(s.hotPer)}% × ${Number(s.hotRounds)} 回合`);
+    else parts.push(`回血 ${skPct(p)}%`);
+  }else if(s.kind==='shield'){
+    if(Number(s.drRounds)>0) parts.push(`受伤 -${skPct(s.drPct)}%`, `${Number(s.drRounds)} 回合`);
+    else parts.push(`护盾 ${skPct(p)}% 攻击`);
+  }else{
+    parts.push(`伤害 ${skMul(p)}×`);
+  }
+  if(Number(s.lifesteal)>0) parts.push(`吸血 ${skPct(s.lifesteal)}%`);
+  if(!noCd && Number(s.cd)>0) parts.push(`CD ${s.cd}s`); // 普攻 cd=0 不显示；技能库已有独立 CD 列
+  return parts.join(' · ');
+}
+
 function skillSlots(bd){
   const all = CFG.skills.skills;
   const colors = ['sk-fire','sk-ice','sk-heal','sk-shield','sk-basic'];
   const items = bd.map(sid => all.find(x => x.id === sid) || { name:'技能', id:sid });
-  items.push({ name:'普攻', id:'basic' });
+  items.push(CFG.skills.basicAttack || { name:'普攻', id:'basic', kind:'physical', power:1, cd:0 });
   $('skillSlots').innerHTML = items.map((it,i) =>
-    `<div class="skill-slot ${colors[i%colors.length]}">${it.name.charAt(0)}<small>${it.name}</small>` +
+    `<div class="skill-slot ${colors[i%colors.length]}" title="${(it.desc||it.name)+' · '+skEffectText(it)}">${it.name.charAt(0)}<small>${it.name}</small>` +
     `<div class="sk-cd" data-sk="${it.id}"></div>` +
     `<div class="sk-cdnum" data-sknum="${it.id}"></div></div>`
   ).join('');

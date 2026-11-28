@@ -84,6 +84,10 @@ type SkillDef struct {
 	Lifesteal    float64 `json:"lifesteal,omitempty"`
 	SummonRounds int     `json:"summonRounds,omitempty"`
 	SummonPower  float64 `json:"summonPower,omitempty"`
+	// v1.9.87 debuff 拆成两件事：Power = 伤害系数（0 表示纯减益不造成伤害），
+	// AtkDown = 命中后敌人攻击力降低的比例（本场持续，覆盖上一次）。此前 Power 一字段两义
+	// （既当伤害又当降攻），导致单人把它当降攻、组队把它当伤害，两端行为不一致。
+	AtkDown float64 `json:"atkDown,omitempty"`
 }
 
 // SkillPool 是一个职业的 BD 可选池：初始技能 + 进阶技能。

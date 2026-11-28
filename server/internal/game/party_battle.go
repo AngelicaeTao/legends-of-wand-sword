@@ -203,6 +203,8 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 
 	n := 0
 	failed := false
+	// v1.9.87 减益（诅咒/嘲讽）的降攻效果：整场共享，覆盖式生效（与单人 battle.go 同语义）
+	monAtkDebuff := 0.0
 	for wi, spec := range waves {
 		// —— 构建本波阵容 ——
 		base, ok := c.MonsterByID(spec.Mon)
@@ -376,6 +378,35 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					rd.TargetIdx = tgtAlly
 				}
 				n++
+				// v1.9.87 伤害结算闭包：组队里 physical/magic 与「带伤害的减益」共用，
+				// 含 ±10% 浮动、目标血量封顶、吸血回血，口径与单人 battle.go 对齐
+				dealDamage := func(mult float64) {
+					mi := firstAliveMon()
+					if mi < 0 {
+						return
+					}
+					tgt := mons[mi]
+					dmg := u.stats.ATK * (1 + u.atkBuff) * mult * (1 - tgt.mdef/(tgt.mdef+100))
+					dmg *= 0.9 + rng.Float64()*0.2
+					if dmg > tgt.hp {
+						dmg = tgt.hp
+					}
+					tgt.hp -= dmg
+					u.dealt += dmg
+					rd.MonIdx = mi
+					rd.Damage = round2(dmg)
+					// v1.9.82 吸取：命中回复本次伤害的 lifesteal（按目标剩余血量计，防溢出）
+					if act.Lifesteal > 0 && dmg > 0 {
+						heal := dmg * act.Lifesteal
+						if room := u.stats.HP - u.hp; heal > room {
+							heal = room
+						}
+						if heal > 0 {
+							u.hp += heal
+							rd.Heal = round2(heal)
+						}
+					}
+				}
 				switch act.Kind {
 				case "heal":
 					tu := u
@@ -418,6 +449,12 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					rd.TargetIdx = tgtAlly
 				case "buff":
 					u.atkBuff = act.Power
+				case "debuff":
+					// v1.9.87 减益：power=伤害系数（0 则纯降攻不出手），atkDown=怪物攻击降低比例
+					monAtkDebuff = act.AtkDown
+					if act.Power > 0 {
+						dealDamage(act.Power)
+					}
 				case "summon":
 					// v1.9.82 召唤：当回合登场不出手，之后每个本人回合由召唤物补伤害
 					if act.SummonRounds > 0 {
@@ -426,30 +463,7 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 						u.summonName = act.Name
 					}
 				default:
-					mi := firstAliveMon()
-					if mi >= 0 {
-						tgt := mons[mi]
-						dmg := u.stats.ATK * (1 + u.atkBuff) * act.Power * (1 - tgt.mdef/(tgt.mdef+100))
-						dmg *= 0.9 + rng.Float64()*0.2
-						if dmg > tgt.hp {
-							dmg = tgt.hp
-						}
-						tgt.hp -= dmg
-						u.dealt += dmg
-						rd.MonIdx = mi
-						rd.Damage = round2(dmg)
-						// v1.9.82 吸取：命中回复本次伤害的 lifesteal（按目标剩余血量计，防溢出）
-						if act.Lifesteal > 0 && dmg > 0 {
-							heal := dmg * act.Lifesteal
-							if room := u.stats.HP - u.hp; heal > room {
-								heal = room
-							}
-							if heal > 0 {
-								u.hp += heal
-								rd.Heal = round2(heal)
-							}
-						}
-					}
+					dealDamage(act.Power)
 				}
 				rd.MonHP = monHP()
 				rd.HeroHP = heroHP()
@@ -477,7 +491,7 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 				ti := targets[heroTarget%len(targets)]
 				heroTarget++
 				tu := units[ti]
-				dmg := m.atk * (1 - tu.stats.DEF/(tu.stats.DEF+100))
+				dmg := m.atk * (1 - monAtkDebuff) * (1 - tu.stats.DEF/(tu.stats.DEF+100))
 				if tu.drLeft > 0 {
 					dmg *= 1 - tu.drPct
 					tu.drLeft--
