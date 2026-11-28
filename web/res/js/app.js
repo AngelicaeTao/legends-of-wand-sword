@@ -2771,14 +2771,53 @@ function logLine(cls,text){
   box.appendChild(d);
   while(box.childElementCount>6)box.removeChild(box.firstChild);
 }
+// v1.9.75 技能栏：每个格子加一层 CD 薄膜（顺时针扫一圈）+ 剩余秒数
+let skCdMap = {};                 // skillId -> {remain, total}（单位：回合/秒）
+let skLastUse = {};               // skillId -> 最近一次施放时间（用于平滑）
+
 function skillSlots(bd){
-  const all=CFG.skills.skills;
-  const colors=['sk-fire','sk-ice','sk-heal','sk-shield','sk-basic'];
-  const items=bd.map(sid=>all.find(s=>s.id===sid)||{name:'技能',id:sid});
-  items.push({name:'普攻',id:'basic'});
-  $('skillSlots').innerHTML=items.map((s,i)=>`<div class="skill-slot ${colors[i%colors.length]}">${s.name.charAt(0)}<small>${s.name}</small></div>`).join('');
-  $('skillCap').textContent=`生效技能：已装备 ${bd.length} 技能 + 普攻兜底（自动释放）`;
+  const all = CFG.skills.skills;
+  const colors = ['sk-fire','sk-ice','sk-heal','sk-shield','sk-basic'];
+  const items = bd.map(sid => all.find(x => x.id === sid) || { name:'技能', id:sid });
+  items.push({ name:'普攻', id:'basic' });
+  $('skillSlots').innerHTML = items.map((it,i) =>
+    `<div class="skill-slot ${colors[i%colors.length]}">${it.name.charAt(0)}<small>${it.name}</small>` +
+    `<div class="sk-cd" data-sk="${it.id}"></div>` +
+    `<div class="sk-cdnum" data-sknum="${it.id}"></div></div>`
+  ).join('');
+  skCdMap = {}; paintSkillCds();
+  $('skillCap').textContent = `生效技能：已装备 ${bd.length} 技能 + 普攻兜底（自动释放）`;
 }
+
+// 某个技能刚被施放：把 CD 拉满
+function setSkillCd(id, ticks){
+  if(!id || id === 'basic' || !(ticks > 0)) return;
+  skCdMap[id] = { remain: ticks, total: ticks };
+  paintSkillCds();
+}
+// 每次行动推进一格 CD
+function tickSkillCds(){
+  let dirty = false;
+  for(const k in skCdMap){
+    const c = skCdMap[k];
+    if(c.remain > 0){ c.remain = Math.max(0, c.remain - 1); dirty = true; }
+  }
+  if(dirty) paintSkillCds();
+}
+function paintSkillCds(){
+  document.querySelectorAll('#skillSlots .sk-cd').forEach(el => {
+    const c = skCdMap[el.dataset.sk];
+    const frac = (c && c.total > 0) ? Math.max(0, c.remain / c.total) : 0;
+    el.style.setProperty('--cd', frac.toFixed(3));
+  });
+  document.querySelectorAll('#skillSlots .sk-cdnum').forEach(el => {
+    const c = skCdMap[el.dataset.sknum];
+    const n = c ? Math.ceil(c.remain) : 0;
+    el.textContent = n > 0 ? String(n) : '';
+    el.classList.toggle('on', n > 0);
+  });
+}
+
 async function playBattle(rep,mon,bd){
   battlePlaying=true;paused=false;
   currentMonster=mon;
@@ -2827,6 +2866,7 @@ async function playBattle(rep,mon,bd){
       }else{
       const sk=skills.find(x=>x.id===r.action)||{};
       const kind=sk.kind||'physical';
+      setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
       const ti=Math.max(0,(r.monIdx||0)|0);
       const tgt=monInfos[ti]||monInfos[0];
       const tgtName=(tgt&&(tgt.name||MON_NAMES[tgt.sprite]))||'怪物';
@@ -2870,6 +2910,7 @@ async function playBattle(rep,mon,bd){
       logLine('mon',`R${r.n} ${r.skillName} → 英雄 -${Math.round(r.damage)}${r.dr>0?`（格挡减伤 ${Math.round(r.dr*100)}%）`:''}`);
     }
     bHp.hero=r.heroHp;bHp.mon=r.monHp;updateHp();
+    tickSkillCds();                 // v1.9.75 每步推进 CD
     await sleep(270);
   }
   battlePlaying=false;
@@ -3141,6 +3182,15 @@ async function openPartyInvite(){
 let partySlots=null;          // [{name,classId,x,hpMax,hpNow,actor}]
 let partyRunCtl=null;         // 取消令牌（离开战斗时中断）
 
+// v1.9.75 组队法师法球：从该英雄手侧飞向 BOSS 胸口
+function partyMagicShot(s, fx){
+  const color = fx==='fx_dmg_fire'?'#ff9b4a' : fx==='fx_dmg_holy'?'#ffe9a8'
+              : fx==='fx_dmg_dark'?'#b47bff' : '#7fd9ff';
+  magicShots.push({x0:(s.x||420)+28, y0:470, x1:MON_SLOT[0].x, y1:MON_SLOT[0].y-120,
+                   start:performance.now(), dur:165, color});
+  if(magicShots.length>8) magicShots.shift();
+}
+
 function partyClear(){
   partySlots=null;
   if(partyRunCtl){ partyRunCtl.dead=true; partyRunCtl=null; }
@@ -3151,14 +3201,26 @@ function drawPartyHeroes(t,now){
   if(!partySlots) return;
   partySlots.forEach((s,i)=>{
     if(!s.actor) return;
+    // v1.9.75 近战冲刺：算出本帧绘制用的 x，基准 s.x 不变
+    let hx=s.x;
+    if(s.lunge){
+      const e=(now-s.lunge.t0)/s.lunge.dur;
+      if(e>=1) s.lunge=null;
+      else{
+        let q;
+        if(e<0.35) q=1-Math.pow(1-e/0.35,3);
+        else{ const u=(e-0.35)/0.65; q=1-u*u*(3-2*u); }
+        hx=s.x+(s.lunge.tx-s.x)*q;
+      }
+    }
     const dead = s.hpNow<=0;
     // 影子
     cvb.fillStyle='rgba(0,0,0,'+(dead?0.12:0.3)+')';
-    cvb.beginPath();cvb.ellipse(s.x,566,42,12,0,0,Math.PI*2);cvb.fill();
-    s.actor.render(cvb,s.x,560,1.6,{dir:(s.faceR?1:-1),alpha:dead?0.45:1});
+    cvb.beginPath();cvb.ellipse(hx,566,42,12,0,0,Math.PI*2);cvb.fill();
+    s.actor.render(cvb,hx,560,1.6,{dir:(s.faceR?1:-1),alpha:dead?0.45:1});
     // 头顶血条
     // v1.9.73 血条贴到头顶上方：立绘脚底在 y=560、高 96*1.6，头顶约 406，血条放 360
-    const w=92,h=9,bx=s.x-w/2,by=Math.round(560-96*1.6)-46;
+    const w=92,h=9,bx=hx-w/2,by=Math.round(560-96*1.6)-46;
     cvb.fillStyle='rgba(0,0,0,.62)';cvb.fillRect(bx-1,by-1,w+2,h+2);
     cvb.fillStyle='#2a3a2a';cvb.fillRect(bx,by,w,h);
     const pct=Math.max(0,Math.min(1,s.hpNow/Math.max(1,s.hpMax)));
@@ -3167,9 +3229,9 @@ function drawPartyHeroes(t,now){
     cvb.strokeStyle='rgba(255,255,255,.35)';cvb.lineWidth=1;cvb.strokeRect(bx+.5,by+.5,w-1,h-1);
     // 名字 + 数字
     cvb.font='bold 12px "Microsoft YaHei",sans-serif';cvb.textAlign='center';
-    cvb.fillStyle='#e6eefc';cvb.fillText(s.name||'', s.x, by-6);
+    cvb.fillStyle='#e6eefc';cvb.fillText(s.name||'', hx, by-6);
     cvb.font='11px "Microsoft YaHei",sans-serif';cvb.fillStyle='#cfe0f5';
-    cvb.fillText(Math.max(0,Math.round(s.hpNow))+' / '+Math.round(s.hpMax), s.x, by+h+12);
+    cvb.fillText(Math.max(0,Math.round(s.hpNow))+' / '+Math.round(s.hpMax), hx, by+h+12);
     cvb.textAlign='left';
   });
 }
@@ -3243,9 +3305,18 @@ async function playPartyBattle(rep){
     if(r.actor==='hero'){
       const sk=skills.find(x=>x.id===r.action)||{};
       const kind=r.action==='hot'?'heal':(sk.kind||'physical');
+      setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
       if(kind==='physical') window.SFX&&SFX.slash();
       else if(kind==='shield') window.SFX&&SFX.shield();
       else window.SFX&&SFX.cast();
+      // v1.9.75 近战冲到 BOSS 身边再砍；法师从自己手侧发法球（与单人一致）
+      if(s && r.damage>0){
+        if(MELEE_CLASSES[s.classId]===1){
+          s.lunge={t0:performance.now(), dur:430, tx:Math.max(s.x+140, MON_SLOT[0].x-170)};
+        }else{
+          partyMagicShot(s, r.fx);
+        }
+      }
       if(s&&s.actor){ try{ s.actor.play('attack'); }catch(e){} }
       if(si===meIdx) setBAnim('hero','attack',420);
       await sleep(150);
@@ -3272,6 +3343,7 @@ async function playPartyBattle(rep){
       logLine('mon',`R${r.n} ${rep.bossName||'BOSS'} → ${s?s.name:'队友'} -${Math.round(r.damage||0)}`);
     }
     if(r.bossHp<=0) setMonAnim(0,'die',1600);
+    tickSkillCds();                 // v1.9.75 每步推进 CD
     await sleep(270);
   }
   if(ctl.dead||view!=='battle') return;

@@ -1131,3 +1131,13 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
 .pd-m em{font-style:normal;margin-left:auto;font-size:12px;color:#9fb0c8}
 .pd-dot{width:8px;height:8px;border-radius:50%;background:#5fd38a;box-shadow:0 0 6px #5fd38a}
 .pd-m.off .pd-dot{background:#6b7688;box-shadow:none}
+
+/* ===== v1.9.75 技能栏 CD：图标上一层半透明薄膜顺时针转一圈 ===== */
+@property --cd { syntax: '<number>'; inherits: false; initial-value: 0; }
+.skill-slot{position:relative;overflow:hidden}
+.skill-slot .sk-cd{position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:conic-gradient(rgba(4,8,14,.72) calc(var(--cd,0) * 1turn), rgba(4,8,14,0) 0);
+  transition:--cd .26s linear}
+.skill-slot .sk-cdnum{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;opacity:0}
+.skill-slot .sk-cdnum.on{opacity:1}
