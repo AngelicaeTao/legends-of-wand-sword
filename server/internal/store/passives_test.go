@@ -98,3 +98,61 @@ func TestTransferDropsForeignPassives(t *testing.T) {
 	}
 	t.Logf("转职清理：骑士被动 → 拳师后清空，可重新装配拳师被动 ✓")
 }
+
+// v1.9.92 被动技能升级：被动不进 BD 池、也不写 Unlocked，走的是独立校验分支。
+// 此前 SkillUpgrade 一律套用主动技能的两道校验，导致被动升级必然失败。
+func TestPassiveUpgrade(t *testing.T) {
+	if err := game.Init("../../../configs"); err != nil {
+		t.Fatal(err)
+	}
+
+	k := NewPlayer("t_up_knight", "升级骑士", "knight")
+	k.refreshPower()
+	k.Core.Gem = 100000 // 足够升满
+	// 先装配：只有已装配的被动才计入战力，未装配时升级它不影响战力（这是设计如此）
+	if _, err := k.SavePassives([]string{"kp_guardian"}); err != nil {
+		t.Fatalf("装配被动失败：%v", err)
+	}
+	basePower := k.Core.BattlePower
+
+	// ① 当前职业的被动可以升级（这是此前的 bug 点）
+	lv, cost, err := k.SkillUpgrade("kp_guardian")
+	if err != nil {
+		t.Fatalf("当前职业的被动应可升级，实际 %v", err)
+	}
+	if lv != 2 || cost <= 0 {
+		t.Fatalf("被动升级后应为 Lv.2 且消耗 >0，实际 lv=%d cost=%d", lv, cost)
+	}
+	if got := k.Skills.Levels["kp_guardian"]; got != 2 {
+		t.Fatalf("存档等级应为 2，实际 %d", got)
+	}
+
+	// ② 升级后战力必须跟着涨（固定档位分 × 等级系数）
+	if k.Core.BattlePower <= basePower {
+		t.Fatalf("被动升级后战力应上涨，实际 %d → %d", basePower, k.Core.BattlePower)
+	}
+
+	// ③ 跨职业被动仍应被拒
+	if _, _, err := k.SkillUpgrade("fp_swift"); err == nil {
+		t.Fatal("骑士不应能升级拳师被动")
+	}
+
+	// ④ 一阶职业没有被动池 → 拒绝
+	w := NewPlayer("t_up_warrior", "升级战士", "warrior")
+	w.Core.Gem = 100000
+	if _, _, err := w.SkillUpgrade("kp_guardian"); err == nil {
+		t.Fatal("一阶职业不应能升级任何被动")
+	}
+
+	// ⑤ 主动技能升级路径不受影响（仍要求已解锁）
+	if _, _, err := w.SkillUpgrade("f_combo"); err == nil {
+		t.Fatal("战士不应能升级拳师主动技能")
+	}
+	slots := w.Skills.Unlocked
+	if len(slots) == 0 {
+		t.Fatal("战士应有初始技能")
+	}
+	if _, _, err := w.SkillUpgrade(slots[0]); err != nil {
+		t.Fatalf("已解锁的主动技能应可升级，实际 %v", err)
+	}
+}

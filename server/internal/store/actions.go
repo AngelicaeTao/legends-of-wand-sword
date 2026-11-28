@@ -403,21 +403,31 @@ func (p *PlayerState) SkillLevelOf(id string) int {
 //   - 扣费在服务端完成，返回升级后等级与实际消耗。
 func (p *PlayerState) SkillUpgrade(id string) (level, cost int, err error) {
 	c := game.C()
-	if _, ok := c.SkillByID(id); !ok {
+	def, ok := c.SkillByID(id)
+	if !ok {
 		return 0, 0, fmt.Errorf("未知技能：%s", id)
 	}
-	if !c.InBDPool(p.Core.ClassID, id) {
-		return 0, 0, fmt.Errorf("该技能不属于当前职业")
-	}
-	unlocked := false
-	for _, x := range p.Skills.Unlocked {
-		if x == id {
-			unlocked = true
-			break
+	// v1.9.92 被动技能单独判定：被动既不在 BD 池（initial/advanced）里，也不写进
+	// Skills.Unlocked（规则是「转职即全部获得」，无需解锁）。此前一律套用下面两道
+	// 主动技能校验，导致所有被动升级都被拒，前端只看到「升级失败」。
+	if def.Kind == "passive" {
+		if !c.InPassivePool(p.Core.ClassID, id) {
+			return 0, 0, fmt.Errorf("该被动不属于当前职业")
 		}
-	}
-	if !unlocked {
-		return 0, 0, fmt.Errorf("技能尚未解锁，先解锁再升级")
+	} else {
+		if !c.InBDPool(p.Core.ClassID, id) {
+			return 0, 0, fmt.Errorf("该技能不属于当前职业")
+		}
+		unlocked := false
+		for _, x := range p.Skills.Unlocked {
+			if x == id {
+				unlocked = true
+				break
+			}
+		}
+		if !unlocked {
+			return 0, 0, fmt.Errorf("技能尚未解锁，先解锁再升级")
+		}
 	}
 	cur := p.SkillLevelOf(id)
 	if max := game.SkillMaxLevel(); cur >= max {
