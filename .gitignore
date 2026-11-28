@@ -1,5 +1,7 @@
 data/saves/
 data/accounts/
+data/backups/
+data/*.exe.bak-*
 data/token_secret
 data/server.log
 data/zjcs-server
