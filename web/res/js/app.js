@@ -572,7 +572,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.84';
+const BUILD_VER='v1.9.85';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1705,7 +1705,7 @@ function renderRole(){
           <div class="hb-lv">Lv.${c.level}<span>已装备 ${done}/4</span></div>
           <div class="hb-exp"><i style="width:${pct.toFixed(1)}%"></i><span>${fmt(exp)} / ${fmt(need)}</span></div>
         </div>
-        <div class="hero-power"><em>战力</em><b>${fmt((heroStats&&heroStats.power)||c.battlePower)}</b></div>
+        <div class="hero-power"><em>战力</em><b>${fmt((heroStats&&heroStats.power)||c.battlePower)}</b>${(heroStats&&heroStats.skillPower)>0?`<i style="display:block;font-style:normal;font-weight:400;font-size:10px;color:#9fb0c6;margin-top:2px">含技能 +${fmt(heroStats.skillPower)}</i>`:''}</div>
       </div>
       <div class="sec-title">基础属性</div>${attrRows()}
       ${quickEquip(eq)}
@@ -1763,12 +1763,15 @@ function renderRole(){
           suBase=Number(SU.baseGem||60), suStep=Number(SU.stepGem||30);
     const suLv=id=>{const v=(state.skills&&state.skills.levels&&state.skills.levels[id])||1;return Math.max(1,Math.min(suMax,v));};
     const suCost=lv=>lv>=suMax?0:suBase+suStep*(lv-1);
+    // v1.9.85 技能战力：服务端 /api/stats/calc 返回的已装备技能逐项战力（skillPowers），前端不自行推算
+    const skPw=id=>{const a=((heroStats&&heroStats.skillPowers)||[]).find(x=>x.id===id);return a?Number(a.power)||0:0;};
     const upRows=visible.filter(s=>unlocked.includes(s.id)).map(s=>{
       const lv=suLv(s.id), cost=suCost(lv), mx=lv>=suMax, mult=1+suPer*(lv-1);
       const afford=((state.core&&state.core.gem)||0)>=cost;
+      const pw=skPw(s.id);
       return `<div class="skup-row">
         <div class="sku-main"><span class="sku-name">${s.name}</span><span class="sku-lv">Lv.${lv}</span></div>
-        <div class="sku-eff">效果 ×${mult.toFixed(2)} · 每级 +${(suPer*100).toFixed(0)}%${mx?' · 已满级':''}</div>
+        <div class="sku-eff">效果 ×${mult.toFixed(2)} · 每级 +${(suPer*100).toFixed(0)}%${pw?' · 战力 +'+fmt(pw):''}${mx?' · 已满级':''}</div>
         <button class="sku-btn" data-up="${s.id}" ${(mx||!afford)?'disabled':''}>${mx?'满级':'升级 '+fmt(cost)+' 钻'}</button>
       </div>`;
     }).join('');

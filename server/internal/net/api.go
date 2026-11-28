@@ -353,12 +353,17 @@ type calcStatsReq struct {
 	Equip   []calcEquipItem  `json:"equip"`
 	Avatar  *game.Avatar     `json:"avatar"` // 旧格式兼容
 	Items   []game.EquipItem `json:"items"`  // 旧格式兼容
+	// v1.9.85 未登录纯计算时可用；登录用户以存档为准，这两个字段被忽略
+	Skills  []string       `json:"skills"`
+	SkillLv map[string]int `json:"skillLv"`
 }
 
-// calcStatsResp 总属性（扁平字段）+ 每件装备战力。
+// calcStatsResp 总属性（扁平字段）+ 每件装备战力 + 技能战力明细（v1.9.85）。
 type calcStatsResp struct {
 	game.Stats
-	EquipPowers []game.EquipPower `json:"equipPowers"`
+	EquipPowers []game.EquipPower      `json:"equipPowers"`
+	SkillPowers []game.SkillPowerEntry `json:"skillPowers,omitempty"`
+	SkillPower  float64                `json:"skillPower,omitempty"`
 }
 
 // playerStats 用存档直接算属性，口径与 /api/stats/calc 一致。
@@ -383,10 +388,17 @@ func playerStats(p *store.PlayerState) map[string]any {
 		gi := game.EquipItem{ID: e.ID, Slot: e.Slot, Quality: e.Quality, Enhance: e.Enhance, Stats: e.Stats, ClassID: e.ClassID}
 		powers = append(powers, game.EquipPower{ID: e.ID, Power: game.EquipContribution(p.Core.ClassID, gi)})
 	}
-	st := game.CalcStats(game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn})
+	st := game.CalcStats(game.Avatar{
+		Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: worn,
+		Skills: p.Skills.Slots, SkillLv: p.Skills.Levels,
+	})
+	// v1.9.85 技能与技能等级计入战力：逐技能明细供面板显示，skillPower 为合计
+	skillPowers := game.SkillPowers(p.Skills.Slots, p.Skills.Levels)
 	return map[string]any{
 		"hp": st.HP, "atk": st.ATK, "def": st.DEF, "crit": st.Crit, "spd": st.Spd, "power": st.Power,
 		"equipPowers": powers,
+		"skillPowers": skillPowers,
+		"skillPower":  game.SkillPowerSum(p.Skills.Slots, p.Skills.Levels),
 	}
 }
 
@@ -421,6 +433,17 @@ func calcStats(w http.ResponseWriter, r *http.Request) {
 			a.Equip = q.Items
 		}
 	}
+	// v1.9.85 技能与技能等级计入战力：登录用户一律以存档为准（客户端传什么都不作数），
+	// 未登录的纯计算请求才用请求体里的 skills/skillLv（缺省=无技能战力，与老客户端兼容）。
+	if uid, ok := authUserID(r); ok {
+		if p, err := disk.Load(uid); err == nil && p != nil {
+			a.Skills = p.Skills.Slots
+			a.SkillLv = p.Skills.Levels
+		}
+	} else if len(a.Skills) == 0 && len(q.Skills) > 0 {
+		a.Skills = q.Skills
+		a.SkillLv = q.SkillLv
+	}
 	st := game.CalcStats(a)
 
 	// v1.9.28：全量装备逐件折算战力；带 equipped=false 标记的件不计入总属性
@@ -440,13 +463,16 @@ func calcStats(w http.ResponseWriter, r *http.Request) {
 				worn = append(worn, it.EquipItem)
 			}
 		}
-		st2 := game.CalcStats(game.Avatar{Level: a.Level, ClassID: a.ClassID, Equip: worn})
+		st2 := game.CalcStats(game.Avatar{Level: a.Level, ClassID: a.ClassID, Equip: worn, Skills: a.Skills, SkillLv: a.SkillLv})
 		resp.Stats = st2
 	} else {
 		for _, it := range a.Equip {
 			resp.EquipPowers = append(resp.EquipPowers, game.EquipPower{ID: it.ID, Power: game.EquipContribution(a.ClassID, it)})
 		}
 	}
+	// v1.9.85 技能战力明细（已装备技能 × 等级）
+	resp.SkillPowers = game.SkillPowers(a.Skills, a.SkillLv)
+	resp.SkillPower = game.SkillPowerSum(a.Skills, a.SkillLv)
 	jsonOut(w, resp)
 }
 

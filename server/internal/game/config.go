@@ -49,7 +49,16 @@ type SkillsConfig struct {
 	Slots       int                  `json:"slots"`
 	BasicAttack SkillDef             `json:"basicAttack"`
 	Skills      []SkillDef           `json:"skills"`
-	Classes     map[string]SkillPool `json:"classes"` // 职业技能池（交付包 skills.json §4.3）
+	Classes     map[string]SkillPool `json:"classes"`   // 职业技能池（交付包 skills.json §4.3）
+	PowerRule   SkillPowerRule       `json:"powerRule"` // v1.9.85 技能/技能等级计入战力
+}
+
+// SkillPowerRule 技能战力规则（v1.9.85）：
+// 已装备技能每个贡献 base[档位] × kindWeight[类型] × SkillEffectMult(等级)，累加进总战力。
+// 等级系数复用 economy.skillUpgrade.perLevel，不再单独配置，避免两处不一致。
+type SkillPowerRule struct {
+	Base       map[string]float64 `json:"base"`       // 档位（initial/advanced）→ 基础分
+	KindWeight map[string]float64 `json:"kindWeight"` // 技能类型权重（输出类 1.0，辅助类 <1）
 }
 type SkillDef struct {
 	ID      string  `json:"id"`

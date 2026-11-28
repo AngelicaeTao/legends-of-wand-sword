@@ -118,8 +118,7 @@
       },
       "skillPool": [
         "wl_curse",
-        "wl_summon",
-        "wl_drain"
+        "wl_summon"
       ]
     }
   ],
