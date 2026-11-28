@@ -224,8 +224,18 @@ func TestShopSell(t *testing.T) {
 	}
 
 	// 比例可配：改配置后再兑，金币单价生效
+	// 注意：Economy.Shop 是全局配置，改完必须还原，否则会污染同包后续用例
+	//（曾出现：本用例把 goldPerUnit 改成 25 后没恢复，导致后面的专价用例读到 25）。
 	if cfg := game.C().Economy.Shop; cfg != nil {
+		prev, had := cfg["materialOut"]
 		cfg["materialOut"] = map[string]any{"goldPerUnit": float64(25), "gemPerUnit": float64(2)}
+		defer func() {
+			if had {
+				cfg["materialOut"] = prev
+			} else {
+				delete(cfg, "materialOut")
+			}
+		}()
 	}
 	cost, got2, err = p.ShopExchange("materialToGold", "material", 2)
 	if err != nil || got2 != 50 {
@@ -243,5 +253,74 @@ func TestShopSell(t *testing.T) {
 	// pay 不是 material：报错
 	if _, _, err := p.ShopExchange("materialToGold", "gold", 1); err == nil {
 		t.Fatalf("兑回卡必须消耗强化材料，用金币支付应报错")
+	}
+}
+
+// v1.9.84 仓库物品专价回归：v1.9.68 把 5 种强化材料的专价行删掉、改用 default.material
+// 的 1:10 之后，钢铁/皮革这些从仓库回收的价格掉到了原来的 1/12（钢锭 120→10）。
+// 判定是「两套体系被混成一套」：materialOut（强化材料计数器兑回，1:10/1:1）是 v1.9.68
+// 新加的，仓库物品的 items 专价属于 v1.9.57 的旧标准，两者不该互相覆盖。
+// 这里把专价逐项锁住，防止下次再被当成「重复定价」删掉。
+func TestShopSellMaterialPrices(t *testing.T) {
+	if err := game.Init("../../../configs"); err != nil {
+		t.Fatal(err)
+	}
+	p := NewPlayer("t_shop_mat_price", "材料价侠", "warrior")
+
+	// v1.9.57 专价：id → {金币, 钻石}
+	want := []struct {
+		id, kind  string
+		gold, gem int
+	}{
+		{"钢锭", "材料", 120, 10},
+		{"精铁", "材料", 200, 20},
+		{"蓝宝石", "材料", 600, 50},
+		{"皮革", "材料", 80, 10},
+		{"布料", "材料", 60, 10},
+		{"potion_s", "consume", 150, 10},
+		{"potion_l", "consume", 450, 30},
+		{"秘银", "材料", 400, 40},
+		{"金币袋", "材料", 500, 50},
+	}
+	for _, w := range want {
+		p.Warehouse = []Item{{ID: w.id, Qty: 4, Kind: w.kind}}
+		p.Core.Gold, p.Core.Gem = 0, 0
+
+		unit, got, err := p.ShopSell(w.id, 3, "gold")
+		if err != nil {
+			t.Fatalf("%s 回收金币失败：%v", w.id, err)
+		}
+		if unit != w.gold || got != w.gold*3 {
+			t.Fatalf("%s 金币单价应为 %d、3 件共 %d，实际 unit=%d got=%d",
+				w.id, w.gold, w.gold*3, unit, got)
+		}
+
+		p.Warehouse = []Item{{ID: w.id, Qty: 4, Kind: w.kind}}
+		unit, got, err = p.ShopSell(w.id, 3, "gem")
+		if err != nil {
+			t.Fatalf("%s 回收钻石失败：%v", w.id, err)
+		}
+		if unit != w.gem || got != w.gem*3 {
+			t.Fatalf("%s 钻石单价应为 %d、3 件共 %d，实际 unit=%d got=%d",
+				w.id, w.gem, w.gem*3, unit, got)
+		}
+	}
+
+	// 未定价的材料走 default.material（100 金 / 10 钻），不是 1:10
+	p.Warehouse = []Item{{ID: "月光石", Qty: 5, Kind: "材料"}}
+	p.Core.Gold, p.Core.Gem = 0, 0
+	unit, got, err := p.ShopSell("月光石", 2, "gold")
+	if err != nil {
+		t.Fatalf("未定价材料回收失败：%v", err)
+	}
+	if unit != 100 || got != 200 {
+		t.Fatalf("未定价材料应走 default.material 100 金/件，实际 unit=%d got=%d", unit, got)
+	}
+
+	// 同一时刻，强化材料计数器兑回仍是 1 件 = 10 金币（materialOut），与上面的仓库专价互不影响
+	p.Core.Material = 10
+	p.Core.Gold = 0
+	if _, got, err := p.ShopExchange("materialToGold", "material", 5); err != nil || got != 50 {
+		t.Fatalf("强化材料计数器应仍按 1:10 兑回（5 件=50 金）：err=%v got=%d", err, got)
 	}
 }
