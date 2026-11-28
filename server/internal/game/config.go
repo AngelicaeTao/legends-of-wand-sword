@@ -46,11 +46,12 @@ type TransferDef struct {
 }
 
 type SkillsConfig struct {
-	Slots       int                  `json:"slots"`
-	BasicAttack SkillDef             `json:"basicAttack"`
-	Skills      []SkillDef           `json:"skills"`
-	Classes     map[string]SkillPool `json:"classes"`   // 职业技能池（交付包 skills.json §4.3）
-	PowerRule   SkillPowerRule       `json:"powerRule"` // v1.9.85 技能/技能等级计入战力
+	Slots        int                  `json:"slots"`
+	PassiveSlots int                  `json:"passiveSlots"` // v1.9.89 转职后可装配的被动槽位数
+	BasicAttack  SkillDef             `json:"basicAttack"`
+	Skills       []SkillDef           `json:"skills"`
+	Classes      map[string]SkillPool `json:"classes"`   // 职业技能池（交付包 skills.json §4.3）
+	PowerRule    SkillPowerRule       `json:"powerRule"` // v1.9.85 技能/技能等级计入战力
 }
 
 // SkillPowerRule 技能战力规则（v1.9.85）：
@@ -88,9 +89,36 @@ type SkillDef struct {
 	// AtkDown = 命中后敌人攻击力降低的比例（本场持续，覆盖上一次）。此前 Power 一字段两义
 	// （既当伤害又当降攻），导致单人把它当降攻、组队把它当伤害，两端行为不一致。
 	AtkDown float64 `json:"atkDown,omitempty"`
+
+	// —— v1.9.89 被动技能（Kind=passive）——
+	// 被动不进 BD 槽位，单独占 2 个被动槽（转职后解锁）；效果分两类：
+	// ① 属性型：HPPct/ATKPct/DEFPct/CritAdd/SpdAdd，在 CalcStats 里按乘/加生效；
+	// ② 战斗特效型：由 passive.go 汇总成 PassiveBonus，单人 battle.go 与组队
+	//    party_battle.go 共用同一套钩子，保证两端行为一致。
+	// 全部字段可缺省（零值不生效），一个被动可同时带多种效果。
+	HPPct        float64            `json:"hpPct,omitempty"`        // 最大生命百分比（可为负）
+	ATKPct       float64            `json:"atkPct,omitempty"`       // 攻击百分比（可为负）
+	DEFPct       float64            `json:"defPct,omitempty"`       // 防御百分比（可为负）
+	CritAdd      float64            `json:"critAdd,omitempty"`      // 暴击率加值（绝对值，0.05 = +5%）
+	SpdAdd       float64            `json:"spdAdd,omitempty"`       // 速度加值（绝对值）
+	LifestealAdd float64            `json:"lifestealAdd,omitempty"` // 所有伤害附带吸血比例
+	DRAdd        float64            `json:"drAdd,omitempty"`        // 常驻受伤减免比例
+	Thorns       float64            `json:"thorns,omitempty"`       // 受击反弹伤害比例（按受到的伤害计）
+	OpenShield   float64            `json:"openShield,omitempty"`   // 战斗开始获得护盾（×攻击力）
+	HealBoost    float64            `json:"healBoost,omitempty"`    // 治疗类技能回复量增幅
+	ShieldBoost  float64            `json:"shieldBoost,omitempty"`  // 护盾类技能效果增幅
+	CDR          float64            `json:"cdr,omitempty"`          // 全技能冷却缩减比例（上限 0.5）
+	LowHPThresh  float64            `json:"lowHpThresh,omitempty"`  // 低血增伤触发阈值（生命占比）
+	LowHPDmg     float64            `json:"lowHpDmg,omitempty"`     // 低于阈值时的增伤比例
+	ExtraEvery   int                `json:"extraEvery,omitempty"`   // 每 N 个英雄回合追加一次攻击
+	ExtraPower   float64            `json:"extraPower,omitempty"`   // 追加攻击的伤害系数（×攻击）
+	RegenEvery   int                `json:"regenEvery,omitempty"`   // 每 N 个英雄回合回复一次
+	RegenPct     float64            `json:"regenPct,omitempty"`     // 每次回复的最大生命占比
+	KindDmg      map[string]float64 `json:"kindDmg,omitempty"`      // 按技能类型增伤（physical/magic/debuff…）
+	DebuffBoost  float64            `json:"debuffBoost,omitempty"`  // 降攻类减益的效果增幅
 }
 
-// SkillPool 是一个职业的 BD 可选池：初始技能 + 进阶技能。
+// SkillPool 是一个职业的 BD 可选池：初始技能 + 进阶技能 + 被动技能。
 type SkillPool struct {
 	Name      string   `json:"name"`
 	Tier      int      `json:"tier"`
@@ -99,6 +127,9 @@ type SkillPool struct {
 	NeedStage int      `json:"needStage"`
 	Initial   []string `json:"initial"`
 	Advanced  []string `json:"advanced"`
+	// v1.9.89 被动池：转职职业各 4 个，一阶职业为空。转职即全部获得（无需解锁），
+	// 但只有 2 个被动槽，需要玩家自己取舍。
+	Passives []string `json:"passives"`
 }
 
 // CreatorConfig 对应交付包 creator_manifest.json（format=creator_parts_v2）。
@@ -303,6 +334,31 @@ func (c *Config) SkillByID(id string) (SkillDef, bool) {
 	}
 	return SkillDef{}, false
 }
+
+// PassiveSlotMax 转职后可装配的被动槽位数（v1.9.89），读 skills.json 的 passiveSlots。
+// 一阶职业（战士/法师）被动池为空，槽位对它们不生效，前端据此决定是否显示被动区。
+func PassiveSlotMax() int {
+	if n := C().Skills.PassiveSlots; n > 0 {
+		return n
+	}
+	return 2 // 配置缺省时的兜底，与 skills.json 默认值一致
+}
+
+// PassivePool 返回某职业的被动池（v1.9.89）。未配置/一阶职业返回空切片。
+func (c *Config) PassivePool(classID string) []string {
+	p, ok := c.Skills.Classes[classID]
+	if !ok || len(p.Passives) == 0 {
+		return []string{}
+	}
+	return p.Passives
+}
+
+// IsPassive 判断某技能 id 是否被动技能（v1.9.89）。
+// 装配校验用它拦掉「把主动技能塞进被动槽」这类脏数据。
+func (c *Config) IsPassive(id string) bool {
+	s, ok := c.SkillByID(id)
+	return ok && s.Kind == "passive"
+}
 func (c *Config) MonsterByID(id string) (MonsterDef, bool) {
 	for _, m := range c.Monsters.Monsters {
 		if m.ID == id {
@@ -343,6 +399,20 @@ func (c *Config) InBDPool(classID, skillID string) bool {
 		return true
 	}
 	for _, id := range c.BDPoolOf(classID) {
+		if id == skillID {
+			return true
+		}
+	}
+	return false
+}
+
+// InPassivePool 判断技能是否属于该职业的被动池（v1.9.89）。
+// 被动不走解锁流程（转职即全部获得），装配时只需校验「是当前职业的被动」。
+func (c *Config) InPassivePool(classID, skillID string) bool {
+	if skillID == "" {
+		return false
+	}
+	for _, id := range c.PassivePool(classID) {
 		if id == skillID {
 			return true
 		}

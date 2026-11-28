@@ -90,6 +90,8 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	}
 	rng := rand.New(rand.NewSource(seed))
 	hero := CalcStats(req.Avatar)
+	// v1.9.89 被动特效快照：零被动时 Empty() 为真，下面所有钩子都会跳过
+	pb := CalcPassiveBonus(req.Avatar.Passives, req.Avatar.SkillLv)
 
 	// v1.9.36 群怪模版：组合非空按组合展开成员（服务端权威点位下发，可混编不同怪），否则单怪。
 	group := req.Group
@@ -198,7 +200,8 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	rep := BattleReport{Seed: seed, Rounds: []BattleRound{}, HeroHPStart: round2(heroHP), Monsters: monInfos}
 	heroAtkBuff := 0.0
 	monAtkDebuff := 0.0
-	shield := 0.0
+	// v1.9.89 开场护盾：被动「圣盾精通」使战斗开始即获得 攻击×比例 的护盾
+	shield := hero.ATK * pb.OpenShield
 	// v1.9.40 持续效果状态：HoT（法师治疗术持续回血）与 DR（战士格挡持续减伤）
 	hotLeft := 0
 	hotPer := 0.0
@@ -231,6 +234,7 @@ func ResolveBattle(req BattleRequest) BattleReport {
 		return -1
 	}
 	n := 0
+	heroTurn := 0 // v1.9.89 英雄回合序号（被动「每 N 回合」类效果按它计时，不受怪物行动干扰）
 	// v1.9.58 秒杀判定：本次遭遇总血量 ≤ 普攻保底伤害时，直接判胜、跳过整个回合模拟。
 	// 保底伤害取最保守口径：普攻 power × 最低浮动 0.9 × 组合内最高防御减伤，判定必杀即真必杀。
 	// 玩家先手（heroFirst）才允许，避免"还没出手就被打死"却被判胜。
@@ -251,6 +255,23 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	for t := 0; t < maxTicks && heroHP > 0 && totalMonHP() > 0; t++ {
 		for _, first := range []bool{heroFirst, !heroFirst} {
 			if first {
+				heroTurn++
+				// v1.9.89 被动周期回复（庇护圣所）：每 N 个英雄回合回一口，独立战报行
+				if pb.RegenEvery > 0 && pb.RegenPct > 0 && heroTurn%pb.RegenEvery == 0 && heroHP > 0 && heroHP < hero.HP {
+					heal := hero.HP * pb.RegenPct
+					if room := hero.HP - heroHP; heal > room {
+						heal = room
+					}
+					if heal > 0 {
+						heroHP += heal
+						n++
+						rep.Rounds = append(rep.Rounds, BattleRound{
+							N: n, Actor: "hero", Action: "passiveRegen", SkillName: "被动·回复",
+							FX: "fx_heal", Heal: round2(heal),
+							HeroHP: round2(heroHP), MonHP: round2(math.Max(0, totalMonHP())),
+						})
+					}
+				}
 				// v1.9.40 HoT 跳数结算：英雄行动前先回一口（独立战报行，前端绿色浮字）
 				if hotLeft > 0 && heroHP > 0 {
 					hotLeft--
@@ -305,7 +326,12 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				act := basic
 				if chosen >= 0 {
 					act = queue[chosen].def
-					queue[chosen].remain = act.CD
+					// v1.9.89 被动冷却缩减：下限 1 秒，防高等级把 CD 压到 0 后无限连放
+					cd := act.CD * (1 - pb.CDR)
+					if cd < 1 {
+						cd = 1
+					}
+					queue[chosen].remain = cd
 				}
 				for i := range queue {
 					queue[i].remain = math.Max(0, queue[i].remain-tick)
@@ -326,23 +352,32 @@ func ResolveBattle(req BattleRequest) BattleReport {
 					if act.ID == "execute" && tgt.hp < tgt.def.Base["hp"]*tgt.lvFactor*0.3 {
 						dmg *= 2
 					}
+					// v1.9.89 被动增伤：按技能类型（物理/魔法/减益…）与低血狂暴分别叠乘
+					if v := pb.KindDmgOf(act.Kind); v > 0 {
+						dmg *= 1 + v
+					}
+					if pb.LowHPDmg > 0 {
+						dmg *= pb.LowHPMult(heroHP, hero.HP)
+					}
 					dmg *= 0.9 + rng.Float64()*0.2 // ±10% 浮动
 					actual := dmg
-					if shield > 0 {
-						absorbed := math.Min(shield, dmg)
-						shield -= absorbed
-						actual = dmg - absorbed
+					if actual < 0 {
+						actual = 0
 					}
+					// v1.9.89 修正：英雄护盾只吸收怪物造成的伤害，不再被自己的攻击消耗
+					//（旧逻辑在此扣 shield，导致「圣盾精通」的开场护盾一次攻击就自耗光）
 					hpBefore := tgt.hp
 					tgt.hp -= actual
 					r.Damage = round2(actual)
 					// v1.9.82 吸取：命中回复本次实际造成伤害的 lifesteal（按目标剩余血量计，防溢出）
-					if act.Lifesteal > 0 && actual > 0 {
+					// v1.9.89 被动吸血并入同一口径：技能自带吸血 + 被动附加吸血
+					ls := act.Lifesteal + pb.Lifesteal
+					if ls > 0 && actual > 0 {
 						effective := actual
 						if hpBefore < effective {
 							effective = hpBefore
 						}
-						heal := effective * act.Lifesteal
+						heal := effective * ls
 						if room := hero.HP - heroHP; heal > room {
 							heal = room
 						}
@@ -356,7 +391,8 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				case "heal":
 					if act.HotRounds > 0 {
 						// v1.9.40 持续回血：施放立即回第一跳，剩余 HotRounds-1 跳逐回合结算
-						hotPer = hero.HP * act.HotPer
+						// v1.9.89 被动治疗增幅作用于每一跳
+						hotPer = hero.HP * act.HotPer * (1 + pb.HealBoost)
 						hotLeft = act.HotRounds - 1
 						hotName = act.Name
 						heal := hotPer
@@ -369,8 +405,14 @@ func ResolveBattle(req BattleRequest) BattleReport {
 						}
 						r.Heal = round2(heal)
 					} else {
-						heal := hero.HP * power
-						heroHP = math.Min(hero.HP, heroHP+heal)
+						heal := hero.HP * power * (1 + pb.HealBoost)
+						if room := hero.HP - heroHP; heal > room {
+							heal = room
+						}
+						if heal < 0 {
+							heal = 0
+						}
+						heroHP += heal
 						r.Heal = round2(heal)
 					}
 				case "shield":
@@ -379,13 +421,15 @@ func ResolveBattle(req BattleRequest) BattleReport {
 						drLeft = act.DRRounds
 						drPct = act.DRPct
 					} else {
-						shield += hero.ATK * power
+						// v1.9.89 被动护盾增幅
+						shield += hero.ATK * power * (1 + pb.ShieldBoost)
 					}
 				case "buff":
 					heroAtkBuff = power
 				case "debuff":
 					// v1.9.87 减益拆成两件事：power=伤害系数（0 则纯减益不出手），atkDown=敌人攻击降低比例
-					monAtkDebuff = act.AtkDown
+					// v1.9.89 被动降攻强化；上限 90% 防破防
+					monAtkDebuff = math.Min(0.9, act.AtkDown*(1+pb.DebuffBoost))
 					if power > 0 {
 						dealDamage(power)
 					}
@@ -402,6 +446,28 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				r.HeroHP = round2(heroHP)
 				r.MonHP = round2(math.Max(0, totalMonHP()))
 				rep.Rounds = append(rep.Rounds, r)
+				// v1.9.89 被动追加攻击（疾风步）：每 N 个英雄回合追加一击，独立战报行。
+				// 放在技能行动之后，语义是「普攻之外多打一下」，不占技能冷却。
+				if pb.ExtraEvery > 0 && pb.ExtraPower > 0 && heroTurn%pb.ExtraEvery == 0 && heroHP > 0 && totalMonHP() > 0 {
+					if xi := nextAlive(turnIdx); xi >= 0 {
+						xd := hero.ATK * pb.ExtraPower * (1 - mems[xi].mdef/(mems[xi].mdef+100))
+						xd *= pb.LowHPMult(heroHP, hero.HP)
+						xd *= 0.9 + rng.Float64()*0.2
+						if xd > mems[xi].hp {
+							xd = mems[xi].hp
+						}
+						if xd < 0 {
+							xd = 0
+						}
+						mems[xi].hp -= xd
+						n++
+						rep.Rounds = append(rep.Rounds, BattleRound{
+							N: n, Actor: "hero", Action: "passiveExtra", SkillName: "被动·追击",
+							FX: "fx_dmg_normal", Damage: round2(xd), MonIdx: xi,
+							HeroHP: round2(heroHP), MonHP: round2(math.Max(0, totalMonHP())),
+						})
+					}
+				}
 			} else {
 				mi := nextAlive(turnIdx)
 				if mi < 0 {
@@ -413,6 +479,9 @@ func ResolveBattle(req BattleRequest) BattleReport {
 				if drLeft > 0 {
 					dmg *= 1 - drPct
 				} // v1.9.40 格挡姿态持续减伤
+				if pb.DR > 0 {
+					dmg *= 1 - pb.DR
+				} // v1.9.89 被动常驻受伤减免（壁垒/坚定信仰）
 				dmg *= 0.9 + rng.Float64()*0.2
 				actual := dmg
 				if shield > 0 {
@@ -431,6 +500,19 @@ func ResolveBattle(req BattleRequest) BattleReport {
 					mr.DR = drPct
 				} // 前端据此显示"格挡减伤"
 				rep.Rounds = append(rep.Rounds, mr)
+				// v1.9.89 被动反伤（荆棘之甲）：按实际受到的伤害反弹给攻击者，同回合战报行
+				if pb.Thorns > 0 && actual > 0 && atkUnit.hp > 0 {
+					rf := actual * pb.Thorns
+					if rf > atkUnit.hp {
+						rf = atkUnit.hp
+					}
+					atkUnit.hp -= rf
+					rep.Rounds = append(rep.Rounds, BattleRound{
+						N: n, Actor: "hero", Action: "passiveThorns", SkillName: "被动·反伤",
+						FX: "fx_dmg_normal", Damage: round2(rf), MonIdx: mi,
+						HeroHP: round2(math.Max(0, heroHP)), MonHP: round2(math.Max(0, totalMonHP())),
+					})
+				}
 				if drLeft > 0 {
 					drLeft--
 				} // 每次怪物攻击消耗一回合减伤

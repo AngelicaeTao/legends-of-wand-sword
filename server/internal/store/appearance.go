@@ -187,6 +187,15 @@ func (p *PlayerState) TransferTo(to string, stage int) error {
 		kept = append([]string{}, pool.Initial...)
 	}
 	p.Skills.Slots = kept
+	// v1.9.89 转职后被动池整体更换：旧职业的被动一律卸下（不同职业的被动不通用），
+	// 新职业的 4 个被动直接可用，由玩家自己在 2 个槽里挑。
+	pk := []string{}
+	for _, pid := range p.Skills.Passives {
+		if c.InPassivePool(to, pid) && !hasStr(pk, pid) {
+			pk = append(pk, pid)
+		}
+	}
+	p.Skills.Passives = pk
 	p.refreshPower() // v1.9.85 转职改变职业加成与技能池，战力必须跟着重算
 	return nil
 }
@@ -247,6 +256,25 @@ func (p *PlayerState) Migrate() bool {
 			}
 		}
 		p.Skills.Levels = lv
+	}
+
+	// v1.9.89 被动装配清理：只保留「配置里存在 + 是 passive + 在当前职业被动池」的 id，
+	// 顺带去重与截断到槽位上限。老存档没有 passives 字段时这里是空切片，不产生变更。
+	if len(p.Skills.Passives) > 0 {
+		pk := []string{}
+		for _, id := range p.Skills.Passives {
+			sk, ok := c.SkillByID(id)
+			if ok && sk.Kind == "passive" && c.InPassivePool(p.Core.ClassID, id) && !hasStr(pk, id) {
+				if len(pk) < game.PassiveSlotMax() {
+					pk = append(pk, id)
+				} else {
+					changed = true
+				}
+			} else {
+				changed = true
+			}
+		}
+		p.Skills.Passives = pk
 	}
 
 	sl := []string{}

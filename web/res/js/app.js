@@ -572,7 +572,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.88';
+const BUILD_VER='v1.9.89';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1704,7 +1704,7 @@ function renderRole(){
           <div class="hb-lv">Lv.${c.level}<span>已装备 ${done}/4</span></div>
           <div class="hb-exp"><i style="width:${pct.toFixed(1)}%"></i><span>${fmt(exp)} / ${fmt(need)}</span></div>
         </div>
-        <div class="hero-power"><em>战力</em><b>${fmt((heroStats&&heroStats.power)||c.battlePower)}</b>${(heroStats&&heroStats.skillPower)>0?`<i style="display:block;font-style:normal;font-weight:400;font-size:10px;color:#9fb0c6;margin-top:2px">含技能 +${fmt(heroStats.skillPower)}</i>`:''}</div>
+        <div class="hero-power"><em>战力</em><b>${fmt((heroStats&&heroStats.power)||c.battlePower)}</b>${(heroStats&&((heroStats.skillPower||0)+(heroStats.passivePower||0)))>0?`<i style="display:block;font-style:normal;font-weight:400;font-size:10px;color:#9fb0c6;margin-top:2px">含技能 +${fmt((heroStats.skillPower||0)+(heroStats.passivePower||0))}</i>`:''}</div>
       </div>
       <div class="sec-title">基础属性</div>${attrRows()}
       ${quickEquip(eq)}
@@ -1762,8 +1762,9 @@ function renderRole(){
     const suLv=id=>{const v=(state.skills&&state.skills.levels&&state.skills.levels[id])||1;return Math.max(1,Math.min(suMax,v));};
     const suCost=lv=>lv>=suMax?0:suBase+suStep*(lv-1);
     // v1.9.85 技能战力：服务端 /api/stats/calc 返回的已装备技能逐项战力（skillPowers），前端不自行推算
-    const skPw=id=>{const a=((heroStats&&heroStats.skillPowers)||[]).find(x=>x.id===id);return a?Number(a.power)||0:0;};
-    const upRows=visible.filter(s=>unlocked.includes(s.id)).map(s=>{
+    const skPw=id=>{const a=((heroStats&&heroStats.skillPowers)||[]).concat((heroStats&&heroStats.passivePowers)||[]).find(x=>x.id===id);return a?Number(a.power)||0:0;};
+    // v1.9.89 升级行抽成函数：主动技能与被动技能共用同一套（被动不需要解锁，直接全量列出）
+    const upRow=s=>{
       const lv=suLv(s.id), cost=suCost(lv), mx=lv>=suMax, mult=1+suPer*(lv-1);
       const afford=((state.core&&state.core.gem)||0)>=cost;
       const pw=skPw(s.id);
@@ -1772,7 +1773,31 @@ function renderRole(){
         <div class="sku-eff">效果 ×${mult.toFixed(2)} · 每级 +${(suPer*100).toFixed(0)}%${pw?' · 战力 +'+fmt(pw):''}${mx?' · 已满级':''}</div>
         <button class="sku-btn" data-up="${s.id}" ${(mx||!afford)?'disabled':''}>${mx?'满级':'升级 '+fmt(cost)+' 钻'}</button>
       </div>`;
+    };
+    // v1.9.89 被动技能：转职后职业池 4 个全部可用（无需解锁），只挑 2 个装配
+    const pasMax=Number((CFG.skills&&CFG.skills.passiveSlots)||2); // 与 skills.json 的 passiveSlots 同源
+    const pasPool=(cp.passives||[]).map(id=>all.find(x=>x.id===id)).filter(Boolean);
+    if(!window._pasDraft) window._pasDraft=(state.skills?.passives||[]).filter(id=>(cp.passives||[]).indexOf(id)>=0).slice(0,pasMax);
+    const pasSel=window._pasDraft;
+    const pasSlots=Array.from({length:pasMax},(_,i)=>{
+      const sid=pasSel[i];
+      if(!sid) return `<div class="pas-slot empty">空被动槽</div>`;
+      const s=all.find(x=>x.id===sid)||{name:sid};
+      return `<div class="pas-slot" data-pasdrop="${i}"><div class="pn">${s.name}</div><div class="pe">${skEffectText(s)}</div></div>`;
     }).join('');
+    const pasLib=pasPool.filter(s=>pasSel.indexOf(s.id)<0).map(s=>
+      `<div class="lib-item" data-passive="${s.id}" style="cursor:pointer">
+        <span class="li-ico">${ICON.star?ICON.star(18,'#a9d8ff'):''}</span>
+        <span class="li-name">${s.name}</span>
+        <span class="li-eff">${skEffectText(s)}</span>
+      </div>`).join('');
+    const pasSection=pasPool.length?`
+      <div class="sec-title" style="margin-top:16px">被动技能（${pasSel.length}/${pasMax} 槽）</div>
+      <div class="sec-sub" style="margin-bottom:6px">转职后被动全部获得，此处选择装配 ${pasMax} 个并计入战力。点已装槽位卸下，点列表装入。</div>
+      <div class="pas-grid">${pasSlots}</div>
+      ${pasLib?`<div class="lib-grid" style="margin-top:8px">${pasLib}</div>`:''}
+    `:'';
+    const upRows=visible.filter(s=>unlocked.includes(s.id)).concat(pasPool).map(upRow).join('');
     const cards=equipped.map((sid,i)=>{
       const s=all.find(x=>x.id===sid)||{name:sid,kind:'physical'};
       const ic=kindIco[s.kind]||'sword';
@@ -1800,6 +1825,7 @@ function renderRole(){
       <div class="sec-sub">当前职业 <b style="color:#f0d590">${cp.name||c.classId}</b> 的技能池：${visible.length} 个（进阶技能转职后自动解锁）。点击技能库装配，点击槽位卸下，最多 4 槽。</div>
       <div class="skill-grid2">${cards}</div>
       <div class="sec-title">技能库（仅本职业）</div>${lib?`<div class="lib-grid">${lib}</div>`:`<div class="sec-sub">本职业 ${visible.length} 个技能已全部装配，无更多可选项。</div>`}
+      ${pasSection}
       <button class="big-btn goldbtn" id="submitBD" style="margin-top:12px">保存 BD 配置</button>
       <div class="sec-sub" style="margin-top:8px">已解锁 ${unlocked.length}/${visible.length} · 未解锁技能点击花费 300 钻石解锁</div>
       <div class="sec-title" style="margin-top:16px">技能升级（每级效果 +${(suPer*100).toFixed(0)}%）</div>
@@ -1870,15 +1896,31 @@ function renderRole(){
     body.querySelectorAll('.skill-card[data-slot]').forEach(el=>el.onclick=()=>{
       window._bdDraft.splice(parseInt(el.dataset.slot),1);window.SFX&&SFX.unequip();renderRole();
     });
-    // 提交 BD
+    // v1.9.89 被动装配（草稿）：点列表装入、点已装槽位卸下，随「保存 BD」一起提交
+    // 注意：这里的 pasMax 必须在本作用域重新取，渲染块里的 const pasMax 在块外不可见
+    const pasMaxNow=Number((CFG.skills&&CFG.skills.passiveSlots)||2);
+    body.querySelectorAll('[data-passive]').forEach(el=>el.onclick=()=>{
+      const sid=el.dataset.passive;
+      if(window._pasDraft.length>=pasMaxNow){toastModal('被动槽已满',`最多装配 ${pasMaxNow} 个被动，先卸下一个再选`);return;}
+      if(window._pasDraft.indexOf(sid)>=0) return;
+      window._pasDraft.push(sid);window.SFX&&SFX.rune();renderRole();
+    });
+    body.querySelectorAll('[data-pasdrop]').forEach(el=>el.onclick=()=>{
+      window._pasDraft.splice(parseInt(el.dataset.pasdrop),1);window.SFX&&SFX.unequip();renderRole();
+    });
+    // 提交 BD（主动 + 被动一起保存）
     const sb=$('submitBD');
     if(sb)sb.onclick=async()=>{
       try{
         const r=await api('/api/player/action',{userId:uid(),action:'submit_bd',slots:window._bdDraft});
-        if(r.state){state=r.state;await applyStats(r.stats);}
-        window._bdDraft=null;
+        // 被动单独走 save_passives：服务端会再校验职业池与槽位上限
+        const pr=await api('/api/player/action',{userId:uid(),action:'save_passives',passives:window._pasDraft||[]});
+        if(pr.state){state=pr.state;}else if(r.state){state=r.state;}
+        const st2=(pr&&pr.stats)||(r&&r.stats);
+        if(st2){await applyStats(st2);}
+        window._bdDraft=null;window._pasDraft=null;
         window.SFX&&SFX.config();
-        toastModal('BD 已保存',(r.slots||[]).length+' 个技能已生效');
+        toastModal('BD 已保存',`${(r.slots||[]).length} 个主动技能 · ${(pr.passives||[]).length} 个被动生效`);
         renderRole();
       }catch(e){window.SFX&&SFX.fail();toastModal('保存失败',e.message);}
     };
@@ -2820,9 +2862,36 @@ let skLastUse = {};               // skillId -> 最近一次施放时间（用�
 // 攻击加成 / 降攻比例），全部由配置字段生成，改数值不用改前端，也不会与生效逻辑脱节。
 const skPct = v => Math.round(Number(v||0)*100);
 const skMul = v => Number(v||0).toFixed(1);
+// v1.9.89 带符号百分比：被动存在负面效果（虚空之躯 生命 -10%），不能一律加「+」
+const skSign = v => { const n = Math.round(Number(v||0)*100); return (n>0?'+':'') + n + '%'; };
 function skEffectText(s, noCd){
   if(!s) return '';
   const p = Number(s.power||0), parts = [];
+  // v1.9.89 被动技能：没有 power/CD 语义，全部效果按配置字段逐条翻译。
+  // 一个被动可同时带属性与战斗特效，这里按「属性 → 减伤/吸血 → 机制」的顺序拼，与 desc 一致。
+  if(s.kind==='passive'){
+    if(Number(s.hpPct)) parts.push(`生命 ${skSign(s.hpPct)}`);
+    if(Number(s.atkPct)) parts.push(`攻击 ${skSign(s.atkPct)}`);
+    if(Number(s.defPct)) parts.push(`防御 ${skSign(s.defPct)}`);
+    if(Number(s.critAdd)) parts.push(`暴击 ${skSign(s.critAdd)}`);
+    if(Number(s.spdAdd)) parts.push(`速度 ${Number(s.spdAdd)>0?'+':''}${Number(s.spdAdd)}`); // 速度是绝对值，不是百分比
+    if(Number(s.lifestealAdd)) parts.push(`吸血 ${skPct(s.lifestealAdd)}%`);
+    if(Number(s.drAdd)) parts.push(`受伤 -${skPct(s.drAdd)}%`);
+    if(Number(s.thorns)) parts.push(`反伤 ${skPct(s.thorns)}%`);
+    if(Number(s.openShield)) parts.push(`开场护盾 ${skPct(s.openShield)}% 攻击`);
+    if(Number(s.healBoost)) parts.push(`治疗 +${skPct(s.healBoost)}%`);
+    if(Number(s.shieldBoost)) parts.push(`护盾 +${skPct(s.shieldBoost)}%`);
+    if(Number(s.cdr)) parts.push(`冷却 -${skPct(s.cdr)}%`);
+    if(Number(s.lowHpDmg)) parts.push(`生命 ≤${skPct(s.lowHpThresh)}% 时伤害 +${skPct(s.lowHpDmg)}%`);
+    if(Number(s.extraEvery)>0) parts.push(`每 ${Number(s.extraEvery)} 回合追击 ${skMul(s.extraPower)}×`);
+    if(Number(s.regenEvery)>0) parts.push(`每 ${Number(s.regenEvery)} 回合回血 ${skPct(s.regenPct)}%`);
+    if(s.kindDmg){
+      const kn = {physical:'物理', magic:'魔法', debuff:'减益', heal:'治疗', shield:'护盾', buff:'增益', summon:'召唤'};
+      Object.keys(s.kindDmg).forEach(k => parts.push(`${kn[k]||k}伤害 +${skPct(s.kindDmg[k])}%`));
+    }
+    if(Number(s.debuffBoost)) parts.push(`降攻效果 +${skPct(s.debuffBoost)}%`);
+    return parts.join(' · '); // 被动没有 CD，不拼冷却
+  }
   if(s.kind==='summon'){
     parts.push(`召唤 ${s.summonRounds||6} 回合`, `每回合 ${skMul(s.summonPower)}×`);
   }else if(s.kind==='debuff'){
@@ -2928,14 +2997,26 @@ async function playBattle(rep,mon,bd){
     $('roundVal').textContent=`${roundNo} / 30`;
     if(r.actor==='hero'){
       // v1.9.40 持续回血跳数行：绿色浮字 + 恢复日志，不播攻击动画
-      if(r.action==='hot'){
+      if(r.action==='hot'||r.action==='passiveRegen'){
+        // v1.9.89 被动周期回复与 HoT 同一表现：绿色浮字，不播攻击动画
         window.SFX&&SFX.heal();
         spawnFx('+'+Math.round(r.heal||0),420,430,'#7fe0a0');
-        logLine('hero',`R${r.n} ${r.skillName} → 持续恢复 +${Math.round(r.heal||0)}`);
+        logLine('hero',`R${r.n} ${r.skillName} → ${r.action==='passiveRegen'?'被动回复':'持续恢复'} +${Math.round(r.heal||0)}`);
+      }else if(r.action==='passiveThorns'){
+        // v1.9.89 被动反伤：伤害打在怪物身上，英雄不出手，因此不播攻击动画、不动技能 CD
+        const tiT=Math.max(0,(r.monIdx||0)|0);
+        const tgtT=monInfos[tiT]||monInfos[0];
+        const tgtNameT=(tgtT&&(tgtT.name||MON_NAMES[tgtT.sprite]))||'怪物';
+        if(r.damage>0){
+          setMonAnim(tiT,'hit',300);
+          spawnFx('-'+Math.round(r.damage),slotOf(tiT).x,430,'#8ec6f5');
+          window.SFX&&SFX.hit();
+          logLine('hero',`R${r.n} ${r.skillName} → ${tgtNameT} -${Math.round(r.damage)}`);
+        }
       }else{
       const sk=skills.find(x=>x.id===r.action)||{};
       const kind=r.action==='summonHit'?'summon':(sk.kind||'physical');
-      setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
+      if(sk.id) setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD（被动追击没有技能配置，跳过）
       const ti=Math.max(0,(r.monIdx||0)|0);
       const tgt=monInfos[ti]||monInfos[0];
       const tgtName=(tgt&&(tgt.name||MON_NAMES[tgt.sprite]))||'怪物';
@@ -3411,8 +3492,9 @@ async function playPartyBattle(rep){
     updateHp();
     if(r.actor==='hero'){
       const sk=skills.find(x=>x.id===r.action)||{};
-      const kind=r.action==='hot'?'heal':(r.action==='summonHit'?'summon':(sk.kind||'physical'));
-      setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
+      // v1.9.89 被动事件：回复与 HoT 同表现，反伤不播英雄出手，追击无技能配置（跳过 CD）
+      const kind=(r.action==='hot'||r.action==='passiveRegen')?'heal':(r.action==='summonHit'?'summon':(sk.kind||'physical'));
+      if(sk.id) setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
       if(kind==='physical') window.SFX&&SFX.slash();
       else if(kind==='shield') window.SFX&&SFX.shield();
       else window.SFX&&SFX.cast();

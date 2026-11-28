@@ -631,8 +631,11 @@ func partyStart(w http.ResponseWriter, r *http.Request) {
 		}
 		heroes = append(heroes, game.PartyHero{
 			UserID: mid, Name: st.Core.Name, ClassID: st.Core.ClassID, Level: st.Core.Level,
-			Avatar: game.Avatar{Level: st.Core.Level, ClassID: st.Core.ClassID, Equip: equip},
-			BD:     st.Skills.Slots,
+			// v1.9.89 补上 SkillLv 与 Passives：此前组队没传技能等级，导致队员技能效果
+			// 一直按 1 级结算（单人已经吃 +8%/级，两端不一致）。
+			Avatar: game.Avatar{Level: st.Core.Level, ClassID: st.Core.ClassID, Equip: equip,
+				SkillLv: st.Skills.Levels, Passives: st.Skills.Passives},
+			BD: st.Skills.Slots,
 		})
 	}
 	if len(heroes) == 0 {

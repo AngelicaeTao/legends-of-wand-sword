@@ -317,7 +317,9 @@ func ApplyChestReward(p *PlayerState, exp, gold, gem, material, potions int, equ
 
 // GainExp 直接加经验并处理升级（任务奖励等非战斗来源使用）。
 func (p *PlayerState) GainExp(exp int) {
-	if exp <= 0 { return }
+	if exp <= 0 {
+		return
+	}
 	p.Core.Exp += exp
 	for p.Core.Level < 200 && p.Core.Exp >= game.ExpNeeded(p.Core.Level) {
 		p.Core.Exp -= game.ExpNeeded(p.Core.Level)
@@ -339,6 +341,7 @@ func (p *PlayerState) refreshPower() {
 	p.Core.BattlePower = int(game.CalcStats(game.Avatar{
 		Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip,
 		Skills: p.Skills.Slots, SkillLv: p.Skills.Levels,
+		Passives: p.Skills.Passives, // v1.9.89 被动计入战力（固定档位分）
 	}).Power)
 }
 
