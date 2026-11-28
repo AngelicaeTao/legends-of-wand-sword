@@ -3362,11 +3362,21 @@ async function playPartyBattle(rep){
         if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${rep.bossName||'BOSS'} -${Math.round(r.damage)}`);
       }else if(r.heal>0){
+        // v1.9.79 治疗落到「被治疗的人」头顶
+        const tgt=(r.targetIdx!=null&&partySlots[r.targetIdx])?partySlots[r.targetIdx]:s;
         window.SFX&&SFX.heal();
-        spawnFx('+'+Math.round(r.heal), s?s.x:420, 440, '#7fe0a0');
-        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → 恢复 +${Math.round(r.heal)}`);
+        spawnFx('+'+Math.round(r.heal), tgt?tgt.x:420, 440, '#7fe0a0');
+        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${tgt?tgt.name:'自己'} +${Math.round(r.heal)}`);
       }else{
-        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''}（${kind==='shield'?'持续减伤':kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
+        // v1.9.79 格挡/增益：浮字落在目标队友头顶
+        const tgt=(r.targetIdx!=null&&partySlots[r.targetIdx])?partySlots[r.targetIdx]:s;
+        if(kind==='shield'){
+          window.SFX&&SFX.shield();
+          spawnFx('格挡', tgt?tgt.x:420, 440, '#8fd0ff');
+          logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${(tgt&&tgt!==s)?tgt.name:'自己'}（减伤 ${Math.round((sk.drPct||0)*100)}%，${sk.drRounds||1} 回合）`);
+        }else{
+          logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''}（${kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
+        }
       }
     }else{
       window.SFX&&SFX.enemySlash();

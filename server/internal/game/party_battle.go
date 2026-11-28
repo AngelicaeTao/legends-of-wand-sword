@@ -52,6 +52,7 @@ type PartyRound struct {
 	Actor    string    `json:"actor"` // hero / boss
 	HeroIdx  int       `json:"heroIdx,omitempty"`
 	MonIdx   int       `json:"monIdx,omitempty"`
+	TargetIdx int      `json:"targetIdx,omitempty"` // v1.9.79 治疗/格挡的目标队友
 	Action   string    `json:"action,omitempty"`
 	SkillName string   `json:"skillName,omitempty"`
 	Damage   float64   `json:"damage,omitempty"`
@@ -307,6 +308,20 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 						break
 					}
 				}
+				// v1.9.79 治疗/格挡优先照顾血量比例最低的队友（含自己）
+				pickAlly := func() int {
+					best, bestR := -1, 2.0
+					for i, v := range units {
+						if v.hp <= 0 {
+							continue
+						}
+						r := v.hp / math.Max(1, v.stats.HP)
+						if r < bestR {
+							bestR, best = r, i
+						}
+					}
+					return best
+				}
 				var act SkillDef
 				if chosen >= 0 {
 					act = u.queue[chosen].def
@@ -314,39 +329,64 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 				} else {
 					act = c.Skills.BasicAttack
 				}
+				// 治疗：没人是残血就改成普攻，不浪费回合
+				tgtAlly := -1
+				if act.Kind == "heal" || act.Kind == "shield" {
+					tgtAlly = pickAlly()
+				}
+				if act.Kind == "heal" {
+					// v1.9.79 队友血量低于 75% 才治疗，否则转普攻保输出
+					need := tgtAlly >= 0 && units[tgtAlly].hp < units[tgtAlly].stats.HP*0.75
+					if !need {
+						act = c.Skills.BasicAttack
+					}
+				}
 				rd := PartyRound{N: n + 1, Wave: wi + 1, Actor: "hero", HeroIdx: idx, Action: act.ID, SkillName: act.Name}
+				// 只有真正的治疗/格挡才标注目标（转普攻的那次不标）
+				if (act.Kind == "heal" || act.Kind == "shield") && tgtAlly >= 0 && tgtAlly != idx {
+					rd.TargetIdx = tgtAlly
+				}
 				n++
 				switch act.Kind {
 				case "heal":
+					tu := u
+					if tgtAlly >= 0 {
+						tu = units[tgtAlly]
+					}
 					if act.HotRounds > 0 {
-						u.hotLeft = act.HotRounds
-						u.hotPer = u.stats.HP * act.HotPer
-						u.hotName = act.Name
-						jump := u.hotPer
-						if healed := u.stats.HP - u.hp; jump > healed {
+						tu.hotLeft = act.HotRounds
+						tu.hotPer = tu.stats.HP * act.HotPer
+						tu.hotName = act.Name
+						jump := tu.hotPer
+						if healed := tu.stats.HP - tu.hp; jump > healed {
 							jump = healed
 						}
 						if jump > 0 {
-							u.hp += jump
+							tu.hp += jump
 							rd.Heal = round2(jump)
 						}
 					} else {
-						heal := u.stats.HP * act.Power
-						if room := u.stats.HP - u.hp; heal > room {
+						heal := tu.stats.HP * act.Power
+						if room := tu.stats.HP - tu.hp; heal > room {
 							heal = room
 						}
 						if heal > 0 {
-							u.hp += heal
+							tu.hp += heal
 							rd.Heal = round2(heal)
 						}
 					}
 				case "shield":
-					if act.DRRounds > 0 {
-						u.drLeft = act.DRRounds
-						u.drPct = act.DRPct
-					} else {
-						u.shield += u.stats.ATK * act.Power
+					tu := u
+					if tgtAlly >= 0 {
+						tu = units[tgtAlly]
 					}
+					if act.DRRounds > 0 {
+						tu.drLeft = act.DRRounds
+						tu.drPct = act.DRPct
+					} else {
+						tu.shield += u.stats.ATK * act.Power
+					}
+					rd.TargetIdx = tgtAlly
 				case "buff":
 					u.atkBuff = act.Power
 				default:
