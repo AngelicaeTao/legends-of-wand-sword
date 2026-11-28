@@ -11,6 +11,22 @@
   const DEFAULT = { dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, alpha: 1, flash: 0 };
 
   function lerp(a, b, r) { return a + (b - a) * r; }
+
+  // v1.9.92 受击白闪：为部件图生成"白色剪影"缓存（只染色已有像素，形状正确）
+  const whiteCache = new WeakMap();
+  function whiteOf(im) {
+    let c = whiteCache.get(im);
+    if (c) return c;
+    c = document.createElement('canvas');
+    c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(im, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, c.width, c.height);
+    whiteCache.set(im, c);
+    return c;
+  }
   function norm(v) {
     if (!v || typeof v !== 'object') return { ...DEFAULT };
     return {
@@ -21,15 +37,19 @@
 
   function loadBundle(bundle) {
     if (cache.has(bundle)) return cache.get(bundle);
-    const p = fetch(`/res/v3/parts/${bundle}/parts.json`).then(r => r.json());
-    const a = fetch(`/res/v3/parts/${bundle}/actions.json`).then(r => r.json());
+    // v1.9.92 容错：缺资源时服务端会返回 HTML 404 页，直接 r.json() 会抛出
+    // 「Unexpected non-whitespace character after JSON」的未捕获异常（战斗里一进组就报）
+    const p = fetch(`/res/v3/parts/${bundle}/parts.json`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    const a = fetch(`/res/v3/parts/${bundle}/actions.json`).then(r => (r.ok ? r.json() : null)).catch(() => null);
     const entry = { ready: Promise.all([p, a]).then(([parts, actions]) => {
-      entry.parts = parts; entry.actions = actions;
+      entry.parts = parts || null;
+      entry.actions = actions || { states: {} };
+      if (!parts) return;   // 没有资源 → 渲染时直接跳过（render 里已有 entry.parts 判空）
       // 性能：z 序排序只算一次（原实现每帧每实例 sort）
       entry.sortedParts = Object.keys(parts.parts || {}).sort((x, y) => ((parts.parts[x].z || 0) - (parts.parts[y].z || 0)));
       // 性能：每个状态预计算该状态用到的部件名列表（原实现每帧 Set+spread 求并集）
-      for (const sname in actions.states) {
-        const st = actions.states[sname];
+      for (const sname in entry.actions.states) {
+        const st = entry.actions.states[sname];
         const seen = {};
         const list = [];
         for (const k of (st.keys || [])) for (const n in (k.parts || {}))
@@ -147,9 +167,11 @@
       ctx.globalAlpha = a0;
       const flashAll = (tf._flash || 0) > 0;
       const names = this.entry.sortedParts || Object.keys(parts); // 预排序，免每帧 sort
-      for (const name of names) {
+      const fk = opts.flashK || 0;
+      // 单个部件绘制（isWhite=true 时画白色剪影）
+      const blit = (name, isWhite) => {
         const info = parts[name], im = this.entry.imgs[name];
-        if (!im) continue;
+        if (!im) return;
         const t = tf[name] || DEFAULT;
         // 旋转中心 = pivot（图像坐标，y向下）：px=pivot.x*scale, py=pivot.y*scale（图像内）
         // 部件绘制原点：anchor 为 pivot 在角色坐标（y向上）的位置 → 屏幕 (anchor.x*scale, -anchor.y*scale)
@@ -165,14 +187,22 @@
           ctx.translate(-px, -py);
         }
         ctx.scale(t.sx, t.sy);
-        ctx.drawImage(im, -px, -py, iw, ih);
-        // 受击闪白：在部件图区域叠一层半透明白（限制在矩形内，不污染背景）
-        if (flashAll || (t.flash || 0) > 0) {
-          ctx.globalAlpha = Math.max(0, Math.min(1, (flashAll ? tf._flash : t.flash) * 0.5));
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(-px, -py, iw, ih);
+        ctx.drawImage(isWhite ? whiteOf(im) : im, -px, -py, iw, ih);
+        // 受击闪白：叠一层同形状的白色剪影（旧实现是 fillRect 部件矩形，会出白方块）
+        if (!isWhite && (flashAll || (t.flash || 0) > 0)) {
+          ctx.globalAlpha = Math.min(1, a0 * Math.max(0, Math.min(1, (flashAll ? tf._flash : t.flash) * 0.5)));
+          ctx.drawImage(whiteOf(im), -px, -py, iw, ih);
+          ctx.globalAlpha = a0;
         }
         ctx.restore();
+      };
+      for (const name of names) blit(name, false);
+      // v1.9.92 受击白闪（外部 opts.flashK）：整只怪再叠一遍白色剪影。
+      // 必须放在所有部件之后 —— 若逐个叠，后画的斑点/脸会把白盖掉，看着只白了一半。
+      if (fk > 0.01) {
+        ctx.globalAlpha = Math.min(1, a0 * fk);
+        for (const name of names) blit(name, true);
+        ctx.globalAlpha = a0;
       }
       ctx.restore();
     }
