@@ -4,8 +4,10 @@
  * 交付包 §0.2：主角与 6 种职业服装改为「1 张整体立绘 + root 级变换」，
  * 不再切部件（AI 精致图带武器/披风，切开会碎）。怪物/宝箱仍用 PartActor。
  *
- * 资源：/res/characters/parts/<bundle>/<bundle>_standee.png（128×192，= 逻辑 64×96 的 2 倍导出）
+ * 资源：/res/characters/parts/<bundle>/<bundle>_standee.webp（128×192，= 逻辑 64×96 的 2 倍导出）
  *       parts.json（standee_sprite_v1）+ actions.json（standee_actions_v1）
+ * 加载策略：立绘与 idle 帧优先；其余动作帧首次播放时按需加载，空闲时间再预取，
+ *       避免进入世界时一次性拉取整套 66 帧（约 5MB → 0.7MB）。
  * 坐标：原点 = 脚底中心，x 右为正，y 上为正（逻辑像素）。
  *
  * render(ctx,x,y,scale) 的 scale 语义与 PartActor 一致：逻辑像素→屏幕像素倍率。
@@ -17,38 +19,62 @@
 
   const BASE = '/res/characters/parts/';
   // 资源版本：Cloudflare 会把图片重写成 4h 缓存，改版必须换 URL 才能避免新旧贴图来回切换
-  const AV = '?v=1.9.96';
+  const AV = '?v=1.9.97';
   const cache = new Map(); // bundle -> {ready, parts, actions, img, tint, frames}
+
+  // v1.9.97 懒加载：某状态的动作帧首次需要时才下载（同一状态并发只发一次）
+  function stateOf(entry, state) {
+    const states = (entry.actions && entry.actions.states) || {};
+    if (states[state]) return states[state];
+    return state === 'die' ? states['death'] : null;
+  }
+  function ensureFrames(entry, state) {
+    const st = stateOf(entry, state);
+    if (!st || !st.frames || !st.frames.length) return Promise.resolve();
+    const key = st === stateOf(entry, 'die') ? 'die' : state;
+    if (entry.framesLoaded[key]) return Promise.resolve();
+    if (entry.framesLoading[key]) return entry.framesLoading[key];
+    const jobs = st.frames.map(fn => new Promise(res => {
+      if (entry.frames[fn]) return res();
+      const im = new Image();
+      im.onload = () => { entry.frames[fn] = im; res(); };
+      im.onerror = () => { res(); };
+      im.src = BASE + entry.bundle + '/frames/' + fn + AV;
+    }));
+    const p = Promise.all(jobs).then(() => {
+      entry.framesLoaded[key] = true;
+      entry.framesLoading[key] = null;
+    });
+    entry.framesLoading[key] = p;
+    return p;
+  }
 
   function loadBundle(bundle) {
     if (cache.has(bundle)) return cache.get(bundle);
-    const entry = { bundle, ready: null, img: null, tint: null, frames: {} };
+    const entry = {
+      bundle, ready: null, img: null, tint: null,
+      frames: {}, framesLoaded: {}, framesLoading: {},
+      parts: {}, actions: { states: {} },
+    };
     const p = fetch(BASE + bundle + '/parts.json' + AV).then(r => (r.ok ? r.json() : null)).catch(() => null);
     const a = fetch(BASE + bundle + '/actions.json' + AV).then(r => (r.ok ? r.json() : null)).catch(() => null);
     entry.ready = Promise.all([p, a]).then(([parts, actions]) => {
       entry.parts = parts || {};
       entry.actions = actions || { states: {} };
-      const file = (parts && parts.sprite && parts.sprite.file) || (bundle + '_standee.png');
-      // v1.9.49: 逐帧序列（若 actions.json 某状态带 frames 字段则优先使用）
-      const states = entry.actions.states || {};
-      const jobs = [new Promise(res => {
+      const file = (parts && parts.sprite && parts.sprite.file) || (bundle + '_standee.webp');
+      return new Promise(res => {
         const im = new Image();
         im.onload = () => { entry.img = im; res(); };
         im.onerror = () => { entry.img = null; res(); };
         im.src = BASE + bundle + '/' + file + AV;
-      })];
-      for (const st of Object.values(states)) {
-        if (!st.frames) continue;
-        for (const fn of st.frames) {
-          jobs.push(new Promise(res => {
-            const im = new Image();
-            im.onload = () => { entry.frames[fn] = im; res(); };
-            im.onerror = () => { res(); };
-            im.src = BASE + bundle + '/frames/' + fn + AV;
-          }));
-        }
-      }
-      return Promise.all(jobs);
+      });
+    }).then(() => {
+      // 首屏只等 idle；其余动作在浏览器空闲时后台预取，不阻塞进入世界
+      const rest = () => ['walk', 'attack', 'cast']
+        .forEach(s => { ensureFrames(entry, s); });
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(rest, { timeout: 4000 });
+      else setTimeout(rest, 1500);
+      return ensureFrames(entry, 'idle');
     });
     cache.set(bundle, entry);
     return entry;
@@ -92,6 +118,12 @@
       this.loop = !!st.loop;
       this.t0 = performance.now();
       this.onDone = onDone || null;
+      // 帧未就绪时先用立绘兜底，帧到达后重新计时，避免动作从中途开始
+      if (st.frames && !this.entry.framesLoaded[state]) {
+        ensureFrames(this.entry, state).then(() => {
+          if (this.state === state) this.t0 = performance.now();
+        });
+      }
     }
     playOnce(state, onDone) { this.play(state, onDone); }
 
@@ -139,7 +171,7 @@
       // v1.9.49: 逐帧序列渲染
       if (st && st.frames && st.frames.length) {
         const imgs = st.frames.map(fn => e.frames[fn]).filter(Boolean);
-        if (!imgs.length) return;
+        if (imgs.length) {
         const fps = st.fps || 3;
         const dur = imgs.length * (1000 / fps);
         let ms = now - this.t0;
@@ -163,11 +195,13 @@
           const cb = this.onDone; this.onDone = null; cb();
         }
         return;
+        }
+        // 帧尚未就绪：落到下方立绘兜底，避免角色消失
       }
       if (!e.img) return;
       const tf = this._sample(now);
       if (!tf) return;
-      // 立绘 PNG = 逻辑尺寸 × 2
+      // 立绘 WebP = 逻辑尺寸 × 2
       const w = 64 * scale, h = 96 * scale;
       const a = Math.max(0, Math.min(1, tf.alpha * (opts.alpha == null ? 1 : opts.alpha)));
       if (a < 0.02) return;

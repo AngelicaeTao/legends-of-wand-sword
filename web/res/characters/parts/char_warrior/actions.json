@@ -15,14 +15,14 @@
       "fps": 8,
       "loop": true,
       "frames": [
-        "idle_f00.png",
-        "idle_f01.png",
-        "idle_f02.png",
-        "idle_f03.png",
-        "idle_f04.png",
-        "idle_f05.png",
-        "idle_f06.png",
-        "idle_f07.png"
+        "idle_f00.webp",
+        "idle_f01.webp",
+        "idle_f02.webp",
+        "idle_f03.webp",
+        "idle_f04.webp",
+        "idle_f05.webp",
+        "idle_f06.webp",
+        "idle_f07.webp"
       ],
       "keys": []
     },
@@ -30,14 +30,14 @@
       "fps": 12,
       "loop": true,
       "frames": [
-        "walk_f00.png",
-        "walk_f01.png",
-        "walk_f02.png",
-        "walk_f03.png",
-        "walk_f04.png",
-        "walk_f05.png",
-        "walk_f06.png",
-        "walk_f07.png"
+        "walk_f00.webp",
+        "walk_f01.webp",
+        "walk_f02.webp",
+        "walk_f03.webp",
+        "walk_f04.webp",
+        "walk_f05.webp",
+        "walk_f06.webp",
+        "walk_f07.webp"
       ],
       "keys": []
     },
@@ -45,14 +45,14 @@
       "fps": 20,
       "loop": false,
       "frames": [
-        "attack_f00.png",
-        "attack_f01.png",
-        "attack_f02.png",
-        "attack_f03.png",
-        "attack_f04.png",
-        "attack_f05.png",
-        "attack_f06.png",
-        "attack_f07.png"
+        "attack_f00.webp",
+        "attack_f01.webp",
+        "attack_f02.webp",
+        "attack_f03.webp",
+        "attack_f04.webp",
+        "attack_f05.webp",
+        "attack_f06.webp",
+        "attack_f07.webp"
       ],
       "keys": []
     },
@@ -60,14 +60,14 @@
       "fps": 20,
       "loop": false,
       "frames": [
-        "cast_f00.png",
-        "cast_f01.png",
-        "cast_f02.png",
-        "cast_f03.png",
-        "cast_f04.png",
-        "cast_f05.png",
-        "cast_f06.png",
-        "cast_f07.png"
+        "cast_f00.webp",
+        "cast_f01.webp",
+        "cast_f02.webp",
+        "cast_f03.webp",
+        "cast_f04.webp",
+        "cast_f05.webp",
+        "cast_f06.webp",
+        "cast_f07.webp"
       ],
       "keys": []
     },
@@ -75,12 +75,12 @@
       "fps": 20,
       "loop": false,
       "frames": [
-        "hit_f00.png",
-        "hit_f01.png",
-        "hit_f02.png",
-        "hit_f03.png",
-        "hit_f04.png",
-        "hit_f05.png"
+        "hit_f00.webp",
+        "hit_f01.webp",
+        "hit_f02.webp",
+        "hit_f03.webp",
+        "hit_f04.webp",
+        "hit_f05.webp"
       ],
       "keys": []
     },
@@ -88,18 +88,18 @@
       "fps": 20,
       "loop": false,
       "frames": [
-        "die_f00.png",
-        "die_f01.png",
-        "die_f02.png",
-        "die_f03.png",
-        "die_f04.png",
-        "die_f05.png",
-        "die_f06.png",
-        "die_f07.png",
-        "die_f08.png",
-        "die_f09.png",
-        "die_f10.png",
-        "die_f11.png"
+        "die_f00.webp",
+        "die_f01.webp",
+        "die_f02.webp",
+        "die_f03.webp",
+        "die_f04.webp",
+        "die_f05.webp",
+        "die_f06.webp",
+        "die_f07.webp",
+        "die_f08.webp",
+        "die_f09.webp",
+        "die_f10.webp",
+        "die_f11.webp"
       ],
       "keys": []
     },
@@ -107,14 +107,14 @@
       "fps": 12,
       "loop": false,
       "frames": [
-        "victory_f00.png",
-        "victory_f01.png",
-        "victory_f02.png",
-        "victory_f03.png",
-        "victory_f04.png",
-        "victory_f05.png",
-        "victory_f06.png",
-        "victory_f07.png"
+        "victory_f00.webp",
+        "victory_f01.webp",
+        "victory_f02.webp",
+        "victory_f03.webp",
+        "victory_f04.webp",
+        "victory_f05.webp",
+        "victory_f06.webp",
+        "victory_f07.webp"
       ],
       "keys": []
     },
@@ -122,14 +122,14 @@
       "fps": 12,
       "loop": true,
       "frames": [
-        "celebrate_f00.png",
-        "celebrate_f01.png",
-        "celebrate_f02.png",
-        "celebrate_f03.png",
-        "celebrate_f04.png",
-        "celebrate_f05.png",
-        "celebrate_f06.png",
-        "celebrate_f07.png"
+        "celebrate_f00.webp",
+        "celebrate_f01.webp",
+        "celebrate_f02.webp",
+        "celebrate_f03.webp",
+        "celebrate_f04.webp",
+        "celebrate_f05.webp",
+        "celebrate_f06.webp",
+        "celebrate_f07.webp"
       ],
       "keys": []
     }
