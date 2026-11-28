@@ -1,8 +1,21 @@
 {
-  "_readme": "技能配置（v1.9.7：按《角色创建与换装-完整交付包》配置/skills.json 的 6 职业 17 技能 + 职业过滤规则重写）。power 为系数（交付包 100 制 → 本表 1.0 制，已 /100）。",
+  "_readme": "技能配置（v1.9.7：按《角色创建与换装-完整交付包》配置/skills.json 的 6 职业 + 职业过滤规则重写；v1.9.86 撤销 v1.9.85 的「吸取并入火球」，恢复术士「吸取」wl_drain、火球术回归纯输出，现 6 职业 16 技能）。power 为系数（交付包 100 制 → 本表 1.0 制，已 /100）。",
   "_bdRule": "技能库显示 = unlocked[] ∩ (当前 classId 的 initial ∪ advanced)；不显示跨职业技能；转职后原职业技能自动卸下。",
   "_balanceNote": "全部数值来自交付包 [PLACEHOLDER]，PT-2 验证后只改本表，不改代码。 v1.9.40：m_heal 改持续回血（hotRounds/hotPer），w_guard 改持续减伤（drRounds/drPct）。",
   "slots": 4,
+  "powerRule": {
+    "_note": "v1.9.85 技能战力：已装备技能每格基础分 base[技能档位] × kindWeight[技能类型] × 等级系数，四舍五入后累加进总战力（与装备战力同口径）。等级系数复用技能升级的 skillUpgrade.perLevel（economy.json，每级 +8%），两处始终同源；未列出的档位/类型按 initial / 1.0 兜底",
+    "base": { "initial": 60, "advanced": 120 },
+    "kindWeight": {
+      "physical": 1.0,
+      "magic": 1.0,
+      "heal": 0.7,
+      "shield": 0.85,
+      "buff": 0.7,
+      "debuff": 0.7,
+      "summon": 1.0
+    }
+  },
   "basicAttack": {
     "id": "basic",
     "name": "普攻",

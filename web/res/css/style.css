@@ -118,7 +118,7 @@ input{font-family:inherit}
 .world-map-item:hover{transform:translateX(3px);border-color:#f0d590}
 .world-map-item.cur{border-color:#7fe0a0;box-shadow:inset 0 0 0 1px rgba(127,224,160,.4)}
 .world-map-item.locked{opacity:.55;filter:grayscale(.5)}
-/* v1.9.85 底部操作提示条已移除（WASD/点怪交战… 那一条），样式一并清掉 */
+/* v1.9.87 底部操作提示条已移除（WASD/点怪交战… 那一条），样式一并清掉 */
 
 /* ============================================================
    ③ 战斗场景 UI

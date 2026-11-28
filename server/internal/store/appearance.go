@@ -116,6 +116,7 @@ func (p *PlayerState) CreateCharacter(classID string, look map[string]string, na
 		p.Ext = map[string]any{}
 	}
 	delete(p.Ext, "newCharacter")
+	p.refreshPower() // v1.9.85 新号战力立刻含初始技能，避免首屏显示 0
 	p.appendLogs([]string{fmt.Sprintf("创建角色：%s · %s", p.Core.Name, pool.Name)})
 	return nil
 }
@@ -186,6 +187,7 @@ func (p *PlayerState) TransferTo(to string, stage int) error {
 		kept = append([]string{}, pool.Initial...)
 	}
 	p.Skills.Slots = kept
+	p.refreshPower() // v1.9.85 转职改变职业加成与技能池，战力必须跟着重算
 	return nil
 }
 
@@ -233,6 +235,19 @@ func (p *PlayerState) Migrate() bool {
 		}
 	}
 	p.Skills.Unlocked = un
+
+	// 清理已删除技能的等级残留：技能表里已经不存在的 id，等级也不该留。
+	if len(p.Skills.Levels) > 0 {
+		lv := make(map[string]int, len(p.Skills.Levels))
+		for id, v := range p.Skills.Levels {
+			if _, ok := c.SkillByID(id); ok {
+				lv[id] = v
+			} else {
+				changed = true
+			}
+		}
+		p.Skills.Levels = lv
+	}
 
 	sl := []string{}
 	for _, id := range p.Skills.Slots {

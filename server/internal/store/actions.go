@@ -47,6 +47,7 @@ func (p *PlayerState) SubmitBD(slots []string) ([]string, error) {
 		out = append(out, id)
 	}
 	p.Skills.Slots = out
+	p.refreshPower() // v1.9.85 技能计入战力：BD 变动实时重算
 	p.appendLogs([]string{fmt.Sprintf("更新技能BD：%d 个技能", len(out))})
 	return out, nil
 }
@@ -392,6 +393,7 @@ func (p *PlayerState) SkillUpgrade(id string) (level, cost int, err error) {
 		p.Skills.Levels = map[string]int{}
 	}
 	p.Skills.Levels[id] = cur + 1
+	p.refreshPower() // v1.9.85 技能等级计入战力
 	p.appendLogs([]string{fmt.Sprintf("技能升级：%s → Lv.%d（消耗 %d 钻石）", id, cur+1, cost)})
 	return cur + 1, cost, nil
 }

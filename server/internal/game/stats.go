@@ -61,6 +61,10 @@ type Avatar struct {
 	Level   int         `json:"level"`
 	ClassID string      `json:"classId"`
 	Equip   []EquipItem `json:"equip"`
+	// v1.9.85 技能与技能等级计入战力：Skills = 已装备技能 id，
+	// SkillLv = 技能 id → 等级（缺省/0 按 1 级）。不传则技能战力为 0（兼容老客户端）。
+	Skills  []string       `json:"skills,omitempty"`
+	SkillLv map[string]int `json:"skillLv,omitempty"`
 }
 
 // CalcStats 按 职业系数 × 等级成长 × 装备 计算最终属性。
@@ -94,8 +98,67 @@ func CalcStats(a Avatar) Stats {
 	for _, it := range a.Equip {
 		applyEquip(&st, c, classID2EquipParams{coef: coef, gainPerLv: gainPerLv, qualities: qualities}, it)
 	}
-	st.Power = PowerOf(st)
+	st.Power = PowerOf(st) + SkillPowerSum(a.Skills, a.SkillLv)
 	return st
+}
+
+// SkillPower 单个已装备技能的战力贡献（v1.9.85）。
+// 公式：base[档位] × kindWeight[类型] × SkillEffectMult(等级)，
+// 全部读 skills.json 的 powerRule；等级系数与技能升级共用 economy.skillUpgrade.perLevel。
+// 技能 id 不在配置里（已删除/跨职业残留）返回 0，不报错。
+func SkillPower(skillID string, level int) float64 {
+	c := C()
+	s, ok := c.SkillByID(skillID)
+	if !ok {
+		return 0
+	}
+	pr := c.Skills.PowerRule
+	base, ok := pr.Base[s.Tier]
+	if !ok || base <= 0 {
+		base = 60 // 档位未配置时的兜底分（与 initial 一致）
+	}
+	w, ok := pr.KindWeight[s.Kind]
+	if !ok {
+		w = 1.0
+	}
+	return base * w * SkillEffectMult(level)
+}
+
+// SkillPowerSum 已装备技能的战力合计（去重后四舍五入）。
+// v1.9.85：同一技能重复出现在槽位里只算一次，避免前端 BD 草稿造成虚高。
+func SkillPowerSum(ids []string, levels map[string]int) float64 {
+	sum := 0.0
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		sum += SkillPower(id, levels[id])
+	}
+	return math.Round(sum)
+}
+
+// SkillPowerEntry 单个技能的战力明细分项（随属性接口返回，供面板显示"战力 +N"）。
+type SkillPowerEntry struct {
+	ID    string  `json:"id"`
+	Power float64 `json:"power"`
+}
+
+// SkillPowers 逐技能战力明细（顺序与传入槽位一致，去重、跳过未知 id）。
+func SkillPowers(ids []string, levels map[string]int) []SkillPowerEntry {
+	out := make([]SkillPowerEntry, 0, len(ids))
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if pw := SkillPower(id, levels[id]); pw > 0 {
+			out = append(out, SkillPowerEntry{ID: id, Power: math.Round(pw)})
+		}
+	}
+	return out
 }
 
 // equipParams 抽出装备折算所需的配置快照，供 CalcStats 与 EquipContribution 共用。

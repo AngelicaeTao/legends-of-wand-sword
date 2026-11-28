@@ -327,7 +327,8 @@ func (p *PlayerState) GainExp(exp int) {
 	p.refreshPower()
 }
 
-// refreshPower 用当前职业/等级/装备重算战力，避免存档里战力与属性脱节。
+// refreshPower 用当前职业/等级/装备/技能重算战力，避免存档里战力与属性脱节。
+// v1.9.85：已装备技能及其等级计入战力（公式见 game.SkillPower）。
 func (p *PlayerState) refreshPower() {
 	equip := make([]game.EquipItem, 0, len(p.Equip))
 	for _, e := range p.Equip {
@@ -337,6 +338,7 @@ func (p *PlayerState) refreshPower() {
 	}
 	p.Core.BattlePower = int(game.CalcStats(game.Avatar{
 		Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip,
+		Skills: p.Skills.Slots, SkillLv: p.Skills.Levels,
 	}).Power)
 }
 

@@ -15,7 +15,7 @@ func setMonsterBase(id, key string, v float64) func() {
 	return func() {}
 }
 
-// v1.9.82 术士「吸取」：命中回复本次伤害的 50%（上限不超过最大生命）。
+// v1.9.86 撤销 v1.9.85 的「吸血并入火球」：吸血效果回到术士「吸取」wl_drain，火球术恢复纯输出。
 func TestWarlockDrainLifesteal(t *testing.T) {
 	if err := Init("../../../configs"); err != nil {
 		t.Fatal(err)
@@ -23,6 +23,10 @@ func TestWarlockDrainLifesteal(t *testing.T) {
 	sk, ok := C().SkillByID("wl_drain")
 	if !ok || sk.Lifesteal != 0.5 {
 		t.Fatalf("wl_drain 应配置 lifesteal=0.5，实际 %+v", sk)
+	}
+	// 火球术不应再带吸血，否则等于吸血的术士专属效果被全职业共享
+	if fb, ok := C().SkillByID("m_fireball"); !ok || fb.Lifesteal != 0 {
+		t.Fatalf("m_fireball 不应有吸血，实际 %+v", fb)
 	}
 	// 木桩：高血低攻，保证打满多轮且不会被打死
 	restoreHP := setMonsterBase("boss_beetle", "hp", 5000)
