@@ -43,6 +43,9 @@
   <!-- ============ 视图②：大世界（唯一枢纽场景） ============ -->
   <div class="view hidden" id="worldView">
     <canvas id="cvExplore" width="1280" height="720"></canvas>
+    <!-- v1.9.89 边缘方位箭头独立层：贴在画布之上、HUD 之下，但必须高于底部导航/小地图，
+         否则正下方目标的箭头会被底部导航整块盖住，用户根本没有提示 -->
+    <canvas id="pinEdgeCv" width="1280" height="720"></canvas>
     <!-- 左上：玩家信息条 + 场景名 -->
     <div class="world-hud-left">
       <div class="mini-profile">

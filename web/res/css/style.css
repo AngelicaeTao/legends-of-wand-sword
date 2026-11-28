@@ -14,6 +14,9 @@ input{font-family:inherit}
 #stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;transform-origin:center center;overflow:hidden;background:#080d15;box-shadow:0 0 60px rgba(0,0,0,.9)}
 .view{position:absolute;inset:0}
 .view canvas{width:1280px;height:720px;display:block;image-rendering:pixelated}
+/* v1.9.89 边缘方位箭头层：位置严格贴边（20px），层级压在底部导航/小地图之上、
+   弹窗与大地图层之下。这样箭头既不会为了避让 UI 被挤到画面中间，也不会被 UI 整块盖掉。 */
+#pinEdgeCv{position:absolute;left:0;top:0;z-index:8;pointer-events:none}
 
 /* ---------- 通用 ---------- */
 .gold-border{border:2px solid #d9b45b;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 8px 30px rgba(0,0,0,.55),inset 0 0 24px rgba(217,180,91,.07)}

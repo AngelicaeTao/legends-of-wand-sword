@@ -83,6 +83,11 @@ function WMap(canvas, opts){
   this.mapCache={};     // worldId -> {maskData}（只存小掩码；全图不跨世界缓存）
 
   this.time=0; this.lastTs=0; this.ready=false; this.active=false;
+  // v1.9.89 边缘方位箭头专用层（#pinEdgeCv）：贴在画布之上、但高于底部导航/小地图。
+  // 之前箭头和地图画在同一个 canvas 上，层级天然低于 HUD，正下方目标的箭头会被底部
+  // 导航整块盖住 → 用户完全看不到提示。单独一层后位置仍严格贴边（20px），且始终可见。
+  this.edgeCv=(typeof document!=='undefined')?document.getElementById('pinEdgeCv'):null;
+  this.edgeG=this.edgeCv?this.edgeCv.getContext('2d'):null;
   this.PartActor=window.PartActor;
   this.StandeeActor=window.StandeeActor; // 主角/职业装走整体立绘（交付包 §0.2）
   this.heroBundle='char_warrior';        // 由 classId 决定（char_warrior/char_mage/…）
@@ -1493,6 +1498,9 @@ WMap.prototype.drawPinLabel=function(g,x,y,text,size){
 
 WMap.prototype.drawPinHud=function(g,cx,cy,t){
   const hx=this.hero.x-cx, hy=this.hero.y-cy;
+  // v1.9.89 每帧先清空箭头层，再只把"视口外"的箭头画到这一层上
+  const eg=this.edgeG;
+  if(eg)eg.clearRect(0,0,VW,VH);
   // 到达提示：不依赖 track（此刻已置 false），单独画成顶部横幅。
   // 不放角色头顶是因为 .interact-hint（"点击「xx」交战"）也贴在头顶，
   // 两者会正好叠在一起；顶部中央在 1280×720 下是空白区，不压小地图/任务栏/底部导航。
@@ -1519,7 +1527,8 @@ WMap.prototype.drawPinHud=function(g,cx,cy,t){
     // ---- 视口外：画面边缘的方位箭头（闪烁） ----
     const ang=Math.atan2(p.y-this.hero.y,p.x-this.hero.x);
     const e=this.pinEdgePoint(hx,hy,ang);
-    this.drawPinEdgeArrow(g,e.x,e.y,ang,label,t);
+    // 优先画到独立箭头层（不被 HUD 盖住）；没有该层时退回主画布
+    this.drawPinEdgeArrow(eg||g,e.x,e.y,ang,label,t);
   });
 };
 
