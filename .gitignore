@@ -13,3 +13,4 @@ data/server.err.log
 msg.txt
 commit-msg.txt
 cm.txt
+cm*.txt
