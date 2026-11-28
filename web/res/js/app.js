@@ -154,7 +154,8 @@ function refreshMmPin(){
   }
   mmPinEl.classList.remove('hidden');
   mmPinEl.classList.toggle('off',!p.track);
-  const s=(p.track?'跟踪 ':'标记 ')+worldMap.pinDist()+' 格';
+  const d=worldMap.pinDist();
+  const s=(p.track?'跟踪 ':'标记 ')+(d>0?d+' 格':'附近');
   if(s!==_mmPinText){ mmPinTxt.textContent=s; _mmPinText=s; }
 }
 if(mmPinEl)mmPinEl.addEventListener('click',()=>{ if(worldMap)worldMap.clearPin(); refreshMmPin(); });
