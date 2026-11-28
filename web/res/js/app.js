@@ -2986,7 +2986,6 @@ async function init(){
   }
 }
 init();
-})();
 
 /* ================= v1.9.68 组队副本（大厅 / 队伍 / 多人战斗演出） ================= */
 let partyPoll=null, partyLastRun=0;
@@ -3227,3 +3226,4 @@ function startInviteWatch(){
     };
   },8000);
 }
+})();
