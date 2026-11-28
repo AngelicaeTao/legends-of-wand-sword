@@ -2,201 +2,30 @@
   "bundle": "mon_boss_beetle",
   "format": "parted_sprite_v1",
   "character_size": [
-    40,
-    40
+    56,
+    56
   ],
   "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
   "pivot": "rotation center relative to cropped PNG top-left (logic px)",
   "anchor": "pivot position in character coord (y up+)",
   "z": "draw order, larger=front",
   "parts": {
-    "shadow": {
-      "file": "mon_boss_beetle_shadow.png",
+    "body": {
+      "file": "body.png",
       "size": [
-        31,
-        5
+        39,
+        56
       ],
       "pivot": [
-        15,
-        2
+        19.5,
+        56
       ],
       "anchor": [
-        0,
-        1
-      ],
-      "z": 0
-    },
-    "leg_l1": {
-      "file": "mon_boss_beetle_leg_l1.png",
-      "size": [
-        6,
-        11
-      ],
-      "pivot": [
-        4,
-        0
-      ],
-      "anchor": [
-        -12,
-        15
-      ],
-      "z": 1
-    },
-    "leg_l2": {
-      "file": "mon_boss_beetle_leg_l2.png",
-      "size": [
-        7,
-        10
-      ],
-      "pivot": [
-        5,
-        1
-      ],
-      "anchor": [
-        -12,
-        11
-      ],
-      "z": 1
-    },
-    "leg_r1": {
-      "file": "mon_boss_beetle_leg_r1.png",
-      "size": [
-        6,
-        11
-      ],
-      "pivot": [
         0,
         0
       ],
-      "anchor": [
-        12,
-        15
-      ],
       "z": 1
-    },
-    "leg_r2": {
-      "file": "mon_boss_beetle_leg_r2.png",
-      "size": [
-        7,
-        10
-      ],
-      "pivot": [
-        0,
-        0
-      ],
-      "anchor": [
-        12,
-        11
-      ],
-      "z": 1
-    },
-    "shell": {
-      "file": "mon_boss_beetle_shell.png",
-      "size": [
-        29,
-        25
-      ],
-      "pivot": [
-        14,
-        24
-      ],
-      "anchor": [
-        0,
-        3
-      ],
-      "z": 2
-    },
-    "head": {
-      "file": "mon_boss_beetle_head.png",
-      "size": [
-        13,
-        12
-      ],
-      "pivot": [
-        6,
-        11
-      ],
-      "anchor": [
-        0,
-        22
-      ],
-      "z": 3
-    },
-    "horn_l": {
-      "file": "mon_boss_beetle_horn_l.png",
-      "size": [
-        8,
-        7
-      ],
-      "pivot": [
-        4,
-        6
-      ],
-      "anchor": [
-        -5,
-        31
-      ],
-      "z": 4
-    },
-    "horn_r": {
-      "file": "mon_boss_beetle_horn_r.png",
-      "size": [
-        8,
-        7
-      ],
-      "pivot": [
-        3,
-        6
-      ],
-      "anchor": [
-        5,
-        31
-      ],
-      "z": 4
-    },
-    "eye_l": {
-      "file": "mon_boss_beetle_eye_l.png",
-      "size": [
-        3,
-        4
-      ],
-      "pivot": [
-        1,
-        3
-      ],
-      "anchor": [
-        -3,
-        26
-      ],
-      "z": 5
-    },
-    "eye_r": {
-      "file": "mon_boss_beetle_eye_r.png",
-      "size": [
-        3,
-        4
-      ],
-      "pivot": [
-        1,
-        3
-      ],
-      "anchor": [
-        3,
-        26
-      ],
-      "z": 5
     }
   },
-  "palette": [
-    "#262234",
-    "#263e2a",
-    "#342e2c",
-    "#3a5c3e",
-    "#608a58",
-    "#9ea8b9",
-    "#d23e3e",
-    "#fafafc"
-  ],
-  "color_count": 8,
-  "note": "BOSS甲虫：甲壳/头/双角/四足/双眼分离，冲撞攻击"
+  "note": "甲虫将军：单图 BOSS 精灵，屏幕 224px"
 }

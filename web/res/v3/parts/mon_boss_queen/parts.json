@@ -1,0 +1,31 @@
+{
+  "bundle": "mon_boss_queen",
+  "format": "parted_sprite_v1",
+  "character_size": [
+    56,
+    56
+  ],
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "pivot": "rotation center relative to cropped PNG top-left (logic px)",
+  "anchor": "pivot position in character coord (y up+)",
+  "z": "draw order, larger=front",
+  "parts": {
+    "body": {
+      "file": "body.png",
+      "size": [
+        46,
+        56
+      ],
+      "pivot": [
+        23.0,
+        56
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "z": 1
+    }
+  },
+  "note": "蜂巢女王：单图 BOSS 精灵，屏幕 224px"
+}

@@ -25,6 +25,8 @@ type SpotState struct {
 	RollCount  int    `json:"rollCount"`  // 连续未出稀有的次数（保底用）
 	To         string `json:"to,omitempty"`
 	ReqLevel   int    `json:"requireLevel,omitempty"`
+	RequireUnlocked bool `json:"requireUnlocked,omitempty"` // GATE：目标世界需已解锁（击败本世界首领开启）
+	Level      int    `json:"level,omitempty"` // v2.0 点位独立等级（BOSS 用）
 	// v1.9.46：该点位坐标是否只是兜底值（首领点位由客户端在可走区域随机落点）
 	RandomPos bool     `json:"randomPos,omitempty"`
 	Group     []string `json:"group,omitempty"` // v1.9.36 群怪模版：点位怪物组合（monster id，可重复），战斗/贴图以此为准
@@ -60,7 +62,7 @@ func InitSpawns() {
 				if s.Content != "" { content = s.Content } // v1.9.31 FUNC 点位：content 直传前端
 				spawnMgr.spots[key] = &SpotState{
 					NodeID: s.ID, Type: s.Type, Tier: s.Tier, X: s.X, Y: s.Y,
-					To: s.To, ReqLevel: s.RequireLevel, BossMonster: s.BossMonster,
+					To: s.To, ReqLevel: s.RequireLevel, RequireUnlocked: s.RequireUnlocked, Level: s.Level, BossMonster: s.BossMonster,
 					RandomPos: s.RandomPos,
 					Active: true, ReadyAt: now, ContentID: content,
 				}

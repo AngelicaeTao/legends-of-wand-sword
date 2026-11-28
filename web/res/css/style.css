@@ -385,7 +385,8 @@ body.in-world .logout-btn,body.in-world .sfx-btn{display:none!important}
   font-size:10px;font-weight:800;color:#eaf4ff;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:.3px}
 .quest-tracker{position:absolute;right:14px;top:112px;width:248px;padding:10px 11px 11px;border-radius:14px;
   background:linear-gradient(160deg,rgba(16,24,38,.92),rgba(8,13,22,.95));border:1.5px solid rgba(217,180,91,.5);
-  box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:6;pointer-events:auto}
+  box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:6;pointer-events:auto;
+  max-height:calc(100vh - 150px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(217,180,91,.5) transparent}
 .quest-tracker.qt-all-done{border-color:rgba(127,224,160,.5)}
 .qt-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#c9a227;
   letter-spacing:1px;font-weight:800;padding-bottom:7px;border-bottom:1px solid rgba(217,180,91,.22)}
@@ -410,6 +411,19 @@ body.in-world .logout-btn,body.in-world .sfx-btn{display:none!important}
   animation:qtPulse 1.8s ease-in-out infinite}
 @keyframes qtPulse{0%,100%{box-shadow:0 2px 0 #8a641f,0 0 0 rgba(255,220,140,0)}50%{box-shadow:0 2px 0 #8a641f,0 0 14px rgba(255,220,140,.75)}}
 
+/* ---------- v1.9.93 每日委托分区 / NPC 对话 / 任务卡高度 ---------- */
+.qt-section{display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;
+  padding:6px 2px;font-size:11px;font-weight:800;color:#9ad0ff;letter-spacing:.6px;
+  border-top:1px solid rgba(154,208,255,.22);border-bottom:1px solid rgba(154,208,255,.12)}
+.qt-section em{font-style:normal;color:#7f93ad;font-weight:600;letter-spacing:0}
+.qt-item.claimed{opacity:.55}
+.qt-item.claimed .qt-name{color:#8fa0b8;text-decoration:line-through}
+.qt-claim.busy{opacity:.6;animation:none;cursor:default}
+.qt-story{display:block;margin:6px 0;padding:8px 10px;border-left:3px solid #e0b455;
+  background:rgba(224,180,85,.08);color:#f0d590;font-size:12px;line-height:1.7}
+.npc-role{margin:-2px 0 8px;font-size:11px;color:#9fb0c6;letter-spacing:1px}
+.npc-dialog{font-size:13px;line-height:1.8;color:#e8eef7}
+
 /* ---------- v1.9.45 任务栏收起 / 展开（Q 键或右上角箭头） ---------- */
 .qt-toggle{position:absolute;right:7px;top:7px;width:20px;height:20px;padding:0;display:flex;align-items:center;justify-content:center;
   border-radius:6px;color:#e8c877;background:rgba(240,213,144,.08);border:1px solid rgba(240,213,144,.28);
@@ -421,7 +435,8 @@ body.in-world .logout-btn,body.in-world .sfx-btn{display:none!important}
 .quest-tracker.collapsed{width:auto;padding:8px 8px 8px 12px}
 /* 收起只隐藏任务条目，表头（章节名 + 进度）保留，避免用户不知道这是什么 */
 .quest-tracker.collapsed .qt-item,
-.quest-tracker.collapsed .qt-all{display:none}
+.quest-tracker.collapsed .qt-all,
+.quest-tracker.collapsed .qt-section{display:none}
 .quest-tracker.collapsed .qt-head{border-bottom:0;padding:0 24px 0 0;gap:10px;white-space:nowrap}
 .quest-tracker.collapsed .qt-toggle svg{transform:rotate(180deg)}
 

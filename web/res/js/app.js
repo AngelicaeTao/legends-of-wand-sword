@@ -117,8 +117,18 @@ addEventListener('resize',fitStage); fitStage();
 const cvb=$('cvBattle').getContext('2d');
 cvb.imageSmoothingEnabled=false;
 
+/* 家园常驻 NPC：静态点位只在家园合并，复用现有设施点击与距离校验。
+   立绘 bundle 与职业同源：char_sage/char_warrior/char_mage（交付包已有素材）。 */
+const HOME_NPCS=[
+  {type:'FUNC',contentId:'npc',nodeId:'HOME_NPC_EVA',npcId:'eva',label:'艾拉·守望者',bundle:'char_sage',x:1000,y:520},
+  {type:'FUNC',contentId:'npc',nodeId:'HOME_NPC_GROM',npcId:'grom',label:'格罗姆·铁匠',bundle:'char_warrior',x:900,y:1000},
+  {type:'FUNC',contentId:'npc',nodeId:'HOME_NPC_MIA',npcId:'mia',label:'米娅·药师',bundle:'char_mage',x:1600,y:1000}
+];
+
 /* 俯视大地图引擎：回调注入到本模块的状态机 */
 const worldMap=new WorldMap($('cvExplore'),{
+  homeNpcs:HOME_NPCS,
+  isQuestNpc:(h)=>{const q=window.Quest&&Quest.active();return !!(q&&q.chapter===2&&q.npc===h.npcId);},
   onEncounter:(mon)=>askEncounter(mon),          // 点怪物 → 交战确认
   onChest:(chest)=>onChestOpened(chest),         // 开箱动画开始 → 服务端权威入账
   onPotion:(p)=>onPotionPicked(p),               // v1.9.27 采集草药 → 服务端权威入仓
@@ -569,7 +579,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.92';
+const BUILD_VER='v1.9.93';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -746,6 +756,8 @@ async function finishEnter(){
     if(!worldMap.ready){
       $('loadTxt').textContent='正在生成大世界…（首次进入需下载地图，请稍候）';
       worldMap.opts.worldDefs=(CFG&&CFG.worlds&&CFG.worlds.worlds)||[];
+      // v2.0：东门封印态需要知道哪些世界已解锁
+      worldMap.opts.isUnlocked=id=>!!(state&&state.world&&state.world.unlocked&&state.world.unlocked.indexOf(id)>=0);
       await worldMap.load();
     }
     applyHeroLook();
@@ -791,7 +803,18 @@ async function finishEnter(){
       claim:(qid)=>api('/api/player/action',{userId:uid(),action:'quest_claim',questId:qid}),
       getState:()=>state,
       onState:(st)=>{ state=st; refreshStats().then(syncHud); },
-      toast:(t,s)=>{window.SFX&&SFX.quest();toastModal(t,s);}
+      // 领取每日状态异常时从服务端拉取最新存档并同步任务卡
+      refresh:async()=>{const r=await api('/api/state/load',{userId:uid()});if(r.state){state=r.state;await refreshStats();syncHud();return state;}return null;},
+      // 任务剧情为开发者静态文案，允许渲染换行与高亮；其余文案仍走 toastModal 的转义
+      toast:(t,s)=>{
+        window.SFX&&SFX.quest();
+        if(s&&/<br|<span/.test(s)){
+          showModal(`<h2>${esc(t)}</h2><div class="msub">${s}</div><button class="big-btn goldbtn" id="toastOk">确定</button>`);
+          const ok=$('toastOk'); if(ok)ok.onclick=()=>{ hideModal(); if(view==='world'&&panel)renderPanel(); };
+          return;
+        }
+        toastModal(t,s);
+      }
     });
     // v1.9.27 回血药水快用按钮（HUD）；v1.9.41 满血本地预检（不发请求）+ 去掉多余 refreshStats（降交互延迟）
     const pb=$('usePotionBtn');
@@ -820,11 +843,50 @@ async function loadWorld(worldId, heroX, heroY){
   if(mmw) mmw.textContent=worldLabel;
   syncHud();
 }
-// v1.9.31 家园功能点：仓库/挂机修炼/换装镜（复用原家园面板，二级页直达）
+// 家园 NPC 剧情对话：不接奖励、不建新页面，功能按钮只跳现有面板。
+function openNpcDialog(h){
+  const q=window.Quest?Quest.active():null;
+  const lv=Math.max(1,(state&&state.core&&state.core.level)||1),mult=(1+(lv-1)*0.1).toFixed(1).replace('.0','');
+  const roles={eva:'星图守望者',grom:'星火铁匠',mia:'药剂师 · 每日委托'};
+  let text='';
+  if(h.npcId==='eva'){
+    if(!q)text='星图的赤色尽头已经亮起。接下来的故事，要等星火锻炉另一端的主人亲自诉说。';
+    else if(q.chapter===2&&q.npc==='eva'&&q.storyBefore)text=q.storyBefore;
+    else if(q.chapter===1)text='平原的雾气正在向家园蔓延。先完成「'+q.name+'」，我会在这里解读你带回来的线索。';
+    else text='星图对当前目标有了反应：'+q.desc+'。米娅和格罗姆也会协助你。';
+  }else if(h.npcId==='mia'){
+    if(q&&q.chapter===2&&q.npc==='mia'&&q.storyBefore)text=q.storyBefore+'<br><br>';
+    text+='每日委托包括：赢得 5 场战斗、开启 2 个宝箱、采集 3 次草药。每天 0 点重置。<br>当前 Lv.'+lv+'：金币与经验奖励 ×'+mult+'，钻石和材料不变。';
+  }else{
+    text=q&&q.chapter===2&&q.npc==='grom'&&q.storyBefore?q.storyBefore:'好装备需要反复锤炼。强化仍消耗金币和材料，失败不会计入任务；想挑战星火锻炉，就先检查自己的武器。';
+  }
+  const mainTalk=h.npcId==='eva'&&q&&q.id==='q2_eva_talk';
+  const action=h.npcId==='grom'?'进入强化工坊':h.npcId==='mia'?'打开背包':'';
+  showModal(`<h2>${esc(h.label||'家园居民')}</h2><div class="npc-role">${esc(roles[h.npcId]||'家园居民')}</div>
+    <div class="msub npc-dialog">${text}</div><div class="divider"></div>
+    <div class="enc-btns">${mainTalk?'<button class="big-btn goldbtn" id="npcMain">聆听雾核情报</button>':action?'<button class="big-btn goldbtn" id="npcAction">'+action+'</button>':''}
+    <button class="btn-gray" id="npcClose">${mainTalk||action?'稍后再来':'继续冒险'}</button></div>`);
+  worldMap.active=false;
+  const close=()=>{hideModal();worldMap.active=true;};
+  $('npcClose').onclick=close;
+  if(mainTalk)$('npcMain').onclick=()=>{
+    Quest.progress('talk_eva',1);close();
+    toastModal('剧情已推进','艾拉的情报已记入任务卡，点击「归园议事」的领取按钮获得奖励并继续故事。');
+  };
+  const act=$('npcAction');
+  if(act)act.onclick=()=>{
+    close();
+    if(h.npcId==='grom'){
+      openPanel('home');homeSub='warehouse';forgeSub=true;forgeSel=null;renderPanel();
+    }else openPanel('bag');
+  };
+}
+// v1.9.31 家园功能点：仓库/挂机修炼/换装镜/常驻 NPC（复用原家园面板，二级页直达）
 function openHomeFunc(h){
   if(view!=='world'||panel||battlePlaying)return;
   if(!$('modalLayer').classList.contains('hidden'))return;
   window.SFX&&SFX.tab();
+  if(h.kind==='npc'){openNpcDialog(h);return;}
   if(h.kind==='warehouse'){ openPanel('home'); homeSub='warehouse'; renderPanel(); }
   else if(h.kind==='idle'){ openPanel('home'); homeSub='idle'; renderPanel(); }
   else { openPanel('home'); } // dress：家园面板主视图（换装 + 装饰）
@@ -862,11 +924,15 @@ function askTravel(gate){
   const req=gate.requireLevel||0;
   const lv=state?state.core.level:1;
   const locked=req>0 && lv<req;
+  // v2.0 封印：目标世界需先击败本世界首领解锁
+  const unlocked=state&&state.world&&state.world.unlocked?state.world.unlocked:[];
+  const sealed=!!(gate.requireUnlocked && unlocked.indexOf(gate.to)<0);
+  const blocked=locked||sealed;
   showModal(`<h2>世界通道</h2>
-    <div class="msub">${gate.label}<br>当前等级 Lv.${lv} ${req>0?'· 需 Lv.'+req:''}${locked?'<br><span style="color:#ffcf7a">等级不足，请先打怪或挂机升至 Lv.'+req+'</span>':''}</div>
+    <div class="msub">${gate.label}<br>当前等级 Lv.${lv} ${req>0?'· 需 Lv.'+req:''}${sealed?'<br><span style="color:#ff9a8f">通道被封印：击败本世界首领后开启</span>':(locked?'<br><span style="color:#ffcf7a">等级不足，请先打怪或挂机升至 Lv.'+req+'</span>':'')}</div>
     <div class="divider"></div>
-    <div class="enc-btns"><button class="btn-red" id="goTravel" ${locked?'disabled style="opacity:.45;cursor:not-allowed"':''}>${locked?'等级不足':'传送'}</button><button class="btn-gray" id="cancelTravel">留在原地</button></div>`);
-  if(locked){ $('goTravel').onclick=null; }
+    <div class="enc-btns"><button class="btn-red" id="goTravel" ${blocked?'disabled style="opacity:.45;cursor:not-allowed"':''}>${sealed?'封印中':(locked?'等级不足':'传送')}</button><button class="btn-gray" id="cancelTravel">留在原地</button></div>`);
+  if(blocked){ $('goTravel').onclick=null; }
   else { $('goTravel').onclick=()=>{hideModal();travelTo(gate);}; }
   $('cancelTravel').onclick=()=>{hideModal();worldMap.active=true;};
 }
@@ -947,6 +1013,7 @@ async function travelTo(gate){
     $('loadTxt').textContent='正在加载目的地地图…（首次传送需下载地图，请稍候）';
     await loadWorld(gate.to, state.world.x, state.world.y);
     if(window.Quest&&gate.to==='W2')Quest.set('travel',1);
+    if(window.Quest&&gate.to==='W3')Quest.set('travel_w3',1);   // 第二章追随赤痕：抵达 W3
     window.SFX&&SFX.gate();
     setTimeout(()=>{window.SFX&&SFX.arrive();},420);
     $('loading').classList.add('hidden');
@@ -2110,7 +2177,7 @@ function renderWarehouse(){
         const cost=r.enhanceCost||{};
         toastModal('强化成功',eqCN(sel)+' 强化至 +'+(r.enhanceLevel||'?')+
           (cost.gold?('（消耗 '+fmt(cost.gold)+' 金币 / '+fmt(cost.material||0)+' 强化材料）'):''));
-        if(window.Quest)Quest.progress('enhance',1);
+        if(window.Quest){Quest.progress('enhance',1);Quest.syncState(state);}
         renderWarehouse();
       }catch(e){window.SFX&&SFX.fail();toastModal('强化失败',e.message);}
     };
@@ -2660,7 +2727,7 @@ async function onPotionPicked(p){
   }catch(e){ pickErr=e.message||''; }
   window.SFX&&(reward?SFX.heal():SFX.deny());
   if(reward){
-    if(window.Quest)Quest.progress('chest',1);
+    if(window.Quest){Quest.progress('herb',1);Quest.syncState(state);}   // v1.9.93 修复：采药累计 herb，不再误算 chest
     showModal(`<h2>🌿 采集草药</h2>
       <div class="msub">已放入背包（草药 2 分钟后重新长出）</div>
       <div class="divider"></div>
@@ -2683,7 +2750,11 @@ async function onChestOpened(chest){
     reward=r.reward;
     if(r.state){state=r.state;await applyStats(r.stats);}
   }catch(e){ reward=null; chestErr=e.message||''; }
-  if(reward&&window.Quest)Quest.progress('chest',1);
+  if(reward&&window.Quest){
+    Quest.progress('chest',1);
+    if(worldMap.worldId==='W2')Quest.progress('chest_w2',1);   // 第二章残页回响：仅 W2 大世界开箱计数
+    Quest.syncState(state);
+  }
   if(window.SFX){ if(reward)SFX.chest(); else SFX.deny(); }
   const realTier=(reward&&reward.tier)||chest.tier;   // v1.9.45 以服务端实发档位为准
   const label={wood:'木质宝箱',silver:'银质宝箱',gold:'黄金宝箱',diamond:'钻石宝箱',crystal:'水晶宝箱'}[realTier]||'宝箱';
@@ -2740,7 +2811,11 @@ async function dropChestFor(mon){
 
 function showBattleResult(rep,mon){
   const win=rep.result==='win';
-  if(win&&window.Quest)Quest.progress('kill',1);
+  if(win&&window.Quest){
+    Quest.progress('kill',1);
+    // 第二章雾中试锋：仅 W2 大世界（非副本）胜利计数
+    if(worldMap.worldId==='W2'&&mon&&!(mon.nodeId||'').startsWith('dungeon_'))Quest.progress('kill_w2',1);
+  }
   const slotCN={weapon:'武器',helmet:'头盔',armor:'护甲',trinket:'饰品'};
   // v1.9.53 装备掉落改为小格子（原每件一行，10 件以上会把结算弹窗撑出屏幕、领取按钮点不到）
   // v1.9.54 按部位出图标（不再是通用背包图标）+ 完整名称；低于在穿战力已被服务端分解，只留汇总行
@@ -3146,6 +3221,8 @@ $('panelShade').onclick=closePanel;
 /* 怪物等级：世界等级 + 档位加成。原实现精英 +4 / BOSS +8，导致 1 级世界里的精英
    直接是 Lv.5 —— 玩家 85 血、怪 213 血，4 秒必败且事前毫无预警。改 +2 / +5。 */
 function monsterLevel(mon){
+  // v2.0 点位独立等级（W1 五个 BOSS 各自 Lv.5~10）优先于世界等级
+  if(mon&&mon.lv>0)return Math.max(1,Math.min(60,mon.lv));
   const wl=(CFG.worlds.worlds.find(w=>w.id===worldMap.worldId)||{}).level||1;
   // v1.9.46 三档怪物：精英/首领 +2 级；首领自身 base/growth 更高，属性自然高于精英
   const kind=mon.kind||(mon.type==='boss_beetle'?'boss':(mon.elite?'elite':'normal'));
@@ -3161,7 +3238,7 @@ async function doFight(mon){
     // v1.9.36 群怪：大世界点位战斗携带 worldId+nodeId，服务端按点位组合权威结算（与遭遇贴图同源）
     const bundle=await api('/api/battle/fight',{userId:uid(),bd,monsterId:mon.monId||mon.type,monsterLv:monLv,elite:(mon.kind==='boss'?'boss':((mon.kind==='elite'||mon.elite)?'elite':'')),
       worldId:worldMap.worldId,nodeId:mon.nodeId||''});
-    if(bundle.state){state=bundle.state;await applyStats(bundle.stats);}
+    if(bundle.state){state=bundle.state;await applyStats(bundle.stats);if(window.Quest)Quest.syncState(state);}
     currentReport=bundle.report;
     // v1.9.58 一击必杀：服务端判定怪物总血量低于普攻保底伤害时直接判胜，
     // 前端跳过整段战斗演出与血条播放，直接弹结算（不切战斗视图）

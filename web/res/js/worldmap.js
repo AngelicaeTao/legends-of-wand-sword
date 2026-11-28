@@ -34,6 +34,7 @@ const THEMES={
   arena:    {name:'星陨之巅',ground:['#4a4560','#514b68','#423d58','#564f6e'],road:'#8a86a3',wall:'meteor',pond:'#3a3550',deco:'star'}
 };
 const MON_NAMES={slime:'史莱姆',skeleton:'骷髅兵',bat:'蝙蝠',boss_beetle:'甲虫将军',
+  boss_golem:'藤蔓巨像',boss_mantis:'螳螂刀客',boss_queen:'蜂巢女王',boss_shaman:'蘑菇术士',
   slime_toxic:'毒液史莱姆',skeleton_archer:'骷髅弓手',bat_crimson:'血蝙蝠',map_boss:'图域首领'};
 // v1.9.46 贴图别名：怪物 id 与像素资源包名不一致时在此登记（否则会 404 请求 mon_map_boss/parts.json）
 const MON_SPRITE={map_boss:'boss_beetle'};
@@ -56,6 +57,9 @@ function WMap(canvas, opts){
   this.themeKey='grassland';
   // v1.9.31 家园：世界尺寸改为实例属性（HOME=2560×1440 小地图，其余世界=MW/MH）
   this.WM=MW; this.HM=MH;
+  this.texScale=1;            // v2.0 世界尺寸/地形贴图宽度（W1=1.5，其余=1）
+  this.maskScale=MASK_SCALE;  // v2.0 每掩码像素对应的世界单位（W1=12，其余=8）
+  this.skipPaint=false;       // v2.0 地形已完整绘制（不补绘）
   this.homeItems=[];  // 家园功能点 {x,y,nodeId,kind,label}（仓库/挂机/换装镜）
 
   this.obstacles=[];  // 保留字段兼容，地形升级后不再用精灵墙，墙由掩码判定
@@ -125,7 +129,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   } else {
     const base=RES+'maps/'+worldId+'_';
     const loadImg=(src)=>new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('地形加载失败:'+src));im.src=src;});
-    const maskImg=await loadImg(base+'mask_half.png?v=1.9.5');
+    const maskImg=await loadImg(base+'mask_half.png?v=2.0.1');
     const mc=document.createElement('canvas');mc.width=MASK_W;mc.height=MASK_H;
     const mg=mc.getContext('2d',{willReadFrequently:true});mg.drawImage(maskImg,0,0);
     this.maskData=mg.getImageData(0,0,MASK_W,MASK_H).data;
@@ -146,7 +150,7 @@ WMap.prototype.loadTerrain=async function(worldId){
   this.groundBmp=null;this.ground=null;
   // 全图：仅当前世界持有。优先 fetch→createImageBitmap：
   // 解码与后续按块裁剪均在浏览器解码线程完成，主线程零大图采样（消除预热期掉帧）
-  const url=RES+'maps/'+worldId+'_full_half.webp?v=1.9.5';
+  const url=RES+'maps/'+worldId+'_full_half.webp?v=2.0.1';
   try{
     const resp=await fetch(url,{cache:'force-cache'});
     const blob=await resp.blob();
@@ -157,6 +161,10 @@ WMap.prototype.loadTerrain=async function(worldId){
   }
   this.tiles=new Map();      // 分块缓存只属于当前世界
   this._pending=new Set();
+  // v2.0 世界尺寸与地形贴图解耦：贴图按 texScale 放大绘制（W1 为 1.5×）
+  const texSrc=this.groundBmp||this.ground;
+  this.texScale=this.WM/((texSrc&&texSrc.width)||this.WM);
+  this.maskScale=this.WM/MASK_W;
   // 小地图底图（优先级 1）：整世界缩略 1920×1080（1px = 8 世界单位），
   // 与主画面同一张地形图 → 小地图所见即画面所见，位置必然对应
   try{
@@ -164,7 +172,7 @@ WMap.prototype.loadTerrain=async function(worldId){
     this.thumb=await createImageBitmap(src,{resizeWidth:THUMB_W,resizeHeight:THUMB_H,resizeQuality:'low'});
   }catch(e){ this.thumb=null; }
   // v1.9.31 动态缩略尺度（app.js 小地图 / M 弹窗按此换算；常规世界=THUMB_*）
-  this.thumbW=THUMB_W; this.thumbH=THUMB_H; this.thumbScale=THUMB_SCALE;
+  this.thumbW=THUMB_W; this.thumbH=THUMB_H; this.thumbScale=this.WM/THUMB_W;
   // 水域修正：地形图里的蓝色水面在掩码中被误标为可走 → 按颜色改为不可走，
   // 让"湖"在视觉与碰撞上一致（角色被挡在岸边，不会站到水面上）
   this.waterFlag=null;
@@ -271,6 +279,7 @@ WMap.prototype.samplePalette=function(){
    —— 不依赖固定色值，也不依赖主题配色：把已知像素向外扩散 8 轮，
    补出的颜色天然与周边一致，因此接缝几乎不可见；再叠细颗粒避免死板 */
 WMap.prototype.buildPaintLayer=function(){
+  if(this.skipPaint)return null;   // v2.0 地图已完整绘制（paint:false），跳过补绘
   if(!this.thumb||!this.maskData)return null;
   const W=MASK_W,H=MASK_H,N=W*H;
   const tc=document.createElement('canvas');tc.width=W;tc.height=H;
@@ -468,7 +477,7 @@ WMap.prototype.buildMiniMap=function(){
 WMap.prototype.TILE_MAX=24;
 WMap.prototype.requestTile=function(tx,ty){ // 请求异步建块（去重），不阻塞渲染
   if(!this.tiles)return;
-  if(tx<0||ty<0||tx>=MW/VW||ty>=MH/VH)return;
+  if(tx<0||ty<0||tx>=this.WM/VW||ty>=this.HM/VH)return;
   const key=tx+','+ty;
   if(this.tiles.has(key)||this._pending.has(key))return;
   this._pending.add(key);
@@ -486,13 +495,21 @@ WMap.prototype.requestTile=function(tx,ty){ // 请求异步建块（去重），
       }
     }
   };
+  const ts=this.texScale||1;
+  // v2.0 用整数源矩形切块，相邻块共用边界像素，避免 1.5× 缩放出现 1px 接缝
+  const tex=this.groundBmp||this.ground;
+  const tw=(tex&&tex.width)||0, th=(tex&&tex.height)||0;
+  const sx0=Math.floor(tx*VW/ts), sy0=Math.floor(ty*VH/ts);
+  const sx1=tw?Math.min(Math.floor((tx+1)*VW/ts),tw):Math.floor((tx+1)*VW/ts);
+  const sy1=th?Math.min(Math.floor((ty+1)*VH/ts),th):Math.floor((ty+1)*VH/ts);
+  const sw0=Math.max(1,sx1-sx0), sh0=Math.max(1,sy1-sy0);
   if(this.groundBmp){
-    createImageBitmap(this.groundBmp,tx*VW,ty*VH,VW,VH).then(done).catch(()=>done(null));
+    createImageBitmap(this.groundBmp,sx0,sy0,sw0,sh0,{resizeWidth:VW,resizeHeight:VH,resizeQuality:'high'}).then(done).catch(()=>done(null));
   } else if(this.ground){
     Promise.resolve().then(()=>{
       const c=document.createElement('canvas');c.width=VW;c.height=VH;
-      const g=c.getContext('2d');g.imageSmoothingEnabled=false;
-      g.drawImage(this.ground,tx*VW,ty*VH,VW,VH,0,0,VW,VH);
+      const g=c.getContext('2d');g.imageSmoothingEnabled=true;
+      g.drawImage(this.ground,sx0,sy0,sw0,sh0,0,0,VW,VH);
       done(c);
     });
   } else { if(this._pending)this._pending.delete(key); }
@@ -512,7 +529,7 @@ WMap.prototype.ensureTile=function(tx,ty){ // 渲染取块：命中返回纹理�
 /* 装饰块：首次访问异步烘焙（下一帧就绪），避免同步生成卡住当前帧 */
 WMap.prototype.ensureDeco=function(tx,ty){
   if(!this.deco)return null;
-  if(tx<0||ty<0||tx>=MW/VW||ty>=MH/VH)return null;
+  if(tx<0||ty<0||tx>=this.WM/VW||ty>=this.HM/VH)return null;
   const key=tx+','+ty;
   const hit=this.deco.tiles.get(key);
   if(hit){ this.deco.tiles.delete(key);this.deco.tiles.set(key,hit); return hit; }
@@ -572,7 +589,10 @@ WMap.prototype.switchWorld=async function(worldId, spots, heroX, heroY){
     this.WM=2560; this.HM=1440;
     await this.loadHomeTerrain();
   } else {
-    this.WM=MW; this.HM=MH;
+    // v2.0 每世界尺寸（W1=11520×6480），缺省沿用 7680×4320
+    this.WM=(wdef&&wdef.worldW)||MW; this.HM=(wdef&&wdef.worldH)||MH;
+    this.maskScale=this.WM/MASK_W;
+    this.skipPaint=!!(wdef&&wdef.paint===false);
     await this.loadTerrain(worldId);
   }
   // 重置实体
@@ -585,7 +605,11 @@ WMap.prototype.switchWorld=async function(worldId, spots, heroX, heroY){
     const fixed=this.findWalkableNear(this.hero.x,this.hero.y,720);
     this.hero.x=fixed.x;this.hero.y=fixed.y;
   }
-  this.applySpots(spots||[]);
+  let spotList=spots||[];
+  if(worldId==='HOME'&&Array.isArray(this.opts.homeNpcs)){
+    spotList=spotList.concat(this.opts.homeNpcs.map(n=>({type:'FUNC',contentId:'npc',nodeId:n.id,npcId:n.npcId,label:n.label,bundle:n.bundle,x:n.x,y:n.y})));
+  }
+  this.applySpots(spotList);
   this.centerCam();
   this.prewarmTiles(); // 后台预热分块，避免移动跨块时同步建块掉帧
 };
@@ -691,6 +715,7 @@ WMap.prototype.applySpots=function(spots){
       const wdefs=(this.opts&&this.opts.worldDefs)||[];
       const tw=wdefs.find(w=>w.id===s.to);
       this.gates.push({x:s.x,y:s.y,nodeId:s.nodeId,to:s.to,requireLevel:s.reqLevel||s.requireLevel||0,
+        requireUnlocked:!!s.requireUnlocked,
         label:'通往 '+(tw?tw.name:(s.to||'?')),worldName:tw?tw.name:s.to});
       continue;
     }
@@ -715,7 +740,7 @@ WMap.prototype.applySpots=function(spots){
       if(kind==='boss'&&s.randomPos){ const rp=this.randomBossPoint(); if(rp){px=rp.x;py=rp.y;} }
       const pre=kind==='elite'?'精英 ':(kind==='boss'?'首领 ':'');
       this.monsters.push({x:px,y:py,nodeId:s.nodeId,type:sprite,name:pre+gangName,
-        group,gangName,monId,kind,elite:kind!=='normal',
+        group,gangName,monId,kind,elite:kind!=='normal',lv:s.level||0,
         state:'idle',r:kind==='boss'?44:30,
         alert:kind==='boss'?440:(kind==='elite'?360:300),actor,phase:Math.random()*6});
       continue;
@@ -736,6 +761,17 @@ WMap.prototype.applySpots=function(spots){
       if(kind==='gate'){
         this.gates.push({x:s.x,y:s.y,nodeId:s.nodeId,to:'BACK',requireLevel:0,
           label:'出门 · 返回大世界',worldName:'大世界'});
+      } else if(kind==='npc'){
+        // 家园常驻 NPC：复用 homeItems 渲染/点击/距离提示，立绘走 StandeeActor（与主角同源）
+        const id=s.nodeId,bundle=s.bundle||'char_warrior';
+        this.standeeCache=this.standeeCache||{};
+        let actor=this.standeeCache[bundle];
+        if(!actor){
+          actor=new this.StandeeActor(bundle);
+          actor.init().then(()=>{ try{actor.play('idle');}catch(e){} });
+          this.standeeCache[bundle]=actor;
+        }
+        this.homeItems.push({x:s.x,y:s.y,nodeId:id,npcId:s.npcId,kind:'npc',actor,label:s.label||'',phase:Math.random()*6});
       } else {
         const labels={warehouse:'仓库',idle:'挂机修炼',dress:'换装镜'};
         this.homeItems.push({x:s.x,y:s.y,nodeId:s.nodeId,kind,label:labels[kind]||kind,phase:Math.random()*6});
@@ -856,19 +892,19 @@ WMap.prototype.buildObstacles=function(rnd,th,cx,cy){
 // 检查角色 (x,y) 半径 r 覆盖范围内的采样点是否全在可走区
 WMap.prototype.isWaterAt=function(x,y){
   if(!this.waterFlag)return false;
-  const mx=Math.floor(x/MASK_SCALE),my=Math.floor(y/MASK_SCALE);
+  const mx=Math.floor(x/this.maskScale),my=Math.floor(y/this.maskScale);
   if(mx<0||my<0||mx>=MASK_W||my>=MASK_H)return false;
   return this.waterFlag[my*MASK_W+mx]===1;
 };
 WMap.prototype.isPavedAt=function(x,y){
   if(!this.pavedMask)return false;
-  const mx=Math.floor(x/MASK_SCALE),my=Math.floor(y/MASK_SCALE);
+  const mx=Math.floor(x/this.maskScale),my=Math.floor(y/this.maskScale);
   if(mx<0||my<0||mx>=MASK_W||my>=MASK_H)return false;
   return this.pavedMask[my*MASK_W+mx]===1;
 };
 WMap.prototype.isWalkable=function(x,y){
   if(!this.maskData)return true; // 掩码未加载时不阻挡（避免卡死）
-  const mx=Math.floor(x/MASK_SCALE),my=Math.floor(y/MASK_SCALE);
+  const mx=Math.floor(x/this.maskScale),my=Math.floor(y/this.maskScale);
   if(mx<0||my<0||mx>=MASK_W||my>=MASK_H)return false;
   return this.maskData[(my*MASK_W+mx)*4]>127; // 取R通道（灰度图RGB相同）
 };
@@ -956,7 +992,7 @@ WMap.prototype.nearestRemote=function(x,y,maxd){let b=null,d0=maxd||120;for(cons
 /* v1.9.31 家园功能点交互：需走到附近（与宝箱/草药同规则） */
 WMap.prototype.tryUseHomeItem=function(h){
   if(Math.hypot(h.x-this.hero.x,h.y-this.hero.y)>300){
-    if(this.opts.onHint)this.opts.onHint('请用 WASD / 方向键走到'+(h.label||'设施')+'附近再使用');
+    if(this.opts.onHint)this.opts.onHint('请用 WASD / 方向键走到'+(h.kind==='npc'?'该 NPC':(h.label||'设施'))+'附近再'+(h.kind==='npc'?'交谈':'使用'));
     return;
   }
   this.opts.onHomeItem&&this.opts.onHomeItem(h);
@@ -1097,7 +1133,7 @@ WMap.prototype.render=function(now){
   else {g.fillStyle='#3a5a2a';g.fillRect(0,0,VW,VH);}
   // 水面：统一湖水色（盖住原图的脏色），再叠波纹
   if(this.waterCv){
-    const ms=MASK_SCALE;
+    const ms=this.maskScale;
     let sx=cx/ms, sy=cy/ms, sw=VW/ms, sh=VH/ms;
     if(sx<0){sw+=sx;sx=0;}
     if(sy<0){sh+=sy;sy=0;}
@@ -1107,7 +1143,7 @@ WMap.prototype.render=function(now){
   }
   // 不可通行区域遮罩：盖住地形图的棋盘格/透明底，只留出可走通道（与碰撞一致）
   if(this.maskCv){
-    const ms=MASK_SCALE;
+    const ms=this.maskScale;
     let sx=cx/ms, sy=cy/ms, sw=VW/ms, sh=VH/ms;
     if(sx<0){sw+=sx;sx=0;}
     if(sy<0){sh+=sy;sy=0;}
@@ -1117,7 +1153,7 @@ WMap.prototype.render=function(now){
   }
   // 可走区补绘（棋盘格底纹 → 主题地面色）
   if(this.paintCv){
-    const ms=MASK_SCALE;
+    const ms=this.maskScale;
     let sx=cx/ms, sy=cy/ms, sw=VW/ms, sh=VH/ms;
     if(sx<0){sw+=sx;sx=0;}
     if(sy<0){sh+=sy;sy=0;}
@@ -1222,21 +1258,22 @@ WMap.prototype.drawHero=function(g,sx,sy,t){
 WMap.prototype.drawMonster=function(g,m,sx,sy,t){
   const bob=Math.sin(t*3+m.phase)*3;
   const near=this.hero&&Math.hypot(m.x-this.hero.x,m.y-this.hero.y)<m.alert;
+  const isBoss=m.kind==='boss';
   // 阴影
   g.fillStyle='rgba(0,0,0,.26)';
-  g.beginPath();g.ellipse(sx,sy+10,24,9,0,0,Math.PI*2);g.fill();
-  if(m.actor)m.actor.render(g,sx,sy+bob,m.type==='boss_beetle'?2.6:2.1,{});
+  g.beginPath();g.ellipse(sx,sy+10,isBoss?44:24,isBoss?16:9,0,0,Math.PI*2);g.fill();
+  if(m.actor)m.actor.render(g,sx,sy+bob,isBoss?4:2.1,{});
   // 警戒圈：仅当玩家靠近时显示，避免满屏红圈
   if(near){
     g.strokeStyle='rgba(255,110,90,.30)';g.lineWidth=2;g.setLineDash([5,7]);
     g.beginPath();g.arc(sx,sy,m.alert,0,Math.PI*2);g.stroke();g.setLineDash([]);
   }
   // 名牌：深色底 + 金色字（纯描边在浅色地面上看不清）
-  g.font='bold 12px "Microsoft YaHei","PingFang SC",sans-serif';
+  g.font=isBoss?'bold 14px "Microsoft YaHei","PingFang SC",sans-serif':'bold 12px "Microsoft YaHei","PingFang SC",sans-serif';
   g.textAlign='center';
   const label=m.name;
   const w=g.measureText(label).width+14;
-  const ny=sy-(m.type==='boss_beetle'?150:118);
+  const ny=sy-(isBoss?240:118);
   g.fillStyle='rgba(8,12,20,.72)';
   g.beginPath();
   const r=5;
@@ -1285,7 +1322,9 @@ WMap.prototype.drawHomeItem=function(g,h,sx,sy,t){
   const bob=Math.sin(t*2+h.phase)*2;
   const glow=0.5+0.5*Math.sin(t*3+h.phase);
   g.fillStyle='rgba(0,0,0,.24)';g.beginPath();g.ellipse(sx,sy+10,34,12,0,0,Math.PI*2);g.fill();
-  if(h.kind==='warehouse'){
+  if(h.kind==='npc'){
+    if(h.actor)h.actor.render(g,sx,sy,1,{dir:1});
+  } else if(h.kind==='warehouse'){
     // 木箱堆（大箱+小箱）
     g.fillStyle='#a8794a';g.fillRect(sx-34,sy-44+bob,68,52);
     g.strokeStyle='#6d4a24';g.lineWidth=3;g.strokeRect(sx-34,sy-44+bob,68,52);
@@ -1322,6 +1361,12 @@ WMap.prototype.drawHomeItem=function(g,h,sx,sy,t){
   g.fillRect(sx-w/2,ny-14,w,22);
   g.strokeStyle=`rgba(240,213,144,${0.4+glow*0.4})`;g.lineWidth=1;g.strokeRect(sx-w/2,ny-14,w,22);
   g.fillStyle='#f0d590';g.fillText(label,sx,ny+2);
+  // NPC 头顶任务标记：当该 NPC 承接当前可领取/进行中的主线时显示 “!”
+  if(h.kind==='npc'&&this.opts.isQuestNpc&&this.opts.isQuestNpc(h)){
+    const mx=sx+w/2+13,my=ny-3;
+    g.fillStyle='#f0d590';g.beginPath();g.arc(mx,my,10,0,Math.PI*2);g.fill();
+    g.fillStyle='#3a2708';g.font='bold 15px sans-serif';g.fillText('!',mx,my+5);
+  }
 };
 WMap.prototype.drawGate=function(g,gt,sx,sy,t){  const glow=0.5+0.5*Math.sin(t*2.2);
   // 光柱
@@ -1365,7 +1410,13 @@ WMap.prototype.drawGate=function(g,gt,sx,sy,t){  const glow=0.5+0.5*Math.sin(t*2
   g.fillRect(sx-w/2,sy-118,w,20);
   g.strokeStyle='rgba(160,210,255,.6)';g.lineWidth=1;g.strokeRect(sx-w/2,sy-118,w,20);
   g.fillStyle='#cfe6ff';g.fillText(txt,sx,sy-104);
-  if(gt.requireLevel>0){
+  // v2.0 封印态：目标世界未解锁（需先击败本世界首领）
+  const sealed=!!(gt.requireUnlocked&&this.opts&&this.opts.isUnlocked&&!this.opts.isUnlocked(gt.to));
+  if(sealed){
+    g.font='bold 11px "Microsoft YaHei",sans-serif';
+    g.fillStyle='#ff9a8f';
+    g.fillText('封印中 · 击败本世界首领',sx,sy-84);
+  } else if(gt.requireLevel>0){
     g.font='10px "Microsoft YaHei",sans-serif';
     g.fillStyle=gt.requireLevel>((this.hero&&this.lv)||99)?'#ff9a8f':'#ffd590';
     g.fillText('需 Lv.'+gt.requireLevel,sx,sy-84);
@@ -1658,7 +1709,7 @@ WMap.prototype.openMapModal=function(){
     if(this.worldId==='HOME'&&this.groundHome){ this._mapThumbFallback=this.groundHome; }
     else{
       const img=new Image();
-      img.src=RES+'maps/'+this.worldId+'_thumb.webp';
+      img.src=RES+'maps/'+this.worldId+'_thumb.webp?v=2.0.1';
       this._mapThumbFallback=img;
     }
   }

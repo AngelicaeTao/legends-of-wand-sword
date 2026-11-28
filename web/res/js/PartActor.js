@@ -21,8 +21,8 @@
 
   function loadBundle(bundle) {
     if (cache.has(bundle)) return cache.get(bundle);
-    const p = fetch(`/res/v3/parts/${bundle}/parts.json`).then(r => r.json());
-    const a = fetch(`/res/v3/parts/${bundle}/actions.json`).then(r => r.json());
+    const p = fetch(`/res/v3/parts/${bundle}/parts.json?v=2.0.1`).then(r => r.json());
+    const a = fetch(`/res/v3/parts/${bundle}/actions.json?v=2.0.1`).then(r => r.json());
     const entry = { ready: Promise.all([p, a]).then(([parts, actions]) => {
       entry.parts = parts; entry.actions = actions;
       // 性能：z 序排序只算一次（原实现每帧每实例 sort）
@@ -42,7 +42,7 @@
           const im = new Image();
           im.onload = () => { imgs[name] = im; res(); };
           im.onerror = () => { imgs[name] = null; res(); };
-          im.src = `/res/v3/parts/${bundle}/${info.file}`;
+          im.src = `/res/v3/parts/${bundle}/${info.file}?v=2.0.1`;
         })
       );
       return Promise.all(jobs).then(() => { entry.imgs = imgs; });

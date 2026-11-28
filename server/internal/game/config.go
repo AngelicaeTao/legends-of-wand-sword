@@ -230,6 +230,9 @@ type WorldDef struct {
 	Level  int        `json:"level"`
 	Theme  string     `json:"theme"`
 	BG     string     `json:"bg"`
+	WorldW int        `json:"worldW,omitempty"` // v2.0 每世界尺寸（缺省 7680×4320）
+	WorldH int        `json:"worldH,omitempty"`
+	Paint  *bool      `json:"paint,omitempty"` // false=地形已完整绘制，客户端跳过补绘
 	Spawns []SpawnDef `json:"spawns"`
 	// v1.9.46 地图产出系数：宝箱经验/金币/钻石/材料/药水按此放大。
 	// 配置为 1.0 / 1.2 / 1.44 …（每张图比上一张多 20%，累积），未配置时按 1.0 处理。
@@ -248,6 +251,10 @@ type SpawnDef struct {
 	// v1.9.46 BOSS 点位随机落点：坐标只是兜底，客户端在可行走区域随机取点后渲染。
 	// 服务端只按 nodeId 判胜负与冷却，不校验坐标，故随机不影响结算权威性。
 	RandomPos bool `json:"randomPos"`
+	// v2.0 世界地图：BOSS 独立等级、击杀解锁世界、GATE 是否要求目标世界已解锁
+	Level           int    `json:"level"`
+	Unlock          string `json:"unlock"`
+	RequireUnlocked bool   `json:"requireUnlocked"`
 }
 
 var (

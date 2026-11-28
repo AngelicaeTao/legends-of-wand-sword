@@ -1,0 +1,172 @@
+{
+  "bundle": "mon_boss_queen",
+  "format": "parted_actions_v1",
+  "states": {
+    "idle": {
+      "fps": 6,
+      "loop": true,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 260,
+          "parts": {
+            "body": {
+              "sy": 1.02,
+              "dy": -1
+            }
+          }
+        },
+        {
+          "t": 520,
+          "parts": {}
+        },
+        {
+          "t": 780,
+          "parts": {
+            "body": {
+              "sy": 0.98,
+              "dy": 1
+            }
+          }
+        },
+        {
+          "t": 1040,
+          "parts": {}
+        }
+      ]
+    },
+    "attack": {
+      "fps": 12,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 90,
+          "parts": {
+            "root": {
+              "sx": 0.92,
+              "sy": 1.08
+            },
+            "body": {
+              "sy": 1.08
+            }
+          }
+        },
+        {
+          "t": 180,
+          "parts": {
+            "root": {
+              "dx": 6,
+              "sx": 1.1,
+              "sy": 0.92
+            },
+            "body": {
+              "sy": 0.92
+            }
+          }
+        },
+        {
+          "t": 300,
+          "parts": {
+            "root": {
+              "dx": 3,
+              "sx": 1.02,
+              "sy": 0.98
+            }
+          }
+        },
+        {
+          "t": 420,
+          "parts": {}
+        }
+      ]
+    },
+    "hit": {
+      "fps": 10,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 60,
+          "parts": {
+            "root": {
+              "dx": -4
+            },
+            "body": {
+              "sx": 1.06,
+              "sy": 0.94
+            },
+            "_flash": 1
+          }
+        },
+        {
+          "t": 120,
+          "parts": {
+            "root": {
+              "dx": -2
+            },
+            "_flash": 0.4
+          }
+        },
+        {
+          "t": 200,
+          "parts": {}
+        }
+      ]
+    },
+    "die": {
+      "fps": 8,
+      "loop": false,
+      "keys": [
+        {
+          "t": 0,
+          "parts": {}
+        },
+        {
+          "t": 180,
+          "parts": {
+            "root": {
+              "sy": 0.78
+            },
+            "body": {
+              "sx": 1.08,
+              "sy": 0.86
+            }
+          }
+        },
+        {
+          "t": 420,
+          "parts": {
+            "root": {
+              "sy": 0.42,
+              "dy": -2
+            },
+            "body": {
+              "sx": 1.16,
+              "sy": 0.5
+            },
+            "_alpha": 0.7
+          }
+        },
+        {
+          "t": 680,
+          "parts": {
+            "root": {
+              "sy": 0.2
+            },
+            "_alpha": 0
+          }
+        }
+      ]
+    }
+  }
+}

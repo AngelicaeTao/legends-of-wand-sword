@@ -1,312 +1,723 @@
 {
   "world": "W1 青草平原",
-  "version": "1.0",
+  "version": "2.0",
   "scale_anchor": {
-    "role_logic_w": 32,
-    "role_scale_root": 4,
-    "role_scene_w": 128,
-    "main_road_px": 384,
-    "ratio": "role = main_road / 3",
-    "map_pixel_to_scene": "1:1（程序按 1 图像像素=1 场景单位加载地形，不再缩放）",
-    "move_speed_px_s": 960,
-    "move_speed_note": "×4，横穿世界仍约16s",
-    "cell_map_px": 8,
-    "sub_per_design_cell": 4,
-    "unit_px": 32
+    "design_grid": [
+      480,
+      270
+    ],
+    "unit_px": 24,
+    "world_px": [
+      11520,
+      6480
+    ],
+    "terrain_px": [
+      7680,
+      4320
+    ],
+    "mask_px": [
+      960,
+      540
+    ],
+    "terrain_upscale": 1.5,
+    "mask_px_per_world_unit": 0.08333333333333333,
+    "corridor_width_world_px": {
+      "main": 480,
+      "branch": 336,
+      "dark": 240
+    }
   },
-  "logical_grid": [
-    480,
-    270
-  ],
-  "world_px": [
-    15360,
-    8640
-  ],
-  "split_line_design": [
-    240,
-    135
-  ],
-  "palette_16": [
-    "#0d1b12",
-    "#162b1c",
-    "#1f3d26",
-    "#2e5636",
-    "#3f7049",
-    "#55965f",
-    "#7ab86e",
-    "#3a3226",
-    "#5a4a33",
-    "#7d6647",
-    "#a8916a",
-    "#c9b792",
-    "#4a3a63",
-    "#6d5590",
-    "#2b5f78",
-    "#4a93b5"
-  ],
-  "corridor_width_px": {
-    "main": 384,
-    "branch": 256,
-    "dark": 192
+  "files": {
+    "terrain": "W1_full_half.webp",
+    "mask": "W1_mask_half.png",
+    "thumb": "W1_thumb.webp"
   },
   "mask_legend": {
     "white_255": "可走",
-    "black_0": "墙/不可走"
+    "black_0": "墙/不可走/水面"
   },
-  "chunks": {
-    "NW": {
-      "file": "W1_NW.png",
-      "mask": "W1_NW_mask.png",
-      "design": [
-        0,
-        0,
-        240,
+  "regions": [
+    {
+      "id": "A",
+      "center": [
+        70,
         135
       ],
-      "pixels": [
-        0,
-        0,
-        7680,
-        4320
-      ],
-      "edges": {
-        "top": [
-          {
-            "from": 234,
-            "to": 239,
-            "center": 236,
-            "width_cells": 6
-          }
-        ],
-        "right": [
-          {
-            "from": 0,
-            "to": 134,
-            "center": 67,
-            "width_cells": 135
-          }
-        ],
-        "bottom": [
-          {
-            "from": 0,
-            "to": 239,
-            "center": 119,
-            "width_cells": 240
-          }
-        ],
-        "left": [
-          {
-            "from": 129,
-            "to": 134,
-            "center": 131,
-            "width_cells": 6
-          }
-        ]
-      }
+      "radius": 22,
+      "kind": "stone"
     },
-    "NE": {
-      "file": "W1_NE.png",
-      "mask": "W1_NE_mask.png",
-      "design": [
-        240,
-        0,
-        480,
+    {
+      "id": "HUB",
+      "center": [
+        200,
         135
       ],
-      "pixels": [
-        7680,
-        0,
-        15360,
-        4320
-      ],
-      "edges": {
-        "top": [
-          {
-            "from": 0,
-            "to": 6,
-            "center": 3,
-            "width_cells": 7
-          }
-        ],
-        "right": [
-          {
-            "from": 129,
-            "to": 134,
-            "center": 131,
-            "width_cells": 6
-          }
-        ],
-        "bottom": [
-          {
-            "from": 0,
-            "to": 239,
-            "center": 119,
-            "width_cells": 240
-          }
-        ],
-        "left": [
-          {
-            "from": 0,
-            "to": 134,
-            "center": 67,
-            "width_cells": 135
-          }
-        ]
-      }
+      "radius": 24,
+      "kind": "stone"
     },
-    "SW": {
-      "file": "W1_SW.png",
-      "mask": "W1_SW_mask.png",
-      "design": [
-        0,
-        135,
-        240,
-        270
+    {
+      "id": "MAIN",
+      "center": [
+        330,
+        135
       ],
-      "pixels": [
-        0,
-        4320,
-        7680,
-        8640
-      ],
-      "edges": {
-        "top": [
-          {
-            "from": 0,
-            "to": 239,
-            "center": 119,
-            "width_cells": 240
-          }
-        ],
-        "right": [
-          {
-            "from": 0,
-            "to": 126,
-            "center": 63,
-            "width_cells": 127
-          }
-        ],
-        "bottom": [],
-        "left": [
-          {
-            "from": 0,
-            "to": 6,
-            "center": 3,
-            "width_cells": 7
-          }
-        ]
-      }
+      "radius": 34,
+      "kind": "boss"
     },
-    "SE": {
-      "file": "W1_SE.png",
-      "mask": "W1_SE_mask.png",
-      "design": [
-        240,
-        135,
-        480,
-        270
+    {
+      "id": "WASTE",
+      "center": [
+        145,
+        48
       ],
-      "pixels": [
-        7680,
-        4320,
-        15360,
-        8640
+      "radius": 32,
+      "kind": "boss"
+    },
+    {
+      "id": "HIGHLAND",
+      "center": [
+        330,
+        42
       ],
-      "edges": {
-        "top": [
-          {
-            "from": 0,
-            "to": 239,
-            "center": 119,
-            "width_cells": 240
-          }
-        ],
-        "right": [
-          {
-            "from": 0,
-            "to": 6,
-            "center": 3,
-            "width_cells": 7
-          }
-        ],
-        "bottom": [],
-        "left": [
-          {
-            "from": 0,
-            "to": 127,
-            "center": 63,
-            "width_cells": 128
-          }
-        ]
-      }
+      "radius": 30,
+      "kind": "boss"
+    },
+    {
+      "id": "RUINS",
+      "center": [
+        250,
+        220
+      ],
+      "radius": 30,
+      "kind": "stone"
+    },
+    {
+      "id": "SECAVE",
+      "center": [
+        400,
+        215
+      ],
+      "radius": 22,
+      "kind": "stone"
+    },
+    {
+      "id": "SWJ",
+      "center": [
+        70,
+        205
+      ],
+      "radius": 16,
+      "kind": "stone"
     }
+  ],
+  "roads": [
+    {
+      "points": [
+        [
+          0,
+          135
+        ],
+        [
+          70,
+          135
+        ],
+        [
+          200,
+          135
+        ],
+        [
+          330,
+          135
+        ],
+        [
+          476,
+          135
+        ]
+      ],
+      "width_cells": 20,
+      "kind": "main"
+    },
+    {
+      "points": [
+        [
+          70,
+          113
+        ],
+        [
+          65,
+          80
+        ],
+        [
+          40,
+          72
+        ],
+        [
+          28,
+          60
+        ],
+        [
+          28,
+          28
+        ],
+        [
+          90,
+          28
+        ],
+        [
+          92,
+          48
+        ],
+        [
+          110,
+          44
+        ],
+        [
+          145,
+          48
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          160,
+          78
+        ],
+        [
+          185,
+          105
+        ],
+        [
+          200,
+          135
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          180,
+          45
+        ],
+        [
+          240,
+          32
+        ],
+        [
+          300,
+          38
+        ],
+        [
+          330,
+          42
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          330,
+          72
+        ],
+        [
+          330,
+          100
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          200,
+          160
+        ],
+        [
+          215,
+          185
+        ],
+        [
+          250,
+          220
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          65,
+          157
+        ],
+        [
+          60,
+          185
+        ],
+        [
+          70,
+          205
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          90,
+          210
+        ],
+        [
+          150,
+          215
+        ],
+        [
+          220,
+          220
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          280,
+          215
+        ],
+        [
+          350,
+          218
+        ],
+        [
+          400,
+          215
+        ]
+      ],
+      "width_cells": 14,
+      "kind": "branch"
+    },
+    {
+      "points": [
+        [
+          400,
+          195
+        ],
+        [
+          385,
+          165
+        ],
+        [
+          355,
+          145
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "dark"
+    },
+    {
+      "points": [
+        [
+          70,
+          205
+        ],
+        [
+          42,
+          228
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "dead"
+    },
+    {
+      "points": [
+        [
+          70,
+          205
+        ],
+        [
+          72,
+          250
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "dead"
+    },
+    {
+      "points": [
+        [
+          70,
+          205
+        ],
+        [
+          38,
+          178
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "dead"
+    },
+    {
+      "points": [
+        [
+          400,
+          215
+        ],
+        [
+          432,
+          245
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "dead"
+    },
+    {
+      "points": [
+        [
+          330,
+          42
+        ],
+        [
+          370,
+          65
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "dead"
+    },
+    {
+      "points": [
+        [
+          250,
+          220
+        ],
+        [
+          285,
+          248
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "dead"
+    },
+    {
+      "points": [
+        [
+          92,
+          48
+        ],
+        [
+          80,
+          50
+        ]
+      ],
+      "width_cells": 10,
+      "kind": "bridge_road"
+    }
+  ],
+  "water": {
+    "lake": [
+      55,
+      50,
+      20,
+      15
+    ],
+    "island": [
+      55,
+      50,
+      7
+    ],
+    "bridge": [
+      62,
+      80,
+      50,
+      6
+    ]
   },
   "portals": [
     {
-      "id": "A",
-      "semantic": "世界西侧通道口（连前一世界）",
+      "id": "WEST",
+      "semantic": "世界西侧入口",
       "xy": [
         0,
         135
-      ],
-      "edge": "left"
+      ]
     },
     {
-      "id": "B",
-      "semantic": "世界东侧通道口（连下一世界）",
+      "id": "EAST_W2",
+      "semantic": "东门 → W2（击败主线 BOSS 后开启）",
       "xy": [
-        479,
+        476,
         135
-      ],
-      "edge": "right"
-    },
-    {
-      "id": "C",
-      "semantic": "世界北侧通道口（高阶捷径）",
-      "xy": [
-        240,
-        0
-      ],
-      "edge": "top"
+      ]
     }
   ],
   "points": [
     {
-      "id": "SAFE",
-      "semantic": "中央安全区/传送锚点",
+      "id": "W1_SAFE",
       "xy": [
-        240,
+        70,
         135
       ],
-      "kind": "safe"
+      "kind": "anchor"
     },
     {
-      "id": "N01",
-      "semantic": "上部大环西北角",
+      "id": "W1_BOSS_MAIN",
+      "xy": [
+        330,
+        135
+      ],
+      "kind": "boss",
+      "bossMonster": "boss_beetle",
+      "level": 10,
+      "unlock": "W2"
+    },
+    {
+      "id": "W1_BOSS_GOLEM",
+      "xy": [
+        145,
+        48
+      ],
+      "kind": "boss",
+      "bossMonster": "boss_golem",
+      "level": 6
+    },
+    {
+      "id": "W1_BOSS_MANTIS",
+      "xy": [
+        330,
+        42
+      ],
+      "kind": "boss",
+      "bossMonster": "boss_mantis",
+      "level": 8
+    },
+    {
+      "id": "W1_BOSS_QUEEN",
+      "xy": [
+        250,
+        220
+      ],
+      "kind": "boss",
+      "bossMonster": "boss_queen",
+      "level": 7
+    },
+    {
+      "id": "W1_BOSS_SHAMAN",
+      "xy": [
+        400,
+        215
+      ],
+      "kind": "boss",
+      "bossMonster": "boss_shaman",
+      "level": 5
+    },
+    {
+      "id": "W1_E01",
+      "xy": [
+        57,
+        52
+      ],
+      "kind": "elite",
+      "bossMonster": "slime"
+    },
+    {
+      "id": "W1_E02",
       "xy": [
         110,
-        55
+        44
       ],
-      "kind": "normal"
+      "kind": "elite",
+      "bossMonster": "skeleton"
     },
     {
-      "id": "N02",
-      "semantic": "下部环路中点",
+      "id": "W1_E03",
+      "xy": [
+        386,
+        172
+      ],
+      "kind": "elite",
+      "bossMonster": "bat"
+    },
+    {
+      "id": "W1_E04",
+      "xy": [
+        72,
+        248
+      ],
+      "kind": "elite",
+      "bossMonster": "skeleton_archer"
+    },
+    {
+      "id": "W1_M01",
+      "xy": [
+        160,
+        78
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_M02",
+      "xy": [
+        185,
+        105
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_M03",
       "xy": [
         240,
-        205
+        32
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_M04",
+      "xy": [
+        300,
+        38
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_M05",
+      "xy": [
+        215,
+        185
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_M06",
+      "xy": [
+        150,
+        215
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_M07",
+      "xy": [
+        350,
+        218
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_M08",
+      "xy": [
+        98,
+        47
+      ],
+      "kind": "mob"
+    },
+    {
+      "id": "W1_C01",
+      "xy": [
+        53,
+        50
       ],
       "kind": "chest"
     },
     {
-      "id": "N03",
-      "semantic": "暗道中段",
+      "id": "W1_C02",
       "xy": [
-        165,
-        230
+        285,
+        248
       ],
-      "kind": "elite"
+      "kind": "chest"
+    },
+    {
+      "id": "W1_C03",
+      "xy": [
+        432,
+        245
+      ],
+      "kind": "chest"
+    },
+    {
+      "id": "W1_C04",
+      "xy": [
+        42,
+        228
+      ],
+      "kind": "chest"
+    },
+    {
+      "id": "W1_C05",
+      "xy": [
+        72,
+        250
+      ],
+      "kind": "chest"
+    },
+    {
+      "id": "W1_C06",
+      "xy": [
+        370,
+        65
+      ],
+      "kind": "chest"
+    },
+    {
+      "id": "W1_C07",
+      "xy": [
+        38,
+        178
+      ],
+      "kind": "chest"
+    },
+    {
+      "id": "W1_P01",
+      "xy": [
+        75,
+        145
+      ],
+      "kind": "potion"
+    },
+    {
+      "id": "W1_P02",
+      "xy": [
+        195,
+        145
+      ],
+      "kind": "potion"
+    },
+    {
+      "id": "W1_P03",
+      "xy": [
+        240,
+        210
+      ],
+      "kind": "potion"
+    },
+    {
+      "id": "W1_P04",
+      "xy": [
+        330,
+        150
+      ],
+      "kind": "potion"
+    },
+    {
+      "id": "W1_G_W2",
+      "xy": [
+        476,
+        135
+      ],
+      "kind": "gate",
+      "to": "W2",
+      "requireLevel": 10,
+      "requireUnlocked": true
     }
   ],
-  "programmer_note": "4块按 design 坐标拼成480×270设计网格(每格32px)；4块掩码白色并集=移动可行走区，据此生成碰撞/NavMesh。主通道384px=角色显示宽128px×3。"
+  "programmer_note": "设计格 480×270，1 格=24 世界单位；地形贴图按 16px/格生成，运行时放大 1.5×；掩码 2px/格（12 世界单位/像素）。点位坐标=设计格×24。"
 }

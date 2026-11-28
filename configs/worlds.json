@@ -11,168 +11,230 @@
         {
           "id": "W1_SAFE",
           "type": "ANCHOR",
-          "x": 2560,
-          "y": 2176
+          "x": 1680,
+          "y": 3240
         },
         {
-          "id": "W1_BOSS",
+          "id": "W1_BOSS_MAIN",
           "type": "BOSS",
-          "tier": 1,
-          "x": 3840,
-          "y": 1400,
-          "bossMonster": "map_boss",
-          "randomPos": true,
-          "_note": "v1.9.46 每图常驻首领：客户端在可行走区域随机落点，180s 冷却；属性约为同图精英的 1.5 倍"
+          "x": 7920,
+          "y": 3240,
+          "tier": 5,
+          "bossMonster": "boss_beetle",
+          "level": 10,
+          "unlock": "W2"
+        },
+        {
+          "id": "W1_BOSS_GOLEM",
+          "type": "BOSS",
+          "x": 3480,
+          "y": 1152,
+          "tier": 4,
+          "bossMonster": "boss_golem",
+          "level": 6
+        },
+        {
+          "id": "W1_BOSS_MANTIS",
+          "type": "BOSS",
+          "x": 7920,
+          "y": 1008,
+          "tier": 5,
+          "bossMonster": "boss_mantis",
+          "level": 8
+        },
+        {
+          "id": "W1_BOSS_QUEEN",
+          "type": "BOSS",
+          "x": 6000,
+          "y": 5280,
+          "tier": 4,
+          "bossMonster": "boss_queen",
+          "level": 7
+        },
+        {
+          "id": "W1_BOSS_SHAMAN",
+          "type": "BOSS",
+          "x": 9600,
+          "y": 5160,
+          "tier": 3,
+          "bossMonster": "boss_shaman",
+          "level": 5
         },
         {
           "id": "W1_E01",
-          "type": "MOB",
+          "type": "ELITE",
+          "x": 1368,
+          "y": 1248,
           "tier": 2,
-          "x": 288,
-          "y": 2112,
-          "_note": "v1.9.5：新手区不放精英（原 Lv.3 精英对 Lv.1 必杀），改为 tier2 普通怪"
+          "bossMonster": "slime"
         },
         {
           "id": "W1_E02",
-          "type": "MOB",
+          "type": "ELITE",
+          "x": 2640,
+          "y": 1056,
           "tier": 2,
-          "x": 288,
-          "y": 2208,
-          "_note": "v1.9.5：新手区不放精英（原 Lv.3 精英对 Lv.1 必杀），改为 tier2 普通怪"
+          "bossMonster": "skeleton"
         },
         {
           "id": "W1_E03",
           "type": "ELITE",
-          "tier": 2,
-          "x": 7296,
-          "y": 2112
+          "x": 9264,
+          "y": 4128,
+          "tier": 3,
+          "bossMonster": "bat"
         },
         {
-          "id": "W1_C04",
-          "type": "CHEST",
-          "tier": 1,
-          "x": 2016,
-          "y": 864
+          "id": "W1_E04",
+          "type": "ELITE",
+          "x": 1728,
+          "y": 5952,
+          "tier": 2,
+          "bossMonster": "skeleton_archer"
+        },
+        {
+          "id": "W1_M01",
+          "type": "MOB",
+          "x": 3840,
+          "y": 1872,
+          "tier": 1
+        },
+        {
+          "id": "W1_M02",
+          "type": "MOB",
+          "x": 4440,
+          "y": 2520,
+          "tier": 1
+        },
+        {
+          "id": "W1_M03",
+          "type": "MOB",
+          "x": 5760,
+          "y": 768,
+          "tier": 2
+        },
+        {
+          "id": "W1_M04",
+          "type": "MOB",
+          "x": 7200,
+          "y": 912,
+          "tier": 2
         },
         {
           "id": "W1_M05",
           "type": "MOB",
-          "tier": 1,
-          "x": 5568,
-          "y": 864
+          "x": 5160,
+          "y": 4440,
+          "tier": 1
         },
         {
           "id": "W1_M06",
           "type": "MOB",
-          "tier": 1,
-          "x": 2112,
-          "y": 3360
+          "x": 3600,
+          "y": 5160,
+          "tier": 1
         },
         {
           "id": "W1_M07",
           "type": "MOB",
-          "tier": 1,
-          "x": 5568,
-          "y": 3360
+          "x": 8400,
+          "y": 5232,
+          "tier": 2
         },
         {
           "id": "W1_M08",
           "type": "MOB",
-          "tier": 1,
-          "x": 3840,
-          "y": 4128
+          "x": 2352,
+          "y": 1128,
+          "tier": 1
         },
         {
-          "id": "W1_M09",
-          "type": "MOB",
-          "tier": 1,
-          "x": 3744,
-          "y": 288
-        },
-        {
-          "id": "W1_C10",
+          "id": "W1_C01",
           "type": "CHEST",
-          "tier": 1,
-          "x": 1632,
-          "y": 2112
+          "x": 1272,
+          "y": 1200,
+          "tier": 2
         },
         {
-          "id": "W1_M11",
-          "type": "MOB",
-          "tier": 1,
-          "x": 5184,
-          "y": 2112
-        },
-        {
-          "id": "W1_E12",
-          "type": "MOB",
-          "tier": 2,
-          "x": 6720,
-          "y": 1056,
-          "_note": "v1.9.5：新手区不放精英（原 Lv.3 精英对 Lv.1 必杀），改为 tier2 普通怪"
-        },
-        {
-          "id": "W1_C13",
+          "id": "W1_C02",
           "type": "CHEST",
-          "tier": 1,
-          "x": 960,
-          "y": 1152
+          "x": 6840,
+          "y": 5952,
+          "tier": 2
         },
         {
-          "id": "W1_C14",
+          "id": "W1_C03",
           "type": "CHEST",
-          "tier": 1,
-          "x": 6240,
-          "y": 2400
+          "x": 10368,
+          "y": 5880,
+          "tier": 2
         },
         {
-          "id": "W1_M15",
-          "type": "MOB",
-          "tier": 1,
-          "x": 2688,
-          "y": 2208
+          "id": "W1_C04",
+          "type": "CHEST",
+          "x": 1008,
+          "y": 5472,
+          "tier": 1
         },
         {
-          "id": "W1_M16",
-          "type": "MOB",
-          "tier": 1,
-          "x": 3168,
-          "y": 3264
+          "id": "W1_C05",
+          "type": "CHEST",
+          "x": 1728,
+          "y": 6000,
+          "tier": 2
+        },
+        {
+          "id": "W1_C06",
+          "type": "CHEST",
+          "x": 8880,
+          "y": 1560,
+          "tier": 1
+        },
+        {
+          "id": "W1_C07",
+          "type": "CHEST",
+          "x": 912,
+          "y": 4272,
+          "tier": 1
+        },
+        {
+          "id": "W1_P01",
+          "type": "POTION",
+          "x": 1800,
+          "y": 3480
+        },
+        {
+          "id": "W1_P02",
+          "type": "POTION",
+          "x": 4680,
+          "y": 3480
+        },
+        {
+          "id": "W1_P03",
+          "type": "POTION",
+          "x": 5760,
+          "y": 5040
+        },
+        {
+          "id": "W1_P04",
+          "type": "POTION",
+          "x": 7920,
+          "y": 3600
         },
         {
           "id": "W1_G_W2",
           "type": "GATE",
+          "x": 11424,
+          "y": 3240,
           "to": "W2",
           "requireLevel": 10,
-          "x": 7664,
-          "y": 2160
-        },
-        {
-          "id": "W1_H01",
-          "type": "POTION",
-          "tier": 1,
-          "x": 2112,
-          "y": 864,
-          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
-        },
-        {
-          "id": "W1_H02",
-          "type": "POTION",
-          "tier": 1,
-          "x": 1536,
-          "y": 2112,
-          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
-        },
-        {
-          "id": "W1_H03",
-          "type": "POTION",
-          "tier": 1,
-          "x": 1056,
-          "y": 1152,
-          "_note": "v1.9.27 草药：采集得回血药水，2分钟 respawn"
+          "requireUnlocked": true
         }
       ],
-      "rewardMult": 1.0
+      "rewardMult": 1.0,
+      "worldW": 11520,
+      "worldH": 6480,
+      "paint": false
     },
     {
       "id": "W2",
@@ -1121,7 +1183,7 @@
     "eliteBaseSec": 180,
     "chestBaseSec": 0,
     "jitter": 0.2,
-    "activeDensityCap": 8,
+    "activeDensityCap": 12,
     "potionBaseSec": 120
   }
 }

@@ -367,6 +367,8 @@ func health(w http.ResponseWriter, r *http.Request) {
 }
 
 func getConfig(w http.ResponseWriter, r *http.Request) {
+	// 配置会随版本更新（世界尺寸/点位/BOSS 解锁等），禁止浏览器启发式缓存。
+	w.Header().Set("Cache-Control", "no-store")
 	c := game.C()
 	jsonOut(w, map[string]any{
 		"classes": c.Classes, "skills": c.Skills, "equipment": c.Equipment,
@@ -413,21 +415,27 @@ func stateLoad(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, map[string]any{"exists": false})
 		return
 	}
-	// 老存档迁移（v1.8）：世界分辨率由 15360×8640 折半为 7680×4320，
-	// 坐标超出新世界范围的存档按比例折半；折半后若落在旧默认出生点（中央湖内）
-	// 或边界外，统一点落回 W1 通道安全点。
+	// 老存档迁移：非 W1 世界沿用 v1.8 的 15360→7680 折半；
+	// v2.0 W1 已扩到 11520×6480，超出新边界的存档直接落回新安全点（客户端还会就近修正落墙）。
 	migrated := false
-	if p.World.X > 7680 || p.World.Y > 4320 {
-		p.World.X, p.World.Y = p.World.X/2, p.World.Y/2
-		migrated = true
-	}
-	if p.World.WorldID == "W1" && p.World.X >= 3700 && p.World.X <= 4000 && p.World.Y >= 2050 && p.World.Y <= 2260 {
-		p.World.X, p.World.Y = 2560, 2176
-		migrated = true
-	}
-	if p.World.X < 32 || p.World.Y < 32 || p.World.X > 7648 || p.World.Y > 4288 {
-		p.World.X, p.World.Y = 2560, 2176
-		migrated = true
+	if p.World.WorldID == "W1" {
+		if p.World.X >= 3700 && p.World.X <= 4000 && p.World.Y >= 2050 && p.World.Y <= 2260 {
+			p.World.X, p.World.Y = 1680, 3240
+			migrated = true
+		}
+		if p.World.X < 32 || p.World.Y < 32 || p.World.X > 11488 || p.World.Y > 6448 {
+			p.World.X, p.World.Y = 1680, 3240
+			migrated = true
+		}
+	} else {
+		if p.World.X > 7680 || p.World.Y > 4320 {
+			p.World.X, p.World.Y = p.World.X/2, p.World.Y/2
+			migrated = true
+		}
+		if p.World.X < 32 || p.World.Y < 32 || p.World.X > 7648 || p.World.Y > 4288 {
+			p.World.X, p.World.Y = 2560, 2176
+			migrated = true
+		}
 	}
 	// v1.9.7：技能表按交付包重写 + appearance 补齐（老玩家不会被迫重新创建角色）
 	if p.Migrate() {
@@ -435,6 +443,10 @@ func stateLoad(w http.ResponseWriter, r *http.Request) {
 	}
 	// v1.9.38 武器系归一：老档武器按当前职业归入对应系（登录读档即平滑生效）
 	if p.MigrateWeaponClass() {
+		migrated = true
+	}
+	// 每日任务按服务端日期懒重置；永久主线领取记录不受影响。
+	if _, changed := ensureDailyQuests(p, game.ServerNow()); changed {
 		migrated = true
 	}
 	if migrated {
@@ -712,6 +724,26 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 	}
 	// 武器解封 + 职业池校验：等级不足/跨职业的技能自动剔除（服务端裁定）
 	bd := filterBD(p, q.BD)
+	// v2.0：带点位的大世界战斗，BOSS 独立等级以配置为准（不被客户端传入的等级覆盖）
+	if q.WorldID != "" && q.NodeID != "" {
+		for _, wd := range game.C().Worlds.Worlds {
+			if wd.ID != q.WorldID {
+				continue
+			}
+			for i := range wd.Spawns {
+				sp := &wd.Spawns[i]
+				if sp.ID != q.NodeID {
+					continue
+				}
+				if sp.Level > 0 {
+					q.MonsterLv = sp.Level
+				}
+				if sp.BossMonster != "" {
+					q.MonsterID = sp.BossMonster
+				}
+			}
+		}
+	}
 	req := game.BattleRequest{
 		UserID: q.UserID, Avatar: game.Avatar{Level: p.Core.Level, ClassID: p.Core.ClassID, Equip: equip,
 			Passives: p.Skills.Passives}, // v1.9.89 被动特效以存档为准，不接受客户端传参
@@ -730,6 +762,10 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 	req.Progress = playerProgress(p)
 	rep := game.ResolveBattle(req)
 	logs := store.ApplyBattleReport(p, &rep)
+	// v1.9.93 每日「今日讨伐」：仅胜利推进战斗进度（战败不计）
+	if rep.Result == "win" {
+		advanceDailyQuest(p, "battle", game.ServerNow())
+	}
 	// v1.9.31 战败回家园：大世界战败后送回家园休整（记录来源世界，出门可返回）
 	if rep.Result != "win" && p.World.WorldID != "HOME" {
 		p.World.LastWorldID = p.World.WorldID
@@ -1212,24 +1248,35 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		}
 		extra["guildCoin"] = coin
 	case "quest_claim":
-		rw, ok := questRewards[q.QuestID]
-		if !ok {
-			http.Error(w, "未知任务", 400)
-			return
-		}
 		if p.Ext == nil {
 			p.Ext = map[string]any{}
 		}
-		claimed, _ := p.Ext["quests"].(map[string]any)
-		if claimed == nil {
-			claimed = map[string]any{}
+		var rw questReward
+		if _, isDaily := dailyQuestDefs[q.QuestID]; isDaily {
+			var e error
+			rw, e = claimDailyQuest(p, q.QuestID, game.ServerNow())
+			if e != nil {
+				http.Error(w, e.Error(), 409)
+				return
+			}
+		} else {
+			var ok bool
+			rw, ok = questRewards[q.QuestID]
+			if !ok {
+				http.Error(w, "未知任务", 400)
+				return
+			}
+			claimed, _ := p.Ext["quests"].(map[string]any)
+			if claimed == nil {
+				claimed = map[string]any{}
+			}
+			if claimed[q.QuestID] == true {
+				http.Error(w, "该任务奖励已领取", 409)
+				return
+			}
+			claimed[q.QuestID] = true
+			p.Ext["quests"] = claimed
 		}
-		if claimed[q.QuestID] == true {
-			http.Error(w, "该任务奖励已领取", 409)
-			return
-		}
-		claimed[q.QuestID] = true
-		p.Ext["quests"] = claimed
 		p.Core.Gold += rw.Gold
 		p.Core.Gem += rw.Gem
 		p.Core.Material += rw.Mat
@@ -1321,11 +1368,95 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 type questReward struct{ Gold, Gem, Exp, Mat int }
 
 var questRewards = map[string]questReward{
-	"q_kill3":    {800, 30, 300, 0},
-	"q_chest1":   {600, 20, 200, 2},
-	"q_equip4":   {900, 40, 400, 0},
-	"q_enhance1": {700, 25, 250, 1},
-	"q_travel":   {1500, 80, 800, 5},
+	"q_kill3":      {800, 30, 300, 0},
+	"q_chest1":     {600, 20, 200, 2},
+	"q_equip4":     {900, 40, 400, 0},
+	"q_enhance1":   {700, 25, 250, 1},
+	"q_travel":     {1500, 80, 800, 5},
+	"q2_eva_talk":  {300, 10, 100, 0},
+	"q2_herb3":     {600, 15, 200, 1},
+	"q2_w2_win5":   {1200, 30, 500, 2},
+	"q2_w2_chest2": {1000, 25, 400, 3},
+	"q2_enhance1":  {900, 20, 300, 2},
+	"q2_travel_w3": {2200, 80, 1200, 8},
+}
+
+// 每日任务目标与基础奖励。金币/经验按领奖时等级成长，钻石/材料固定。
+type dailyQuestDef struct {
+	Kind   string
+	Goal   int
+	Reward questReward
+}
+
+var dailyQuestDefs = map[string]dailyQuestDef{
+	"d_battle5": {Kind: "battle", Goal: 5, Reward: questReward{Gold: 800, Gem: 10, Exp: 200}},
+	"d_chest2":  {Kind: "chest", Goal: 2, Reward: questReward{Gold: 500, Gem: 5, Exp: 100, Mat: 1}},
+	"d_herb3":   {Kind: "herb", Goal: 3, Reward: questReward{Gold: 400, Gem: 5, Exp: 100, Mat: 1}},
+}
+
+// ensureDailyQuests 以服务端日历日维护当日进度；跨天只替换 dailyQuests，不碰永久主线记录。
+func ensureDailyQuests(p *store.PlayerState, now int64) (map[string]any, bool) {
+	if p.Ext == nil {
+		p.Ext = map[string]any{}
+	}
+	today := time.Unix(now, 0).Format("2006-01-02")
+	daily, _ := p.Ext["dailyQuests"].(map[string]any)
+	date, _ := daily["date"].(string)
+	if daily == nil || date != today {
+		daily = map[string]any{
+			"date":     today,
+			"progress": map[string]any{},
+			"claimed":  map[string]any{},
+		}
+		p.Ext["dailyQuests"] = daily
+		return daily, true
+	}
+	changed := false
+	if progress, _ := daily["progress"].(map[string]any); progress == nil {
+		daily["progress"] = map[string]any{}
+		changed = true
+	}
+	if claimed, _ := daily["claimed"].(map[string]any); claimed == nil {
+		daily["claimed"] = map[string]any{}
+		changed = true
+	}
+	return daily, changed
+}
+
+// advanceDailyQuest 只由服务端权威成功事件调用，不接受客户端直接上报。
+func advanceDailyQuest(p *store.PlayerState, kind string, now int64) {
+	daily, _ := ensureDailyQuests(p, now)
+	progress, _ := daily["progress"].(map[string]any)
+	progress[kind] = numAny(progress, kind, 0) + 1
+}
+
+func dailyRewardAtLevel(base questReward, level int) questReward {
+	if level < 1 {
+		level = 1
+	}
+	multiplier := 1 + float64(level-1)*0.1
+	base.Gold = int(math.Floor(float64(base.Gold)*multiplier + 1e-9))
+	base.Exp = int(math.Floor(float64(base.Exp)*multiplier + 1e-9))
+	return base
+}
+
+func claimDailyQuest(p *store.PlayerState, questID string, now int64) (questReward, error) {
+	def, ok := dailyQuestDefs[questID]
+	if !ok {
+		return questReward{}, fmt.Errorf("未知每日任务")
+	}
+	daily, _ := ensureDailyQuests(p, now)
+	claimed, _ := daily["claimed"].(map[string]any)
+	if claimed[questID] == true {
+		return questReward{}, fmt.Errorf("今日任务奖励已领取")
+	}
+	progress, _ := daily["progress"].(map[string]any)
+	current := int(numAny(progress, def.Kind, 0))
+	if current < def.Goal {
+		return questReward{}, fmt.Errorf("任务进度不足（%d/%d）", current, def.Goal)
+	}
+	claimed[questID] = true
+	return dailyRewardAtLevel(def.Reward, p.Core.Level), nil
 }
 
 // ---------- 辅助 ----------

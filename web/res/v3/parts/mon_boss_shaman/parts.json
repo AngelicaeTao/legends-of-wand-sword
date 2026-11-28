@@ -1,0 +1,31 @@
+{
+  "bundle": "mon_boss_shaman",
+  "format": "parted_sprite_v1",
+  "character_size": [
+    56,
+    56
+  ],
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "pivot": "rotation center relative to cropped PNG top-left (logic px)",
+  "anchor": "pivot position in character coord (y up+)",
+  "z": "draw order, larger=front",
+  "parts": {
+    "body": {
+      "file": "body.png",
+      "size": [
+        43,
+        56
+      ],
+      "pivot": [
+        21.5,
+        56
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "z": 1
+    }
+  },
+  "note": "蘑菇术士：单图 BOSS 精灵，屏幕 224px"
+}

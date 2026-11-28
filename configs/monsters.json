@@ -115,7 +115,8 @@
       "gold": 1200,
       "dropTier": 5,
       "_note": "v1.9.68 组队副本专属首领：三人共享一个 BOSS，血量由副本 bossHpMult 与人数系数再放大；单人挑战会明显吃力，符合推荐战力设计。"
-    },    {
+    },
+    {
       "id": "map_boss",
       "name": "图域首领",
       "sprite": "boss_beetle",
@@ -131,6 +132,66 @@
       "gold": 60,
       "dropTier": 4,
       "_note": "v1.9.46 大地图每图一个首领：base 约为同图精英的 1.5 倍（精英=普通×1.8hp/1.4atk），不叠加精英倍率；growth 1.16 略高于普通怪，保证高等级图首领仍强于精英"
+    },
+    {
+      "id": "boss_golem",
+      "name": "藤蔓巨像",
+      "sprite": "boss_golem",
+      "isBoss": true,
+      "base": {
+        "hp": 320,
+        "atk": 14,
+        "def": 10
+      },
+      "growth": 1.1,
+      "exp": 600,
+      "gold": 720,
+      "dropTier": 3
+    },
+    {
+      "id": "boss_mantis",
+      "name": "螳螂刀客",
+      "sprite": "boss_mantis",
+      "isBoss": true,
+      "base": {
+        "hp": 190,
+        "atk": 28,
+        "def": 3
+      },
+      "growth": 1.09,
+      "exp": 560,
+      "gold": 690,
+      "dropTier": 3
+    },
+    {
+      "id": "boss_queen",
+      "name": "蜂巢女王",
+      "sprite": "boss_queen",
+      "isBoss": true,
+      "base": {
+        "hp": 230,
+        "atk": 24,
+        "def": 4
+      },
+      "growth": 1.09,
+      "exp": 580,
+      "gold": 700,
+      "dropTier": 3
+    },
+    {
+      "id": "boss_shaman",
+      "name": "蘑菇术士",
+      "sprite": "boss_shaman",
+      "isBoss": true,
+      "base": {
+        "hp": 210,
+        "atk": 26,
+        "def": 5
+      },
+      "growth": 1.09,
+      "exp": 520,
+      "gold": 640,
+      "dropTier": 3
     }
   ],
   "spawnRule": {
