@@ -142,23 +142,34 @@ miniCvEl.addEventListener('click',(e)=>{
   if(worldMap&&worldMap.active)worldMap.openMapModal();
 });
 
-// v1.9.64 小地图下方旗标条：跟踪状态 + 距离，点一下清除标记
+// v1.9.64 小地图下方旗标条：跟踪状态 + 距离，点一下打开大地图（在那里可增删标记）
+// v1.9.82 多标记点：条上只放摘要（个数 + 最近的那个的距离），逐个管理去大地图列表
 const mmPinEl=$('mmPin'), mmPinTxt=$('mmPinTxt');
 let _mmPinText='';
 function refreshMmPin(){
   if(!mmPinEl||!mmPinTxt)return;
-  const p=(worldMap&&worldMap.curPin)?worldMap.curPin():null;
-  if(!p){
+  const wp=(worldMap&&worldMap.worldPins)?worldMap.worldPins():[];
+  if(!wp.length){
     if(!mmPinEl.classList.contains('hidden'))mmPinEl.classList.add('hidden');
     _mmPinText=''; return;
   }
   mmPinEl.classList.remove('hidden');
-  mmPinEl.classList.toggle('off',!p.track);
-  const d=worldMap.pinDist();
-  const s=(p.track?'跟踪 ':'标记 ')+(d>0?d+' 格':'附近');
-  if(s!==_mmPinText){ mmPinTxt.textContent=s; _mmPinText=s; }
+  const near=worldMap.curPin();
+  const nTrack=wp.filter(p=>p.track).length;
+  mmPinEl.classList.toggle('off',nTrack===0);
+  const d=worldMap.pinDistOf(near);
+  const head=wp.length>1?('标记 '+wp.length+' · '):(nTrack?'跟踪 ':'标记 ');
+  const s=head+(d>0?d+' 格':'附近');
+  if(s!==_mmPinText){
+    mmPinTxt.textContent=s;
+    mmPinEl.title=wp.length>1?('共 '+wp.length+' 个标记点（'+nTrack+' 个跟踪中）· 点击打开大地图管理'):'点击打开大地图管理标记';
+    _mmPinText=s;
+  }
 }
-if(mmPinEl)mmPinEl.addEventListener('click',()=>{ if(worldMap)worldMap.clearPin(); refreshMmPin(); });
+if(mmPinEl)mmPinEl.addEventListener('click',()=>{
+  if(!worldMap)return;
+  if(worldMap.active)worldMap.openMapModal();      // 与 M 键同一守卫：非大世界态不开图
+});
 
 // 小地图：真实雷达（以角色为中心，与通行掩码同源，北向上）
 // 旧版是写死的装饰底图（假水域/假十字路），与实际路网无关 → 位置"对不上"
@@ -234,24 +245,27 @@ function drawMiniMap(){
   g.strokeStyle='#d9b45b';g.lineWidth=3;
   g.beginPath();g.arc(C,C,R,0,Math.PI*2);g.stroke();
   // ---- v1.9.64 地图旗标：雷达范围内画小旗；范围外且开启跟踪时沿圆边画指向箭头 ----
-  const pin=(worldMap.curPin?worldMap.curPin():null);
-  if(pin){
+  // v1.9.82 多个标记点：逐个画，跟踪中的金色、未跟踪的灰色，箭头按顺序错开半格避免完全重叠
+  const wpins=(worldMap.worldPins?worldMap.worldPins():[]);
+  wpins.forEach((pin,i)=>{
     const px=mx(pin.x), py=my(pin.y), ddx=px-C, ddy=py-C, dd=Math.hypot(ddx,ddy);
+    const gold=pin.track;
     if(dd<=R-7){
       g.save();
-      g.strokeStyle='#6b4c00';g.lineWidth=1.8;
+      g.strokeStyle=gold?'#6b4c00':'#2a3442';g.lineWidth=1.8;
       g.beginPath();g.moveTo(px,py);g.lineTo(px,py-11);g.stroke();
-      g.fillStyle='#ffd65a';g.strokeStyle='#6b4c00';g.lineWidth=1.1;
+      g.fillStyle=gold?'#ffd65a':'#8fa0b8';g.strokeStyle=gold?'#6b4c00':'#2a3442';g.lineWidth=1.1;
       g.beginPath();g.moveTo(px+1,py-11);g.lineTo(px+10,py-7.6);g.lineTo(px+1,py-4.2);g.closePath();
       g.fill();g.stroke();g.restore();
-    } else if(pin.track){
-      const a=Math.atan2(ddy,ddx), ex=C+Math.cos(a)*(R-9), ey=C+Math.sin(a)*(R-9);
+    } else if(gold){
+      const a=Math.atan2(ddy,ddx), rr=R-9-i*0.9;
+      const ex=C+Math.cos(a)*rr, ey=C+Math.sin(a)*rr;
       g.save();g.translate(ex,ey);g.rotate(a);
       g.fillStyle='#ffd65a';g.strokeStyle='rgba(26,16,0,.9)';g.lineWidth=1.3;
       g.beginPath();g.moveTo(9,0);g.lineTo(-4.5,-6);g.lineTo(-1.8,0);g.lineTo(-4.5,6);g.closePath();
       g.fill();g.stroke();g.restore();
     }
-  }
+  });
   refreshMmPin();
 }
 
@@ -558,7 +572,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.81';
+const BUILD_VER='v1.9.82';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
