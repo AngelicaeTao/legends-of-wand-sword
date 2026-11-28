@@ -83,6 +83,16 @@ function WMap(canvas, opts){
   this.mapCache={};     // worldId -> {maskData}（只存小掩码；全图不跨世界缓存）
 
   this.time=0; this.lastTs=0; this.ready=false; this.active=false;
+  // v1.9.89 边缘方位箭头专用层（#pinEdgeCv）：贴在画布之上、但高于底部导航/小地图。
+  // 之前箭头和地图画在同一个 canvas 上，层级天然低于 HUD，正下方目标的箭头会被底部
+  // 导航整块盖住 → 用户完全看不到提示。单独一层后位置仍严格贴边（20px），且始终可见。
+  this.edgeCv=(typeof document!=='undefined')?document.getElementById('pinEdgeCv'):null;
+  this.edgeG=this.edgeCv?this.edgeCv.getContext('2d'):null;
+  // v1.9.90 底部黑条高度（主界面可见时才有；其它视图返回 0，箭头落点自动回落到底边）
+  this.dockHeight=()=>{
+    const d=(typeof document!=='undefined')?document.getElementById('bottomDock'):null;
+    return (d&&d.offsetParent)?d.offsetHeight:0;
+  };
   this.PartActor=window.PartActor;
   this.StandeeActor=window.StandeeActor; // 主角/职业装走整体立绘（交付包 §0.2）
   this.heroBundle='char_warrior';        // 由 classId 决定（char_warrior/char_mage/…）
@@ -1493,6 +1503,9 @@ WMap.prototype.drawPinLabel=function(g,x,y,text,size){
 
 WMap.prototype.drawPinHud=function(g,cx,cy,t){
   const hx=this.hero.x-cx, hy=this.hero.y-cy;
+  // v1.9.89 每帧先清空箭头层，再只把"视口外"的箭头画到这一层上
+  const eg=this.edgeG;
+  if(eg)eg.clearRect(0,0,VW,VH);
   // 到达提示：不依赖 track（此刻已置 false），单独画成顶部横幅。
   // 不放角色头顶是因为 .interact-hint（"点击「xx」交战"）也贴在头顶，
   // 两者会正好叠在一起；顶部中央在 1280×720 下是空白区，不压小地图/任务栏/底部导航。
@@ -1509,17 +1522,20 @@ WMap.prototype.drawPinHud=function(g,cx,cy,t){
   }
   const pins=this.worldPins().filter(p=>p.track);     // 只有跟踪中才提示，未跟踪不制造常驻噪音
   if(!pins.length)return;
+  const dh=this.dockHeight?this.dockHeight():0;       // v1.9.90 底部黑条占位（每帧只读一次）
+  const viewB=VH-dh;
   pins.forEach((p,i)=>{
     const px=p.x-cx, py=p.y-cy;
     const cells=this.pinDistOf(p);
     // 多个标记时前缀序号，和大地图/小地图上的编号一一对应
     const label=(pins.length>1?((i+1)+' · '):'')+(cells>0?(cells+' 格'):'就在附近');
     // ---- 视口内：地标旗（旗杆 + 旗面 + 地面光环 + 渐隐光柱） ----
-    if(px>10&&px<VW-10&&py>34&&py<VH-14){ this.drawPinFlag(g,px,py,t,label); return; }
+    if(px>10&&px<VW-10&&py>34&&py<viewB-14){ this.drawPinFlag(g,px,py,t,label); return; }
     // ---- 视口外：画面边缘的方位箭头（闪烁） ----
     const ang=Math.atan2(p.y-this.hero.y,p.x-this.hero.x);
-    const e=this.pinEdgePoint(hx,hy,ang);
-    this.drawPinEdgeArrow(g,e.x,e.y,ang,label,t);
+    const e=this.pinEdgePoint(hx,hy,ang,dh);
+    // 优先画到独立箭头层（不被 HUD 盖住）；没有该层时退回主画布
+    this.drawPinEdgeArrow(eg||g,e.x,e.y,ang,label,t);
   });
 };
 
@@ -1562,9 +1578,10 @@ WMap.prototype.drawPinFlag=function(g,px,py,t,label){
    箭头画在 canvas 上，层级天然是「地图之上、HUD 之下」，被面板盖住可以接受，
    位置不准（明明目标在正下方，箭头却停在画面中间的底部导航上方）才是真问题。
    之前那套挤位逻辑会在底部导航/任务栏一带把箭头横向推几百像素，方向感全丢。 */
-WMap.prototype.pinEdgePoint=function(hx,hy,ang){
+WMap.prototype.pinEdgePoint=function(hx,hy,ang,dh){
   const PAD=20;                       // 圆底半径 17 + 3
-  const L=PAD, R=VW-PAD, T=PAD, B=VH-PAD;
+  // v1.9.90 底部黑条是新的可视边界：箭头贴在黑条上沿，不再落到黑条里压住导航按钮
+  const L=PAD, R=VW-PAD, T=PAD, B=VH-(dh||0)-PAD;
   const ca=Math.cos(ang), sa=Math.sin(ang);
   let k=Infinity;
   if(ca>1e-6)k=Math.min(k,(R-hx)/ca); else if(ca<-1e-6)k=Math.min(k,(L-hx)/ca);

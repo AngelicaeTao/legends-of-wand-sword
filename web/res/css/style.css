@@ -14,6 +14,9 @@ input{font-family:inherit}
 #stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;transform-origin:center center;overflow:hidden;background:#080d15;box-shadow:0 0 60px rgba(0,0,0,.9)}
 .view{position:absolute;inset:0}
 .view canvas{width:1280px;height:720px;display:block;image-rendering:pixelated}
+/* v1.9.89 边缘方位箭头层：位置严格贴边（20px），层级压在底部导航/小地图之上、
+   弹窗与大地图层之下。这样箭头既不会为了避让 UI 被挤到画面中间，也不会被 UI 整块盖掉。 */
+#pinEdgeCv{position:absolute;left:0;top:0;z-index:8;pointer-events:none}
 
 /* ---------- 通用 ---------- */
 .gold-border{border:2px solid #d9b45b;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 8px 30px rgba(0,0,0,.55),inset 0 0 24px rgba(217,180,91,.07)}
@@ -263,6 +266,8 @@ input{font-family:inherit}
 .sfx-btn{right:116px}
 .logout-btn:hover,.sfx-btn:hover{background:rgba(217,180,91,.18)}
 .sfx-btn.off{color:#8fa0b8;border-color:rgba(143,160,184,.4)}
+/* v1.9.90 主界面改用底部黑条内的同名按钮，原右下角两个按钮只在其它视图（战斗/创角）显示 */
+body.in-world .logout-btn,body.in-world .sfx-btn{display:none!important}
 
 /* ---------- 动画 / 特效 ---------- */
 @keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
@@ -284,6 +289,32 @@ input{font-family:inherit}
 #loading .lst{font-size:12px;color:#8e9bb4}
 
 /* ============ v1.6 底部 5 入口导航（角色/副本/家园/工会/地图） ============ */
+/* ============ v1.9.90 底部黑色功能条 ============
+   主界面底部划一整条纯黑区域：左侧 6 个入口导航缩小后水平居中，右侧音效 / 退出登录。
+   黑条是新的可视边界，地图在其上方绘制（视野少 104px，换底部 UI 完全不遮挡画面主体）。 */
+.bottom-dock{position:absolute;left:0;right:0;bottom:0;height:104px;z-index:6;display:flex;align-items:center;box-sizing:border-box;padding:0 22px;background:#05070c;border-top:1px solid rgba(217,180,91,.22);box-shadow:0 -8px 24px rgba(0,0,0,.55)}
+.bottom-dock .bottom-nav{position:absolute;left:50%;top:0;bottom:0;transform:translateX(-50%);z-index:1;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;border:none;background:none;box-shadow:none;border-radius:0}
+.dock-actions{margin-left:auto;display:flex;align-items:center;gap:10px;z-index:2}
+.dock-btn{height:34px;padding:0 16px;border-radius:9px;background:rgba(217,180,91,.10);border:1px solid rgba(217,180,91,.45);color:#e9d5a4;font-size:12.5px;font-weight:800;cursor:pointer;transition:background .15s,transform .12s,color .15s,border-color .15s}
+.dock-btn:hover{background:rgba(217,180,91,.24);transform:translateY(-2px)}
+.dock-btn:active{transform:translateY(0)}
+.dock-btn.off{color:#8fa0b8;border-color:rgba(143,160,184,.42);background:rgba(143,160,184,.10)}
+/* 黑条内导航整体缩小（原 74/96 → 52/64），垂直居中 */
+.bottom-dock .nav-badge{width:52px;padding:6px 4px 5px;border-radius:14px;border-width:2.5px;gap:3px;
+  transition:transform .16s cubic-bezier(.2,.85,.3,1.25),filter .14s,box-shadow .18s}
+.bottom-dock .nav-badge .badge-ico{height:24px;font-size:22px}
+.bottom-dock .nav-badge .badge-ico svg{width:22px;height:22px}
+.bottom-dock .nav-badge .badge-label{font-size:10px}
+.bottom-dock .nav-badge.nb-home{width:64px;padding:7px 6px;border-radius:18px;margin-bottom:0;border-width:3px}
+.bottom-dock .nav-badge.nb-home .badge-ico{height:28px;font-size:26px}
+.bottom-dock .nav-badge.nb-home .badge-ico svg{width:28px;height:28px}
+.bottom-dock .nav-badge.nb-home .badge-label{font-size:11px}
+/* 悬停浮起 / 按下回弹 / 点击后保持浮起（.raised 由 JS 维护，同一时刻只有一个） */
+.bottom-dock .nav-badge:hover{filter:brightness(1.18);transform:translateY(-8px) scale(1.06);
+  box-shadow:0 12px 24px rgba(0,0,0,.62),0 0 20px rgba(240,213,144,.45)}
+.bottom-dock .nav-badge:active{transform:translateY(-2px) scale(.97)}
+.bottom-dock .nav-badge.raised{transform:translateY(-8px) scale(1.06);filter:brightness(1.14);
+  box-shadow:0 12px 24px rgba(0,0,0,.62),0 0 20px rgba(240,213,144,.5)}
 .bottom-nav{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:6;display:flex;align-items:flex-end;justify-content:center;gap:14px;padding:10px 30px 8px;border-radius:22px;background:linear-gradient(180deg,rgba(12,17,30,.78),rgba(6,9,17,.94));border:1.5px solid rgba(217,180,91,.45);box-shadow:0 10px 34px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.05)}
 .nav-badge{position:relative;width:74px;padding:9px 6px 7px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;border:3px solid rgba(255,255,255,.28);box-shadow:0 5px 16px rgba(0,0,0,.55),inset 0 0 0 2px rgba(0,0,0,.18);transition:transform .1s,filter .12s}
 .nav-badge:hover{filter:brightness(1.16);transform:translateY(-3px)}

@@ -569,7 +569,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.89';
+const BUILD_VER='v1.9.90';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -621,6 +621,7 @@ function showModal(html){ $('modalBox').innerHTML=html; $('modalLayer').classLis
 function showView(v){
   view=v;
   const inWorld=(v==='world');
+  document.body.classList.toggle('in-world', inWorld);   // v1.9.90 底部黑条内的按钮只在主界面接管
   const lo=$('logoutBtn'), sb=$('sfxBtn');
   if(lo){ lo.classList.toggle('hidden', v==='login'); lo.style.opacity=(v==='battle')?'0.35':''; }
   if(sb)sb.classList.toggle('hidden', v!=='world');
@@ -999,6 +1000,7 @@ function closePanel(){
   $('panelLayer').classList.add('hidden');
   $('worldView').classList.remove('panel-open');
   document.body.classList.remove('panel-open');
+  if(typeof raiseNav==='function')raiseNav(null);   // v1.9.90 关面板即取消入口浮起
   worldMap.active=true;                                         // 恢复地图
   window.SFX&&SFX.panelClose();
 }
@@ -3114,13 +3116,30 @@ function syncSfxBtn(){
   const m=window.SFX&&window.SFX.muted;
   sfxBtn.textContent=m?'静音':'音效';
   sfxBtn.classList.toggle('off',!!m);
+  // v1.9.90 底部黑条里的同一开关（文案/静音态跟着原按钮走，避免两处不一致）
+  const ds=$('dockSfx');
+  if(ds){ ds.textContent=m?'静音':'音效'; ds.classList.toggle('off',!!m); }
 }
 if(sfxBtn){
   syncSfxBtn();
   sfxBtn.onclick=()=>{ if(window.SFX){ SFX.setMuted(!SFX.muted); syncSfxBtn(); if(!SFX.muted)SFX.click(); } };
 }
 // 底部 5 入口导航（v1.6，唯一面板入口）—— v1.9.31 家园按钮改为进入家园地图
-document.querySelectorAll('.nav-badge').forEach(b=>b.onclick=()=>{ if(b.dataset.panel==='home')enterHome(); else openPanel(b.dataset.panel); });
+// v1.9.90 点击后保持浮起（.raised），同一时刻只有一个入口处于浮起态
+function raiseNav(el){
+  document.querySelectorAll('.nav-badge.raised').forEach(x=>{ if(x!==el)x.classList.remove('raised'); });
+  if(el)el.classList.add('raised');
+}
+document.querySelectorAll('.nav-badge').forEach(b=>b.onclick=()=>{
+  raiseNav(b);
+  if(b.dataset.panel==='home')enterHome(); else openPanel(b.dataset.panel);
+});
+// v1.9.90 黑条右侧按钮：直接代理原全局按钮，逻辑（登出/静音持久化）不重复实现
+(function(){
+  const dl=$('dockLogout'), ds=$('dockSfx');
+  if(dl)dl.onclick=()=>{ const o=$('logoutBtn'); if(o)o.click(); };
+  if(ds)ds.onclick=()=>{ const o=$('sfxBtn'); if(o)o.click(); };
+})();
 // 面板唯一出口
 $('panelBack').onclick=closePanel;
 $('panelShade').onclick=closePanel;
