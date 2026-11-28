@@ -894,6 +894,8 @@ body.panel-open .logout-btn,body.panel-open .sfx-btn{opacity:0!important;pointer
   box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .hp-potion:active{transform:scale(.96)}
 .hp-potion b{color:#fff}
+/* v1.9.67 emoji 🧪 在项目字体里没有彩色字形，会渲染成豆腐块，改内联 SVG 小药瓶 */
+.pot-ico{width:13px;height:13px;flex:0 0 auto}
 
 /* ===== v1.9.28 装备战力徽章 ===== */
 .eq-pw{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10.5px;font-weight:800;
