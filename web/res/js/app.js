@@ -3322,7 +3322,12 @@ async function playPartyBattle(rep){
       if(curWave>1){ window.SFX&&SFX.dungeon&&SFX.dungeon(); }
       await sleep(520);
     }
-    if(r.heroHp) r.heroHp.forEach((hp,i)=>{ if(partySlots[i]) partySlots[i].hpNow=hp; });
+    // v1.9.78 死亡表现：血量归零的瞬间播倒地，之后保持倒地位姿（服务端已不再给他出手）
+    if(r.heroHp) r.heroHp.forEach((hp,i)=>{
+      const ps=partySlots[i]; if(!ps) return;
+      if(ps.hpNow>0 && hp<=0 && ps.actor){ try{ ps.actor.playOnce('die'); }catch(e){} ps.deadPose=true; }
+      ps.hpNow=hp;
+    });
     // 怪群血量：当前波各怪之和
     if(r.monHp) bHp.mon=r.monHp.reduce((a,v)=>a+v,0);
     else if(r.bossHp!=null) bHp.mon=r.bossHp;
