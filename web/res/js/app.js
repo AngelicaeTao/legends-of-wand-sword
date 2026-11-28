@@ -3252,7 +3252,11 @@ async function playPartyBattle(rep){
   bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
   clearBattleFx();
   if(battleHeroActor) battleHeroActor.play('idle');
-  battleMonInfos=[{sprite:'boss_beetle',name:rep.bossName||'幽影主宰',isBoss:true,lv:30,elite:false}];
+  // v1.9.77 三波车轮战：初始阵容取第一波
+  const waveDefs=rep.waves||[];
+  const firstWave=waveDefs[0]||{monsters:[{sprite:'boss_beetle',name:rep.bossName||'幽影主宰',isBoss:true,lv:30}]};
+  const toInfos=(w)=>(w&&w.monsters?w.monsters:[]).map(m=>({sprite:m.sprite||'boss_beetle',name:m.name||'怪物',isBoss:!!m.isBoss,lv:m.lv||30,elite:false}));
+  battleMonInfos=toInfos(firstWave);
   battleMonSig='';
   ensureBattleActors(battleMonInfos);
   battleMonActors.forEach((a,i)=>{a.play('idle');setMonAnim(i,'idle',0);});
@@ -3273,7 +3277,9 @@ async function playPartyBattle(rep){
   window.SFX&&SFX.battleStart();
 
   const hMax=Math.max(50, me.hpStart||0);
-  const mMax=Math.max(50, rep.bossMaxHp||0);
+  // v1.9.77 多怪：顶部血条 = 当前波所有怪血量之和
+  const waveMaxOf=(w)=>Math.max(1,(w&&w.monsters?w.monsters:[]).reduce((a,m)=>a+(m.maxHp||0),0));
+  const mMax=waveMaxOf(firstWave);
   bHp={hero:hMax,heroMax:hMax,mon:mMax,monMax:mMax};
   updateHp();
   logLine('sys',`组队副本 · ${heroes.length} 人 · seed=${rep.seed} · ${rounds.length} 步`);
@@ -3296,11 +3302,30 @@ async function playPartyBattle(rep){
   const skills=(CFG&&CFG.skills&&CFG.skills.skills)||[];
   const bossX=MON_SLOT[0].x;
   const total=rounds.length||1;
+  let curWave=0;                 // v1.9.77 当前波次
+  let curMonName='怪物';
   for(const r of rounds){
     while(paused && view==='battle') await sleep(120);
     if(ctl.dead||view!=='battle') return;
+    // v1.9.77 波次切换：换阵容、重置 BOSS 血条、播报
+    if(r.wave && r.wave!==curWave){
+      curWave=r.wave;
+      const wd=waveDefs[curWave-1];
+      battleMonInfos=toInfos(wd);
+      ensureBattleActors(battleMonInfos);
+      battleMonActors.forEach((a,i)=>{a.play('idle');setMonAnim(i,'idle',0);});
+      bHp.monMax=waveMaxOf(wd); bHp.mon=bHp.monMax; updateHp();
+      $('monName')&&($('monName').textContent='第 '+curWave+' 波 · '+((wd&&wd.monsters&&wd.monsters[0]&&wd.monsters[0].name)||'怪物'));
+      $('monLvTag')&&($('monLvTag').textContent=(wd&&wd.monsters?wd.monsters.length:1)+' 只 · 车轮战 '+curWave+'/'+(waveDefs.length||1));
+      curMonName=(wd&&wd.monsters&&wd.monsters[0]&&wd.monsters[0].name)||'怪物';
+      logLine('sys','—— 第 '+curWave+' 波：'+(wd&&wd.monsters?wd.monsters.length:1)+' 只'+curMonName+' ——');
+      if(curWave>1){ window.SFX&&SFX.dungeon&&SFX.dungeon(); }
+      await sleep(520);
+    }
     if(r.heroHp) r.heroHp.forEach((hp,i)=>{ if(partySlots[i]) partySlots[i].hpNow=hp; });
-    if(r.bossHp!=null){ bHp.mon=r.bossHp; }
+    // 怪群血量：当前波各怪之和
+    if(r.monHp) bHp.mon=r.monHp.reduce((a,v)=>a+v,0);
+    else if(r.bossHp!=null) bHp.mon=r.bossHp;
     const si=Math.max(0,(r.heroIdx||0)|0);
     const s=partySlots[si];
     if(si===meIdx) bHp.hero=s?s.hpNow:hMax;
@@ -3326,8 +3351,9 @@ async function playPartyBattle(rep){
       await sleep(150);
       if(s&&s.actor){ try{ s.actor.play('idle'); }catch(e){} }
       if(r.damage>0){
-        setMonAnim(0,'hit',300);
-        spawnFx('-'+Math.round(r.damage), bossX, 430, '#ff6b6b');
+        const mi=Math.max(0,(r.monIdx||0)|0);
+        setMonAnim(mi,'hit',300);
+        spawnFx('-'+Math.round(r.damage), (MON_SLOT[Math.min(mi,MON_SLOT.length-1)]||{x:bossX}).x, 430, '#ff6b6b');
         if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${rep.bossName||'BOSS'} -${Math.round(r.damage)}`);
       }else if(r.heal>0){
@@ -3346,9 +3372,13 @@ async function playPartyBattle(rep){
       window.SFX&&SFX.hurt();
       logLine('mon',`R${r.n} ${rep.bossName||'BOSS'} → ${s?s.name:'队友'} -${Math.round(r.damage||0)}`);
     }
-    if(r.bossHp<=0) setMonAnim(0,'die',1600);
+    // 本波全灭：整排怪物倒地（最后一波即通关）
+    if(r.monHp && r.monHp.length && r.monHp.every(v=>v<=0)){
+      battleMonActors.forEach((a,i)=>setMonAnim(i,'die',1400+i*120));
+      await sleep(500);
+    }
     tickSkillCds();                 // v1.9.75 每步推进 CD
-    await sleep(270);
+    await sleep(210);
   }
   if(ctl.dead||view!=='battle') return;
 
@@ -3362,10 +3392,13 @@ async function playPartyBattle(rep){
   $('fxLayer').appendChild(tt); setTimeout(()=>tt.remove(),1200);
   await sleep(1500);
   if(view!=='battle') return;
+  const wrows=(rep.waves||[]).map(w=>`<div class="pd-m"><span class="pd-dot${w.result==='win'?'':' off'}"></span>
+      <b>第 ${w.index} 波</b><em>${w.monsters?w.monsters.length:1} 只 · ${w.result==='win'?'通过':'失败'} · ${w.rounds} 步</em></div>`).join('');
   const rows=(rep.heroes||[]).map(h=>`<div class="pd-m"><span class="pd-dot${h.alive?'':' off'}"></span><b>${h.name}</b>
       <em>${h.alive?'存活':'倒下'} · 剩余 ${Math.round(h.hpEnd)} · 输出 ${fmt(Math.round(h.damage||0))}</em></div>`).join('');
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
-    <div class="msub">${rep.bossName||'幽影主宰'} · ${rounds.length} 步 · ${rep.partyMult}x 人数加成</div>
+    <div class="msub">车轮战 ${rep.waveDone||0}/${rep.waveTotal||3} 波 · ${rounds.length} 步 · ${rep.partyMult}x 人数加成</div>
+    <div class="sec-title">波次</div>${wrows}
     <div class="sec-title">成员结算</div>${rows}
     <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(rep.exp||0)}</span></div>
     <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(rep.gold||0)}</span></div>

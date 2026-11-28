@@ -462,9 +462,15 @@ func partyStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "队伍成员存档缺失", 500)
 		return
 	}
-	rep := game.ResolvePartyBattle(dg.ID, dg.Mon, dg.Level, dg.BossHpMult, heroes, 0)
+	// v1.9.77 三波车轮战：按副本配置逐波推进；未配置 waves 时退化为单波
+	waves := dg.Waves
+	if len(waves) == 0 {
+		waves = []game.WaveSpec{{Mon: dg.Mon, Lv: dg.Level, Count: 1, HpMult: dg.BossHpMult, AtkMult: 1}}
+	}
+	rep := game.ResolvePartyBattle(dg.ID, waves, heroes, 0)
 
 	// 写回各自存档：血量保留、发奖（胜场才发）
+	// v1.9.77 车轮战：三波全通才有奖励，中途团灭为 0（与 rep.Exp/Gold 一致）
 	mat := 0
 	if rep.Result == "win" {
 		mat = int(3 * rep.PartyMult)
