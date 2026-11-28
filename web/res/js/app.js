@@ -557,7 +557,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.67';
+const BUILD_VER='v1.9.81';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1113,7 +1113,10 @@ const SHOP_ITEMS=[
   {key:'material', pay:'gold', name:'强化材料', rate:'10 金币 / 件', per:10, def:10},
   {key:'material', pay:'gem',  name:'强化材料', rate:'1 钻石 / 件',  per:1,  def:10},
   {key:'exp',      pay:'gold', name:'经验',     rate:'1 金币 / 点',  per:1,  def:100},
-  {key:'exp',      pay:'gem',  name:'经验',     rate:'1 钻石 / 10 点', per:0.1, def:100}
+  {key:'exp',      pay:'gem',  name:'经验',     rate:'1 钻石 / 10 点', per:0.1, def:100},
+  // v1.9.68 强化材料兑回货币：pay='material' 表示消耗强化材料计数器，out=到手的货币
+  {key:'materialToGold', pay:'material', out:'gold', name:'强化材料 → 金币', rate:'10 金币 / 件材料', per:1, gotPer:10, def:10},
+  {key:'materialToGem',  pay:'material', out:'gem',  name:'强化材料 → 钻石', rate:'1 钻石 / 件材料',  per:1, gotPer:1,  def:10}
 ];
 // 钻石兑经验 1:10，必须按 10 的倍数；其余商品按整数件/点
 function shopNormQty(it, v){
@@ -1122,19 +1125,25 @@ function shopNormQty(it, v){
   return n;
 }
 function shopCostOf(it, qty){
+  if(it.out) return qty; // 兑回卡：消耗的是强化材料件数
   return (it.key==='exp'&&it.pay==='gem') ? qty/10 : qty*it.per;
 }
+// 兑换卡文案：消耗什么 / 得到什么（v1.9.68 支持强化材料兑回）
+function shopPayCN(it){ return it.pay==='gold'?'金币':it.pay==='gem'?'钻石':'强化材料'; }
+function shopGotCN(it){ return it.out?(it.out==='gold'?'金币':'钻石'):(it.key==='material'?'强化材料':'经验'); }
+function shopGotOf(it, qty){ return it.out ? qty*it.gotPer : qty; }
 function renderShop(){
   $('panelTitle').textContent='商店';
-  $('panelSub').textContent='金币/钻石兑换强化材料与经验 · 背包材料药水（含秘银/金币袋）可回收 · 数量自填';
+  $('panelSub').textContent='金币/钻石兑换强化材料与经验 · 强化材料可兑金币(1:10)/钻石(1:1) · 背包物品可回收 · 数量自填';
   const c=(state&&state.core)||{};
   const cards=SHOP_ITEMS.map(it=>{
     const id='sq_'+it.key+'_'+it.pay;
-    const have=(it.pay==='gold'?c.gold:c.gem)||0;
-    const own=(it.key==='material'?c.material:c.exp)||0;
+    const have=it.pay==='gold'?c.gold:it.pay==='gem'?c.gem:(c.material||0);
+    const own=it.out?(it.out==='gold'?c.gold:c.gem):(it.key==='material'?c.material:c.exp);
+    const ownCN=it.out?(it.out==='gold'?'金币':'钻石'):(it.key==='material'?'材料':'经验');
     return `<div class="shop-card">
       <div class="sc-head"><span class="sc-name">${it.name}</span><span class="sc-rate">${it.rate}</span></div>
-      <div class="sc-have">持有 <b style="color:#f0d590">${fmt(have)}</b> ${it.pay==='gold'?'金币':'钻石'} · 现有${it.key==='material'?'材料':'经验'} ${fmt(own)}</div>
+      <div class="sc-have">持有 <b style="color:#f0d590">${fmt(have)}</b> ${shopPayCN(it)} · 现有${ownCN} ${fmt(own)}</div>
       <div class="sc-buy">
         <input id="${id}" type="number" min="1" max="1000000" step="${it.key==='exp'&&it.pay==='gem'?10:1}" value="${it.def}" inputmode="numeric">
         <button data-shop="${it.key}|${it.pay}">兑换</button>
@@ -1157,7 +1166,7 @@ function renderShop(){
   }).join('');
   window._sellList=sellList;
   $('panelBody').innerHTML=`<div class="sec-title">兑换商店</div>
-    <div class="sec-sub" style="margin-bottom:6px">强化材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）</div>
+    <div class="sec-sub" style="margin-bottom:6px">强化材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）；强化材料兑回：1 件 = 10 金币 或 1 钻石（v1.9.68）</div>
     <div class="shop-grid">${cards}</div>
     <div class="shop-tip">兑换即时到账：强化材料计入角色材料数（强化/升品时消耗）；经验直接加到当前等级进度，攒够会自动升级。</div>
     <div class="sec-title" style="margin-top:16px">背包回收（材料/药水 · 可回收物品 → 金币或钻石）</div>
@@ -1168,9 +1177,9 @@ function renderShop(){
     const inp=$(id), costEl=$(id+'_cost'), btn=inp&&inp.parentElement.querySelector('button');
     if(!inp||!costEl||!btn) return;
     const upd=()=>{
-      const qty=shopNormQty(it, inp.value), cost=shopCostOf(it, qty);
-      const have=(it.pay==='gold'?c.gold:c.gem)||0;
-      costEl.innerHTML=`消耗 <b>${fmt(cost)}</b> ${it.pay==='gold'?'金币':'钻石'} · 可得 <b>${fmt(qty)}</b> ${it.key==='material'?'材料':'经验'}`;
+      const qty=shopNormQty(it, inp.value), cost=shopCostOf(it, qty), got=shopGotOf(it, qty);
+      const have=it.pay==='gold'?c.gold:it.pay==='gem'?c.gem:(c.material||0);
+      costEl.innerHTML=`消耗 <b>${fmt(cost)}</b> ${shopPayCN(it)} · 可得 <b>${fmt(got)}</b> ${shopGotCN(it)}`;
       btn.disabled=!(qty>0)||cost>have;
     };
     inp.oninput=upd;
@@ -1244,7 +1253,7 @@ async function shopBuy(it, inp){
     window.SFX&&SFX.coin();
     await applyStats(r.stats);
     renderShop();
-    toastModal('兑换成功',`消耗 ${fmt(r.cost)} ${it.pay==='gold'?'金币':'钻石'} → ${it.key==='material'?'强化材料':'经验'} +${fmt(r.got)}`);
+    toastModal('兑换成功',`消耗 ${fmt(r.cost)} ${shopPayCN(it)} → ${shopGotCN(it)} +${fmt(r.got)}`);
   }catch(e){
     window.SFX&&SFX.fail();
     toastModal('兑换失败', (e&&e.message)||String(e));
