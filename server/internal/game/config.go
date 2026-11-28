@@ -163,6 +163,12 @@ type DungeonDef struct {
 	Drop   string `json:"drop"`
 	Mon    string `json:"mon"`
 	Elite  bool   `json:"elite"`
+	// v1.9.68 组队副本：推荐战力 + 队伍上限 + BOSS 血量倍率
+	RecPower   int     `json:"recPower"`
+	PartyMax   int     `json:"partyMax"`
+	BossHpMult float64 `json:"bossHpMult"`
+	// v1.9.77 车轮战：按波次配置怪物阵容（3 小怪 / 2 精英 / 1 首领），血量跨波不重置
+	Waves []WaveSpec `json:"waves"`
 }
 type WorldsConfig struct {
 	Worlds  []WorldDef     `json:"worlds"`

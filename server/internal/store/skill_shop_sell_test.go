@@ -91,8 +91,8 @@ func TestSkillUpgradeMaxLevel(t *testing.T) {
 
 // v1.9.56 背包回收：材料/药水 → 金币或钻石，按件计价，扣减正确。
 // v1.9.57 单价整体 ×10，并支持初始背包（ext.bag）里的 秘银 / 金币袋。
-// v1.9.68 强化材料统一 1 件 = 10 金币 / 1 钻石（金币 1:10、钻石 1:1）；
-// 药水与特殊物品（potion_s/potion_l/秘银/金币袋）保留 v1.9.57 专价。
+// v1.9.68 强化材料计数器兑回货币：1 件 = 10 金币（1:10）/ 1 钻石（1:1），
+// 仓库可回收物品的专价保持 v1.9.57 不变（强化材料计数器与仓库物品是两套东西）。
 func TestShopSell(t *testing.T) {
 	if err := game.Init("../../../configs"); err != nil {
 		t.Fatal(err)
@@ -105,15 +105,15 @@ func TestShopSell(t *testing.T) {
 		{ID: "钢锭", Qty: 5, Kind: "材料"}, // 同 id 多堆叠
 	}
 
-	// 钢锭 10 金币/件（v1.9.68：强化材料统一 1:10 金币），15 件全部堆叠合计
+	// 钢锭 120 金币/件（v1.9.57 专价不变；仓库可回收物品与强化材料计数器是两套东西），15 件合计
 	unit, got, err := p.ShopSell("钢锭", 15, "gold")
 	if err != nil {
 		t.Fatalf("回收钢锭失败：%v", err)
 	}
-	if unit != 10 || got != 150 {
-		t.Fatalf("钢锭应 10 金/件、15 件共 150，实际 unit=%d got=%d", unit, got)
+	if unit != 120 || got != 1800 {
+		t.Fatalf("钢锭应 120 金/件、15 件共 1800，实际 unit=%d got=%d", unit, got)
 	}
-	if p.Core.Gold != 150 {
+	if p.Core.Gold != 1800 {
 		t.Fatalf("金币到账错误：%d", p.Core.Gold)
 	}
 	for _, it := range p.Warehouse {
@@ -201,24 +201,47 @@ func TestShopSell(t *testing.T) {
 		t.Fatalf("报错后不应扣减，背包应仍为 3，实际 %d", n)
 	}
 
-	// ---- v1.9.68 强化材料 → 钻石：统一 1 件 = 1 钻（1:1），与 id 无关 ----
-	p.Core.Gem = 0
-	p.Warehouse = []Item{
-		{ID: "精铁", Qty: 8, Kind: "材料"},
-		{ID: "未知新材料", Qty: 5, Kind: "材料"}, // 未列入 items 的材料走 default.material
-	}
-	unit, got, err = p.ShopSell("精铁", 8, "gem")
+	// ---- v1.9.68 强化材料计数器兑回货币：1 件 = 10 金币（1:10）/ 1 钻石（1:1） ----
+	p.Core.Material = 30 // 强化材料计数器（与仓库物品无关）
+	p.Core.Gold, p.Core.Gem = 0, 0
+
+	// 兑 10 件 → 金币 100（1:10）
+	cost, got2, err := p.ShopExchange("materialToGold", "material", 10)
 	if err != nil {
-		t.Fatalf("精铁换钻石失败：%v", err)
+		t.Fatalf("强化材料兑金币失败：%v", err)
 	}
-	if unit != 1 || got != 8 || p.Core.Gem != 8 {
-		t.Fatalf("精铁应 1 钻/件、8 件共 8 钻，实际 unit=%d got=%d gem=%d", unit, got, p.Core.Gem)
+	if cost != 10 || got2 != 100 || p.Core.Gold != 100 || p.Core.Material != 20 {
+		t.Fatalf("兑金币应 1:10：cost=%d got=%d gold=%d material=%d", cost, got2, p.Core.Gold, p.Core.Material)
 	}
-	unit, got, err = p.ShopSell("未知新材料", 5, "gold") // 兜底材料 10 金/件
+
+	// 兑 5 件 → 钻石 5（1:1）
+	cost, got2, err = p.ShopExchange("materialToGem", "material", 5)
 	if err != nil {
-		t.Fatalf("兜底材料换金币失败：%v", err)
+		t.Fatalf("强化材料兑钻石失败：%v", err)
 	}
-	if unit != 10 || got != 50 {
-		t.Fatalf("未定价材料应走 default.material 10 金/件、5 件共 50，实际 unit=%d got=%d", unit, got)
+	if cost != 5 || got2 != 5 || p.Core.Gem != 5 || p.Core.Material != 15 {
+		t.Fatalf("兑钻石应 1:1：cost=%d got=%d gem=%d material=%d", cost, got2, p.Core.Gem, p.Core.Material)
+	}
+
+	// 比例可配：改配置后再兑，金币单价生效
+	if cfg := game.C().Economy.Shop; cfg != nil {
+		cfg["materialOut"] = map[string]any{"goldPerUnit": float64(25), "gemPerUnit": float64(2)}
+	}
+	cost, got2, err = p.ShopExchange("materialToGold", "material", 2)
+	if err != nil || got2 != 50 {
+		t.Fatalf("配置 goldPerUnit=25 后兑 2 件应得 50 金：err=%v got=%d", err, got2)
+	}
+	cost, got2, err = p.ShopExchange("materialToGem", "material", 3)
+	if err != nil || got2 != 6 || p.Core.Gem != 11 {
+		t.Fatalf("配置 gemPerUnit=2 后兑 3 件应得 6 钻：err=%v got=%d gem=%d", err, got2, p.Core.Gem)
+	}
+
+	// 强化材料不足：报错且不扣
+	if _, _, err := p.ShopExchange("materialToGold", "material", 999); err == nil {
+		t.Fatalf("强化材料不足应报错")
+	}
+	// pay 不是 material：报错
+	if _, _, err := p.ShopExchange("materialToGold", "gold", 1); err == nil {
+		t.Fatalf("兑回卡必须消耗强化材料，用金币支付应报错")
 	}
 }

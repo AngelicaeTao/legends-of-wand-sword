@@ -101,6 +101,21 @@
       "dropTier": 1
     },
     {
+      "id": "trial_boss",
+      "name": "幽影主宰",
+      "sprite": "boss_beetle",
+      "isBoss": true,
+      "base": {
+        "hp": 900,
+        "atk": 120,
+        "def": 12
+      },
+      "growth": 1.18,
+      "exp": 900,
+      "gold": 1200,
+      "dropTier": 5,
+      "_note": "v1.9.68 组队副本专属首领：三人共享一个 BOSS，血量由副本 bossHpMult 与人数系数再放大；单人挑战会明显吃力，符合推荐战力设计。"
+    },    {
       "id": "map_boss",
       "name": "图域首领",
       "sprite": "boss_beetle",

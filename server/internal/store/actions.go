@@ -137,7 +137,7 @@ func (p *PlayerState) UnequipItem(itemID string) ([]string, error) {
 // 返回新品质档与更新后的属性。
 func (p *PlayerState) QualityUp(itemID string, goldCost, matCost int, mults []float64) (int, map[string]float64, error) {
 	if p.Core.Gold < goldCost || p.Core.Material < matCost {
-		return 0, nil, fmt.Errorf("资源不足（需 %d 金币 / %d 材料）", goldCost, matCost)
+		return 0, nil, fmt.Errorf("资源不足（需 %d 金币 / %d 强化材料）", goldCost, matCost)
 	}
 	for i := range p.Equip {
 		if p.Equip[i].ID == itemID {
@@ -190,7 +190,7 @@ func qualityUpOne(e *Equip, goldCost, matCost int, mults []float64, p *PlayerSta
 	p.Core.Gold -= goldCost
 	p.Core.Material -= matCost
 	p.refreshPower()
-	p.appendLogs([]string{fmt.Sprintf("装备升品：%s → 品质+%d（消耗 %d 金币 / %d 材料）", e.ID, e.Quality, goldCost, matCost)})
+	p.appendLogs([]string{fmt.Sprintf("装备升品：%s → 品质+%d（消耗 %d 金币 / %d 强化材料）", e.ID, e.Quality, goldCost, matCost)})
 	return e.Quality, e.Stats, nil
 }
 
@@ -204,7 +204,7 @@ func (p *PlayerState) EnhanceEquip(itemID, slot string, goldCost, matCost int) (
 		hit := (itemID != "" && p.Equip[i].ID == itemID) || (itemID == "" && p.Equip[i].Slot == slot)
 		if hit {
 			if p.Core.Gold < goldCost || p.Core.Material < matCost {
-				return 0, fmt.Errorf("资源不足（需 %d 金币 / %d 材料）", goldCost, matCost)
+				return 0, fmt.Errorf("资源不足（需 %d 金币 / %d 强化材料）", goldCost, matCost)
 			}
 			p.Core.Gold -= goldCost
 			p.Core.Material -= matCost
@@ -235,6 +235,36 @@ func (p *PlayerState) ShopExchange(item, pay string, qty int) (cost, got int, er
 		return 0, 0, fmt.Errorf("单次最多兑换 %d", max)
 	}
 	switch item {
+	// v1.9.68 强化材料兑回货币：每 1 件强化材料 = 10 金币 或 1 钻石（与买入互为镜像）。
+	// 这里 pay 固定为 "material"（消耗的是强化材料计数器），提前独立结算后直接返回。
+	case "materialToGold", "materialToGem":
+		if pay != "material" {
+			return 0, 0, fmt.Errorf("兑回金币/钻石需消耗强化材料（payWith=material）")
+		}
+		per := shopInt("materialOut", "goldPerUnit", 10)
+		if item == "materialToGem" {
+			per = shopInt("materialOut", "gemPerUnit", 1)
+		}
+		if per <= 0 {
+			if item == "materialToGem" {
+				per = 1
+			} else {
+				per = 10
+			}
+		}
+		if p.Core.Material < qty {
+			return 0, 0, fmt.Errorf("强化材料不足（需 %d，持有 %d）", qty, p.Core.Material)
+		}
+		p.Core.Material -= qty
+		got = qty * per
+		if item == "materialToGold" {
+			p.Core.Gold += got
+			p.appendLogs([]string{fmt.Sprintf("商店兑换：强化材料 -%d → 金币 +%d", qty, got)})
+		} else {
+			p.Core.Gem += got
+			p.appendLogs([]string{fmt.Sprintf("商店兑换：强化材料 -%d → 钻石 +%d", qty, got)})
+		}
+		return qty, got, nil
 	case "material":
 		switch pay {
 		case "gold":
@@ -407,11 +437,10 @@ func sellUnitPrice(itemID, kind, pay string) int {
 		}
 		return 10
 	}
-	// v1.9.68：强化材料统一 1 件 = 10 金币 / 1 钻石（金币 1:10、钻石 1:1）
 	if pay == "gold" {
-		return 10
+		return 100 // v1.9.57 兜底价 ×10（原 10）
 	}
-	return 1
+	return 10
 }
 
 // bagQty 读取 Ext.bag（初始背包）里某物品的数量。

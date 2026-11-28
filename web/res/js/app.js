@@ -467,7 +467,9 @@ function drawBattle(t,now){
     }
   }
   lastHeroX=heroX;
-  if(battleHeroActor)battleHeroActor.render(cvb,heroX,560,1.6,{dir:heroFacesR?1:-1});
+  // v1.9.71 组队副本：多英雄模式下由 drawPartyHeroes 画全队，不再画单人立绘
+  if(!partySlots&&battleHeroActor)battleHeroActor.render(cvb,heroX,560,1.6,{dir:heroFacesR?1:-1});
+  if(partySlots)drawPartyHeroes(t,now);
   // v1.9.27 怪物死亡：die 动画 500ms 内压扁 → 380ms 后收掉 actor 用塌陷尘团替代（群怪每只独立）
   const monDie=(bAnim.mon==='die')?(now-(bAnim.monStart||now)):-1;
   battleMonActors.forEach((a,i)=>{
@@ -555,7 +557,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.68';
+const BUILD_VER='v1.9.81';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -568,10 +570,15 @@ function perfTick(now){
         _texMax=gl?String(gl.getParameter(gl.MAX_TEXTURE_SIZE)):'无WebGL';
       }catch(e){_texMax='无WebGL';}
     }
+    // v1.9.80 性能角标仅调试用：地址带 ?perf=1 才显示，玩家默认看不到
     const el=$('perfBadge');
-    if(el)el.textContent=`${BUILD_VER} · ${_perfFps} FPS`;
-    // 纹理上限仅开发者排查用，玩家侧不展示（太技术、也无意义）
-    if(el)el.title=`纹理上限 ${_texMax}`;
+    if(el){
+      if(/[?&]perf=1/.test(location.search)){
+        el.style.display='block';
+        el.textContent=`${BUILD_VER} · ${_perfFps} FPS`;
+        el.title=`纹理上限 ${_texMax}`;
+      }
+    }
   }
 }
 // 靠近实体时的交互提示（跟随角色头顶，10Hz 更新；仅在内容变化时重写 innerHTML）
@@ -737,6 +744,7 @@ async function finishEnter(){
     $('sfxBtn')&&$('sfxBtn').classList.remove('hidden');
     window.SFX&&SFX.login();
     connectWS();
+    startInviteWatch();   // v1.9.68 组队邀请轮询（登录后启动，未组队时才真正发请求）
     // v1.9.45 任务栏收起/展开：Q 键与右上角箭头共用同一状态
     window.toggleQuestTracker=(force)=>{
       const box=document.getElementById('questTracker');
@@ -1009,7 +1017,7 @@ function syncHud(){
   if(hc) hc.innerHTML=
     `<b class="hc hc-gold" title="金币">${ICON.gold(15)}<em>金币</em><i>${fmt(c.gold)}</i></b>`+
     `<b class="hc hc-gem" title="钻石">${ICON.gem(15)}<em>钻石</em><i>${fmt(c.gem)}</i></b>`+
-    `<b class="hc hc-mat" title="强化材料">${ICON.crystal(15,'#9ad6ff')}<em>材料</em><i>${fmt(c.material)}</i></b>`;
+    `<b class="hc hc-mat" title="强化材料">${ICON.crystal(15,'#9ad6ff')}<em>强化材料</em><i>${fmt(c.material)}</i></b>`;
   const iconKey=(cdef&&cdef.icon)?cdef.icon.replace('ui_card_','').replace('.png',''):'warrior';
   $('worldClsIco').src=RES+'characters/cards/ui_card_'+iconKey+'.png';
   $('heroName').textContent=(c.name||'英雄')+' Lv.'+c.level;
@@ -1105,7 +1113,10 @@ const SHOP_ITEMS=[
   {key:'material', pay:'gold', name:'强化材料', rate:'10 金币 / 件', per:10, def:10},
   {key:'material', pay:'gem',  name:'强化材料', rate:'1 钻石 / 件',  per:1,  def:10},
   {key:'exp',      pay:'gold', name:'经验',     rate:'1 金币 / 点',  per:1,  def:100},
-  {key:'exp',      pay:'gem',  name:'经验',     rate:'1 钻石 / 10 点', per:0.1, def:100}
+  {key:'exp',      pay:'gem',  name:'经验',     rate:'1 钻石 / 10 点', per:0.1, def:100},
+  // v1.9.68 强化材料兑回货币：pay='material' 表示消耗强化材料计数器，out=到手的货币
+  {key:'materialToGold', pay:'material', out:'gold', name:'强化材料 → 金币', rate:'10 金币 / 件材料', per:1, gotPer:10, def:10},
+  {key:'materialToGem',  pay:'material', out:'gem',  name:'强化材料 → 钻石', rate:'1 钻石 / 件材料',  per:1, gotPer:1,  def:10}
 ];
 // 钻石兑经验 1:10，必须按 10 的倍数；其余商品按整数件/点
 function shopNormQty(it, v){
@@ -1114,19 +1125,25 @@ function shopNormQty(it, v){
   return n;
 }
 function shopCostOf(it, qty){
+  if(it.out) return qty; // 兑回卡：消耗的是强化材料件数
   return (it.key==='exp'&&it.pay==='gem') ? qty/10 : qty*it.per;
 }
+// 兑换卡文案：消耗什么 / 得到什么（v1.9.68 支持强化材料兑回）
+function shopPayCN(it){ return it.pay==='gold'?'金币':it.pay==='gem'?'钻石':'强化材料'; }
+function shopGotCN(it){ return it.out?(it.out==='gold'?'金币':'钻石'):(it.key==='material'?'强化材料':'经验'); }
+function shopGotOf(it, qty){ return it.out ? qty*it.gotPer : qty; }
 function renderShop(){
   $('panelTitle').textContent='商店';
-  $('panelSub').textContent='金币/钻石兑换材料与经验 · 强化材料可兑金币(1:10)或钻石(1:1) · 数量自填';
+  $('panelSub').textContent='金币/钻石兑换强化材料与经验 · 强化材料可兑金币(1:10)/钻石(1:1) · 背包物品可回收 · 数量自填';
   const c=(state&&state.core)||{};
   const cards=SHOP_ITEMS.map(it=>{
     const id='sq_'+it.key+'_'+it.pay;
-    const have=(it.pay==='gold'?c.gold:c.gem)||0;
-    const own=(it.key==='material'?c.material:c.exp)||0;
+    const have=it.pay==='gold'?c.gold:it.pay==='gem'?c.gem:(c.material||0);
+    const own=it.out?(it.out==='gold'?c.gold:c.gem):(it.key==='material'?c.material:c.exp);
+    const ownCN=it.out?(it.out==='gold'?'金币':'钻石'):(it.key==='material'?'材料':'经验');
     return `<div class="shop-card">
       <div class="sc-head"><span class="sc-name">${it.name}</span><span class="sc-rate">${it.rate}</span></div>
-      <div class="sc-have">持有 <b style="color:#f0d590">${fmt(have)}</b> ${it.pay==='gold'?'金币':'钻石'} · 现有${it.key==='material'?'材料':'经验'} ${fmt(own)}</div>
+      <div class="sc-have">持有 <b style="color:#f0d590">${fmt(have)}</b> ${shopPayCN(it)} · 现有${ownCN} ${fmt(own)}</div>
       <div class="sc-buy">
         <input id="${id}" type="number" min="1" max="1000000" step="${it.key==='exp'&&it.pay==='gem'?10:1}" value="${it.def}" inputmode="numeric">
         <button data-shop="${it.key}|${it.pay}">兑换</button>
@@ -1149,20 +1166,20 @@ function renderShop(){
   }).join('');
   window._sellList=sellList;
   $('panelBody').innerHTML=`<div class="sec-title">兑换商店</div>
-    <div class="sec-sub" style="margin-bottom:6px">材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）</div>
+    <div class="sec-sub" style="margin-bottom:6px">强化材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）；强化材料兑回：1 件 = 10 金币 或 1 钻石（v1.9.68）</div>
     <div class="shop-grid">${cards}</div>
     <div class="shop-tip">兑换即时到账：强化材料计入角色材料数（强化/升品时消耗）；经验直接加到当前等级进度，攒够会自动升级。</div>
-    <div class="sec-title" style="margin-top:16px">材料兑换（强化材料 → 金币或钻石）</div>
-    <div class="sec-sub" style="margin-bottom:6px">强化材料统一 1 件 = 10 金币 或 1 钻石（金币 1:10 / 钻石 1:1）；药水、秘银、金币袋按专价回收。装备请到家园›仓库分解，不在本列表。</div>
+    <div class="sec-title" style="margin-top:16px">背包回收（材料/药水 · 可回收物品 → 金币或钻石）</div>
+    <div class="sec-sub" style="margin-bottom:6px">按件计价，卖出即时到账；含初始背包里的秘银、金币袋。装备请到家园›仓库分解，不在本列表。</div>
     <div class="sell-grid">${sellRows||'<div class="sec-sub">背包里没有可回收的材料或药水</div>'}</div>`;
   SHOP_ITEMS.forEach(it=>{
     const id='sq_'+it.key+'_'+it.pay;
     const inp=$(id), costEl=$(id+'_cost'), btn=inp&&inp.parentElement.querySelector('button');
     if(!inp||!costEl||!btn) return;
     const upd=()=>{
-      const qty=shopNormQty(it, inp.value), cost=shopCostOf(it, qty);
-      const have=(it.pay==='gold'?c.gold:c.gem)||0;
-      costEl.innerHTML=`消耗 <b>${fmt(cost)}</b> ${it.pay==='gold'?'金币':'钻石'} · 可得 <b>${fmt(qty)}</b> ${it.key==='material'?'材料':'经验'}`;
+      const qty=shopNormQty(it, inp.value), cost=shopCostOf(it, qty), got=shopGotOf(it, qty);
+      const have=it.pay==='gold'?c.gold:it.pay==='gem'?c.gem:(c.material||0);
+      costEl.innerHTML=`消耗 <b>${fmt(cost)}</b> ${shopPayCN(it)} · 可得 <b>${fmt(got)}</b> ${shopGotCN(it)}`;
       btn.disabled=!(qty>0)||cost>have;
     };
     inp.oninput=upd;
@@ -1206,7 +1223,7 @@ function sellPriceOf(id,kind,pay){
   const g=(kind==='consume'||kind==='药水'||kind==='potion')?'consume':'material';
   const def=((sell.default||{})[g]||{});
   if(Number(def[pay])>0) return Number(def[pay]);
-  return pay==='gold'?(g==='consume'?150:10):(g==='consume'?10:1); // v1.9.68 材料 1:10金/1:1钻、药水兜底不变，与后端一致
+  return pay==='gold'?(g==='consume'?150:100):10; // v1.9.57 兜底价 ×10，与后端一致
 }
 // 物品中文名：装备之外的中文 id 直接用，内部 id 走 ITEM_CN
 function itemCN(id){ return ITEM_CN[id]||id; }
@@ -1236,7 +1253,7 @@ async function shopBuy(it, inp){
     window.SFX&&SFX.coin();
     await applyStats(r.stats);
     renderShop();
-    toastModal('兑换成功',`消耗 ${fmt(r.cost)} ${it.pay==='gold'?'金币':'钻石'} → ${it.key==='material'?'强化材料':'经验'} +${fmt(r.got)}`);
+    toastModal('兑换成功',`消耗 ${fmt(r.cost)} ${shopPayCN(it)} → ${shopGotCN(it)} +${fmt(r.got)}`);
   }catch(e){
     window.SFX&&SFX.fail();
     toastModal('兑换失败', (e&&e.message)||String(e));
@@ -1365,7 +1382,7 @@ function renderBag(){
     <div class="sec-title">背包 · 药水 <span class="sec-sub" style="display:inline">（${potList.length} 种 · 点击直接喝 · 任意地点可用）</span></div>
     <div class="wg-grid">${potList.map(([id,n])=>`
       <div class="wg-cell pot" data-pot="${id}"><div class="wgi" style="background:#5fd38a">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n}</div></div>`).join('')||'<div class="sec-sub">暂无药水 · 开宝箱/采集草药可获得</div>'}</div>
-    <div class="sec-title">背包 · 材料 <span class="sec-sub" style="display:inline">（${matGoods.length} 种 · ${inHome?'点击存入仓库':'材料存取需回家园'}）</span></div>
+    <div class="sec-title">背包 · 可回收物品 <span class="sec-sub" style="display:inline">（${matGoods.length} 种 · ${inHome?'点击存入仓库':'材料存取需回家园'}）</span></div>
     <div class="wg-grid">${matGoods.map(([id,n])=>`
       <div class="wg-cell" data-g="${id}" data-n="${n|0}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
     <div class="wh-flash hidden" id="bagFlash"></div>`;
@@ -1519,7 +1536,7 @@ async function renderGuild(){
     </div>
     <div style="margin-top:12px;display:flex;gap:10px">
       <button class="btn-gray" id="guildLeave">${isPresident?'退出公会（转让给最早加入的成员）':'退出公会'}</button>
-      <span class="sec-sub" style="flex:1;text-align:right;align-self:center">捐献与商店为服务端权威计数 · 每日 0 点重置</span>
+      <span class="sec-sub" style="flex:1;text-align:right;align-self:center">捐献与商店每日 0 点重置</span>
     </div>`;
   $('panelSub').textContent=`${gv.name} · Lv.${lv} 公会`;
   // v1.9.61 公会成员行加"档案"按钮：点开看该成员的完整档案
@@ -1957,11 +1974,11 @@ function renderWarehouse(){
           <div class="sec-title">数值对比（每级装备属性 +${Math.round(gain*100)}%）</div>
           <div class="fp-props">${props}</div>
           <div class="forge-cost">
-            <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(nextCost)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} 2 材料</b></div>
-            <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 材料</b></div>
+            <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(nextCost)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} 2 强化材料</b></div>
+            <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 强化材料</b></div>
           </div>
           <button class="big-btn goldbtn" id="doForge" ${canPay?'':'disabled style="opacity:.45;cursor:not-allowed"'}>${canPay?'强 化':'资源不足'}</button>
-          <div class="strength-note">强化必成功 · 服务端权威结算，战力即时更新</div>
+          <div class="strength-note">强化必成功 · 战力即时更新</div>
         </div>`;
     }
     // v1.9.44 升品栏：装备升品质入口自仓库移入工坊（品质+1 最高混沌，属性按品质乘数重算）
@@ -1995,11 +2012,11 @@ function renderWarehouse(){
               <span class="fs-lv"><b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b> → <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b></span></div>
             <div class="sec-sub">全部属性 × ${ratio.toFixed(2)}（品质乘数 ${mOld} → ${mNew}）· 强化等级保持不变</div>
             <div class="forge-cost">
-              <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(qGold)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} ${qMat} 材料</b></div>
-              <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 材料</b></div>
+              <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(qGold)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} ${qMat} 强化材料</b></div>
+              <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 强化材料</b></div>
             </div>
             <button class="big-btn goldbtn" id="doQuBtn" ${qCan?'':'disabled style="opacity:.45;cursor:not-allowed"'}>${qCan?'升 品':'资源不足'}</button>
-            <div class="strength-note">升品不可逆 · 服务端权威结算 · 战力即时更新</div>
+            <div class="strength-note">升品不可逆 · 战力即时更新</div>
           </div>`;
       }
     }
@@ -2028,7 +2045,7 @@ function renderWarehouse(){
         window.SFX&&SFX.forge();
         const cost=r.enhanceCost||{};
         toastModal('强化成功',eqCN(sel)+' 强化至 +'+(r.enhanceLevel||'?')+
-          (cost.gold?('（消耗 '+fmt(cost.gold)+' 金币 / '+fmt(cost.material||0)+' 材料）'):''));
+          (cost.gold?('（消耗 '+fmt(cost.gold)+' 金币 / '+fmt(cost.material||0)+' 强化材料）'):''));
         if(window.Quest)Quest.progress('enhance',1);
         renderWarehouse();
       }catch(e){window.SFX&&SFX.fail();toastModal('强化失败',e.message);}
@@ -2043,7 +2060,7 @@ function renderWarehouse(){
       const gM=qu.goldMult!=null?qu.goldMult:1.2, mM=qu.matMult!=null?qu.matMult:0.6;
       const sqi=Math.max(0,Math.min(7,sel.quality||0)), nq=sqi+1;
       const qGold=Math.round((GB[Math.min(nq,7)]||40)*gM), qMat=Math.round((MB[Math.min(nq,7)]||10)*mM);
-      showModal(`<h2>装备升品</h2><div class="msub">将 <b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b>「${eqCN(sel)}${sel.enhance?(' +'+sel.enhance):''}」提升为 <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b>？<br>属性按品质乘数重算提升 · 消耗 <b style="color:#ffd76b">${fmt(qGold)} 金币</b> + <b style="color:#9ad6ff">${qMat} 材料</b><br><span style="color:#e07b7b">升品不可逆，无法找回原品质</span></div>
+      showModal(`<h2>装备升品</h2><div class="msub">将 <b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b>「${eqCN(sel)}${sel.enhance?(' +'+sel.enhance):''}」提升为 <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b>？<br>属性按品质乘数重算提升 · 消耗 <b style="color:#ffd76b">${fmt(qGold)} 金币</b> + <b style="color:#9ad6ff">${qMat} 强化材料</b><br><span style="color:#e07b7b">升品不可逆，无法找回原品质</span></div>
         <div class="divider"></div>
         <div class="enc-btns"><button class="big-btn goldbtn" id="quConfirm">确认升品</button><button class="btn-gray" id="quCancel">再想想</button></div>`);
       $('quCancel').onclick=hideModal;
@@ -2053,7 +2070,7 @@ function renderWarehouse(){
           hideModal();
           if(r.state){state=r.state;await applyStats(r.stats);}
           window.SFX&&SFX.buy&&SFX.buy();
-          toastModal('升品成功',eqCN(sel)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||qGold)+' 金币 / '+(r.cost&&r.cost.material||qMat)+' 材料）');
+          toastModal('升品成功',eqCN(sel)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||qGold)+' 金币 / '+(r.cost&&r.cost.material||qMat)+' 强化材料）');
           forgeSel=null;
           renderWarehouse();
         }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('升品失败',err.message); }
@@ -2136,7 +2153,7 @@ function renderWarehouse(){
         ${pwBadge(e)||''}
         <span class="wg-detail" data-detail="${e.slot}">详情</span>
       </div>`).join('')||'<div class="sec-sub">背包暂无未穿戴装备</div>'}</div>
-    <div class="sec-title">背包 · 材料与消耗品 <span class="sec-sub" style="display:inline">（${batchOn&&whBatch==='in'?'点击勾选存入':'点击选择数量存入'}）</span></div>
+    <div class="sec-title">背包 · 可回收物品 <span class="sec-sub" style="display:inline">（${batchOn&&whBatch==='in'?'点击勾选存入':'点击选择数量存入'}）</span></div>
     <div class="wg-grid">${bagGoods.map(([id,n])=>`
       <div class="wg-cell${batchOn&&whBatch==='in'?selCls('mat',id):''}" data-gin="${id}" data-n="${n|0}" data-selkey="mat:${id}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
     <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · ${batchOn?(whBatch==='out'||whBatch==='dec'?'点击勾选':'当前不可选'):'点击装备取出 · 点 ♻ 分解换金币/材料'}）</span><button class="wh-batch ${whBatch==='dec'?'on':''}" id="batchDec" ${whEq.length?'':'disabled style="opacity:.45"'}>♻ 批量分解</button><button class="wh-batch ${whBatch==='out'?'on':''}" id="batchOut">⇩ 批量取出</button></div>
@@ -2148,7 +2165,7 @@ function renderWarehouse(){
         ${pwBadge(it.equip)||''}
         <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金+${MAT[qi]||10}材</span>
       </div>`;}).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
-    <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · ${batchOn&&whBatch==='out'?'点击勾选取出':'点击选择数量取出'}）</span></div>
+    <div class="sec-title">仓库 · 可回收物品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · ${batchOn&&whBatch==='out'?'点击勾选取出':'点击选择数量取出'}）</span></div>
     <div class="wg-grid">${whGoods.map(it=>`
       <div class="wg-cell${batchOn&&whBatch==='out'?selCls('mat',it.id):''}" data-gout="${it.id}" data-n="${it.qty}" data-selkey="mat:${it.id}"><div class="wgi" style="background:${it.kind==='consume'?'#5fd38a':'#8892a4'}">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(it.id)}<div class="wq">x${it.qty}</div></div>`).join('')||'<div class="sec-sub">空</div>'}</div>
     <div class="wh-flash hidden" id="whFlash"></div>`;
@@ -2208,7 +2225,7 @@ function renderWarehouse(){
       const it=(state.warehouse||[]).find(x=>x.id===id&&!x.hidden&&x.kind==='equip');
       const e=it&&it.equip||{};
       const est=decEst(e);
-      showModal(`<h2>分解装备</h2><div class="msub">将 <b style="color:#f0d590">${eqCN(e)}${e.enhance?(' +'+e.enhance):''}</b> 分解为金币与材料？<br>预计返还 <b style="color:#ffd76b">${fmt(est.gold)} 金币</b> + <b style="color:#9ad6ff">${est.mat} 材料</b>（分解后装备消失，无法找回）</div>
+      showModal(`<h2>分解装备</h2><div class="msub">将 <b style="color:#f0d590">${eqCN(e)}${e.enhance?(' +'+e.enhance):''}</b> 分解为金币与材料？<br>预计返还 <b style="color:#ffd76b">${fmt(est.gold)} 金币</b> + <b style="color:#9ad6ff">${est.mat} 强化材料</b>（分解后装备消失，无法找回）</div>
         <div class="divider"></div>
         <div class="enc-btns"><button class="btn-red" id="doDec">确认分解</button><button class="btn-gray" id="cancelDec">再想想</button></div>`);
       $('cancelDec').onclick=hideModal;
@@ -2218,7 +2235,7 @@ function renderWarehouse(){
           hideModal();
           if(r.state){state=r.state;syncHud();}
           window.SFX&&SFX.coin&&SFX.coin();
-          toastModal('分解成功',eqCN(e)+(e.enhance?(' +'+e.enhance):'')+' → 金币 +'+fmt(r.goldGain||est.gold)+' · 材料 +'+(r.matGain||est.mat));
+          toastModal('分解成功',eqCN(e)+(e.enhance?(' +'+e.enhance):'')+' → 金币 +'+fmt(r.goldGain||est.gold)+' · 强化材料 +'+(r.matGain||est.mat));
           renderPanel();
         }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('分解失败',err.message); }
       };
@@ -2293,7 +2310,7 @@ function renderWarehouse(){
       hideModal(); clearWhBatch();
       renderPanel();
       window.SFX&&(mode==='dec'?SFX.coin&&SFX.coin():SFX.bagIn&&SFX.bagIn());
-      if(mode==='dec') toastModal('批量分解成功','分解 '+eqN+' 件装备 → 金币 +'+fmt(tg)+' · 材料 +'+tm+(err?'（部分失败：'+err+'）':''));
+      if(mode==='dec') toastModal('批量分解成功','分解 '+eqN+' 件装备 → 金币 +'+fmt(tg)+' · 强化材料 +'+tm+(err?'（部分失败：'+err+'）':''));
       else flash((mode==='in'?'批量存入完成':'批量取出完成')+'：装备 '+eqN+' 件 · 材料 '+matN+' 种'+(err?'（部分失败：'+err+'）':''));
     };
     // 分解不可逆：确认弹窗汇总收益（存入/取出直接执行）
@@ -2301,7 +2318,7 @@ function renderWarehouse(){
       let tg=0,tm=0;
       keys.forEach(k=>{ const [kind,id]=k.split(':'); if(kind!=='eq')return;
         const it=wh.find(x=>x.id===id&&x.kind==='equip'); if(it){const s=decEst(it.equip||{});tg+=s.gold;tm+=s.mat;} });
-      showModal(`<h2>批量分解装备</h2><div class="msub">将勾选的 <b style="color:#f0d590">${keys.length} 件装备</b> 分解？<br>预计返还 <b style="color:#ffd76b">${fmt(tg)} 金币</b> + <b style="color:#9ad6ff">${tm} 材料</b><br><span style="font-size:12px;color:#8a93a6">分解后装备消失，无法找回</span></div>
+      showModal(`<h2>批量分解装备</h2><div class="msub">将勾选的 <b style="color:#f0d590">${keys.length} 件装备</b> 分解？<br>预计返还 <b style="color:#ffd76b">${fmt(tg)} 金币</b> + <b style="color:#9ad6ff">${tm} 强化材料</b><br><span style="font-size:12px;color:#8a93a6">分解后装备消失，无法找回</span></div>
         <div class="divider"></div>
         <div class="enc-btns"><button class="btn-red" id="doBatchDecConfirm">确认分解</button><button class="btn-gray" id="cancelBatchDec">再想想</button></div>`);
       $('cancelBatchDec').onclick=()=>{hideModal();wbbRun.disabled=false;};
@@ -2332,7 +2349,7 @@ function renderMap(){
       </div>`;
     }).join('')}
     <div class="sec-sub" style="margin-top:12px">提示：也可在大世界中找到发光的「⇄ 世界通道」直接传送。</div>
-    <div class="sec-title" style="margin-top:16px">⚔ 副本试炼 <span class="sec-sub" style="display:inline">（每日次数服务端权威 · 战败不扣次数）</span></div>
+    <div class="sec-title" style="margin-top:16px">⚔ 副本试炼 <span class="sec-sub" style="display:inline">（每日次数 · 战败不扣次数）</span></div>
     <div id="dgZone"><div class="sec-sub">副本次数加载中…</div></div>`;
   body.querySelectorAll('.world-map-item').forEach(el=>{
     el.onclick=()=>{
@@ -2347,13 +2364,15 @@ function renderMap(){
   const dgZone=$('dgZone');
   const dungeons=(CFG?.economy?.dungeons)||DUNGEONS;
   const lv=state&&state.core?state.core.level:1;
-  Promise.all(dungeons.map(d=>api('/api/player/action',{userId:uid(),action:'dungeon_remain',dungeonId:d.id}).catch(()=>({remain:d.perDay})))).then(rems=>{
+  // v1.9.76 组队副本不限次数，不必请求剩余次数（服务端对 perDay=0 会拒绝）
+  Promise.all(dungeons.map(d=>(d.recPower||0)>0?Promise.resolve({remain:-1}):api('/api/player/action',{userId:uid(),action:'dungeon_remain',dungeonId:d.id}).catch(()=>({remain:d.perDay})))).then(rems=>{
     if(!dgZone||!dgZone.isConnected)return; // 面板已切换
     dungeons.forEach((d,i)=>d._remain=(rems[i]?.remain!=null?rems[i].remain:d.perDay));
     const diffOf={grass:1,mist:2,flame:3,frost:4};
     dgZone.innerHTML=`
       <div class="dungeon-list">${dungeons.map(d=>{
-        const locked=lv<d.lv, exhausted=(d._remain!=null?d._remain:d.perDay)<=0;
+        const isParty=(d.recPower||0)>0;
+        const locked=lv<d.lv, exhausted=!isParty&&((d._remain!=null?d._remain:d.perDay)<=0);
         const dis=locked||exhausted;
         const diff=diffOf[d.id]||1;
         const stars=Array.from({length:4},(_,i)=>i<diff?ICON.star(11,'#f0d590'):ICON.star(11,'#37414f')).join('');
@@ -2362,20 +2381,23 @@ function renderMap(){
           <div class="di-art">${ICON.tent(132)}</div>
           <div class="di-info">
             <div class="di-name">${d.name}<em class="di-star">${stars}</em></div>
-            <div class="di-meta">推荐 Lv.${d.lv} · 今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次 · ${d.drop}</div>
+            <div class="di-meta">推荐 Lv.${d.lv} · ${isParty?'不限次数':`今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次`} · ${d.drop}</div>
           </div>
-          <button class="di-enter${dis?' off':''}" data-dg="${d.id}" ${dis?'disabled':''}>${locked?'等级不足':exhausted?'次数用完':'进入'}</button>
+          <button class="di-enter${dis?' off':''}" data-dg="${d.id}" data-party="${isParty?1:0}" ${dis?'disabled':''}>${locked?'等级不足':(isParty?'组队挑战':exhausted?'次数用完':'进入')}</button>
         </div>`;
       }).join('')}</div>
       <div class="dg-summary">
-        ${(()=>{const used=dungeons.reduce((a,d)=>a+(d.perDay-(d._remain!=null?d._remain:d.perDay)),0);
-               const total=dungeons.reduce((a,d)=>a+d.perDay,0);
+        ${(()=>{const daily=dungeons.filter(d=>(d.recPower||0)<=0);
+               const used=daily.reduce((a,d)=>a+(d.perDay-(d._remain!=null?d._remain:d.perDay)),0);
+               const total=daily.reduce((a,d)=>a+d.perDay,0);
                const open=dungeons.filter(d=>lv>=d.lv).length;
+               const unlimited=dungeons.filter(d=>(d.recPower||0)>0&&lv>=d.lv).length;
                return `<div class="dgs"><em>今日已挑战</em><b>${used} / ${total}</b></div>
                        <div class="dgs"><em>已解锁</em><b>${open} / ${dungeons.length}</b></div>
-                       <div class="dgs"><em>主要产出</em><b>材料 · 装备 · 强化石</b></div>`;})()}
+                       <div class="dgs"><em>主要产出</em><b>强化材料 · 装备 · 强化石</b></div>`+
+                      (unlimited?`<div class="dgs"><em>不限次数</em><b>${unlimited} 个组队副本</b></div>`:'');})()}
       </div>
-      <div class="dg-reset">${ICON.hourglass(13,'#f0d590')}<span>距离每日次数重置 <b>${(()=>{
+      <div class="dg-reset">${ICON.hourglass(13,'#f0d590')}<span>限次副本距离重置 <b>${(()=>{
         const now=new Date(); const t=new Date(now); t.setHours(24,0,0,0);
         const m=Math.floor((t-now)/60000); return Math.floor(m/60)+' 小时 '+(m%60)+' 分';
       })()}</b></span></div>`;
@@ -2384,6 +2406,8 @@ function renderMap(){
       btn.onclick=async()=>{
         const d=dungeons.find(x=>x.id===btn.dataset.dg);
         if(!d)return;
+        if(btn.dataset.party==='1'){ hideModal(); closePanel(); openPartyDungeon(d.id); return; }
+        if(btn.dataset.party==='1'){ hideModal(); closePanel(); openPartyDungeon(d.id); return; }
         try{
           // 服务端权威校验等级+扣次数
           const r=await api('/api/player/action',{userId:uid(),action:'dungeon_enter',dungeonId:d.id});
@@ -2407,7 +2431,7 @@ function renderIdle(){
     <div class="sec-title">挂机设置</div>
     <div class="sec-sub">选择挂机地图 / 查看产出效率 / 领取离线收益</div>
     <div class="preview-box"><div class="pt">挂机地图</div><div class="sec-sub">翡翠草原 · 推荐 Lv.40-50 · 效率 ★★★☆</div></div>
-    <div class="preview-box"><div class="pt">产出效率（每小时）</div><div class="sec-sub">经验 ~1,200 ｜ 金币 ~640 ｜ 材料 ~5 ｜ 回血药水 ~2</div></div>
+    <div class="preview-box"><div class="pt">产出效率（每小时）</div><div class="sec-sub">经验 ~1,200 ｜ 金币 ~640 ｜ 强化材料 ~5 ｜ 回血药水 ~2</div></div>
     <div class="preview-box"><div class="pt">封顶时长</div><div class="sec-sub">8 小时（超出部分不再累计）</div></div>
     <button class="big-btn goldbtn" id="settleIdle">领取离线收益</button>`;
   if(inHome)$('backToHome').onclick=()=>{homeSub=null;window.SFX&&SFX.tab();renderHome();};
@@ -2575,7 +2599,7 @@ async function onPotionPicked(p){
   if(reward){
     if(window.Quest)Quest.progress('chest',1);
     showModal(`<h2>🌿 采集草药</h2>
-      <div class="msub">服务端权威结算 · 已入背包（草药 2 分钟后重新长出）</div>
+      <div class="msub">已放入背包（草药 2 分钟后重新长出）</div>
       <div class="divider"></div>
       <div class="reward-row"><span class="rk">回血药水</span><span class="rv g">+${reward.potions||0}</span></div>
       <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(reward.gold||0)}</span></div>
@@ -2619,7 +2643,7 @@ async function onChestOpened(chest){
       ?`<div class="divider"></div><div class="loot-title">额外物品 · ${items.length} 项</div><div class="loot-grid" id="lootGrid">${cells}</div><div class="loot-tip">按住拖动查看全部 · 已自动入包/入仓</div>`
       :`<div class="divider"></div><div class="sec-sub">本次未获得额外物品</div>`;
     showModal(`<h2>${label} · 开启</h2>
-      <div class="msub">${reward?'服务端权威结算 · 已入账':'开启失败 · '+(chestErr||'宝箱暂不可开')}</div>
+      <div class="msub">${reward?'已入账':'开启失败 · '+(chestErr||'宝箱暂不可开')}</div>
       <div class="divider"></div>
       ${topRows}
       ${gridPart}
@@ -2669,9 +2693,9 @@ function showBattleResult(rep,mon){
   // v1.9.59 自动分解要写清"每件分解出了什么"，不只是总数：逐件列出 品质·部位 → 金币/材料
   const decompRows=(rep.decomposed||[]).map(d=>{
     const q=Math.min(7,d.quality==null?0:d.quality), qc=QCOLOR[q], qn=QUALCN[q], sn=slotCN[d.slot]||d.slot;
-    return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 材料 +${fmt(d.mat||0)}</span></div>`;
+    return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 强化材料 +${fmt(d.mat||0)}</span></div>`;
   }).join('');
-  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
+  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 强化材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row" title="不自动回满 · 用回血药水或采草药恢复"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
@@ -2742,7 +2766,7 @@ function showIdleReward(res){
     <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(res&&res.exp)}</span></div>
     <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(res&&res.gold)}</span></div>
     <div class="reward-row"><span class="rk">装备</span><span class="rv g">x${res&&res.equip||0}</span></div>
-    <div class="reward-row"><span class="rk">材料</span><span class="rv g">x${res&&res.material||0}</span></div>
+    <div class="reward-row"><span class="rk">强化材料</span><span class="rv g">x${res&&res.material||0}</span></div>
     <div class="reward-row"><span class="rk">回血药水</span><span class="rv g">x${res&&res.potions||0}</span></div>
     <div class="reward-row"><span class="rk">血量</span><span class="rv" style="color:#ff9c8f">离线休息已回满</span></div>
     <button class="big-btn" id="idleClaim">一键领取 · 返回大世界</button>`);
@@ -2765,14 +2789,53 @@ function logLine(cls,text){
   box.appendChild(d);
   while(box.childElementCount>6)box.removeChild(box.firstChild);
 }
+// v1.9.75 技能栏：每个格子加一层 CD 薄膜（顺时针扫一圈）+ 剩余秒数
+let skCdMap = {};                 // skillId -> {remain, total}（单位：回合/秒）
+let skLastUse = {};               // skillId -> 最近一次施放时间（用于平滑）
+
 function skillSlots(bd){
-  const all=CFG.skills.skills;
-  const colors=['sk-fire','sk-ice','sk-heal','sk-shield','sk-basic'];
-  const items=bd.map(sid=>all.find(s=>s.id===sid)||{name:'技能',id:sid});
-  items.push({name:'普攻',id:'basic'});
-  $('skillSlots').innerHTML=items.map((s,i)=>`<div class="skill-slot ${colors[i%colors.length]}">${s.name.charAt(0)}<small>${s.name}</small></div>`).join('');
-  $('skillCap').textContent=`生效技能：已装备 ${bd.length} 技能 + 普攻兜底（自动释放）`;
+  const all = CFG.skills.skills;
+  const colors = ['sk-fire','sk-ice','sk-heal','sk-shield','sk-basic'];
+  const items = bd.map(sid => all.find(x => x.id === sid) || { name:'技能', id:sid });
+  items.push({ name:'普攻', id:'basic' });
+  $('skillSlots').innerHTML = items.map((it,i) =>
+    `<div class="skill-slot ${colors[i%colors.length]}">${it.name.charAt(0)}<small>${it.name}</small>` +
+    `<div class="sk-cd" data-sk="${it.id}"></div>` +
+    `<div class="sk-cdnum" data-sknum="${it.id}"></div></div>`
+  ).join('');
+  skCdMap = {}; paintSkillCds();
+  $('skillCap').textContent = `生效技能：已装备 ${bd.length} 技能 + 普攻兜底（自动释放）`;
 }
+
+// 某个技能刚被施放：把 CD 拉满
+function setSkillCd(id, ticks){
+  if(!id || id === 'basic' || !(ticks > 0)) return;
+  skCdMap[id] = { remain: ticks, total: ticks };
+  paintSkillCds();
+}
+// 每次行动推进一格 CD
+function tickSkillCds(){
+  let dirty = false;
+  for(const k in skCdMap){
+    const c = skCdMap[k];
+    if(c.remain > 0){ c.remain = Math.max(0, c.remain - 1); dirty = true; }
+  }
+  if(dirty) paintSkillCds();
+}
+function paintSkillCds(){
+  document.querySelectorAll('#skillSlots .sk-cd').forEach(el => {
+    const c = skCdMap[el.dataset.sk];
+    const frac = (c && c.total > 0) ? Math.max(0, c.remain / c.total) : 0;
+    el.style.setProperty('--cd', frac.toFixed(3));
+  });
+  document.querySelectorAll('#skillSlots .sk-cdnum').forEach(el => {
+    const c = skCdMap[el.dataset.sknum];
+    const n = c ? Math.ceil(c.remain) : 0;
+    el.textContent = n > 0 ? String(n) : '';
+    el.classList.toggle('on', n > 0);
+  });
+}
+
 async function playBattle(rep,mon,bd){
   battlePlaying=true;paused=false;
   currentMonster=mon;
@@ -2804,7 +2867,7 @@ async function playBattle(rep,mon,bd){
   const mMax=Math.max(50,...rep.rounds.map(r=>r.monHp));
   bHp={hero:hMax,heroMax:hMax,mon:mMax,monMax:mMax};
   updateHp();
-  logLine('sys',`服务端战报 seed=${rep.seed} · ${rep.rounds.length} 回合 · 自动战斗${monInfos.length>1?' · 群怪 '+monInfos.length+' 只':''}`);
+  logLine('sys',`战斗开始 · ${rep.rounds.length} 回合 · 自动战斗${monInfos.length>1?' · 群怪 '+monInfos.length+' 只':''}`);
   const skills=CFG.skills.skills||[];
   const slotOf=i=>MON_SLOT[Math.min(Math.max(0,i|0),MON_SLOT.length-1)];
   for(const r of rep.rounds){
@@ -2821,6 +2884,7 @@ async function playBattle(rep,mon,bd){
       }else{
       const sk=skills.find(x=>x.id===r.action)||{};
       const kind=sk.kind||'physical';
+      setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
       const ti=Math.max(0,(r.monIdx||0)|0);
       const tgt=monInfos[ti]||monInfos[0];
       const tgtName=(tgt&&(tgt.name||MON_NAMES[tgt.sprite]))||'怪物';
@@ -2864,6 +2928,7 @@ async function playBattle(rep,mon,bd){
       logLine('mon',`R${r.n} ${r.skillName} → 英雄 -${Math.round(r.damage)}${r.dr>0?`（格挡减伤 ${Math.round(r.dr*100)}%）`:''}`);
     }
     bHp.hero=r.heroHp;bHp.mon=r.monHp;updateHp();
+    tickSkillCds();                 // v1.9.75 每步推进 CD
     await sleep(270);
   }
   battlePlaying=false;
@@ -2982,4 +3047,422 @@ async function init(){
   }
 }
 init();
+
+/* ================= v1.9.68 组队副本（大厅 / 队伍 / 多人战斗演出） ================= */
+let partyPoll=null, partyLastRun=0;
+
+function pdPowColor(my,rec){ const r=rec>0?my/rec:1; return r>=1?'#7fe0a0':r>=0.7?'#ffd76b':'#ff8a8a'; }
+
+async function reloadPlayerState(){
+  try{ const r=await api('/api/state/load',{userId:uid()}); if(r.exists){ state=r.state; await applyStats(r.stats); } }catch(e){}
+}
+
+async function openPartyDungeon(dgId){
+  let info;
+  try{ info=await api('/api/dungeon/party/info',{userId:uid()}); }catch(e){ toastModal('副本',e.message); return; }
+  const list=info.dungeons||[];
+  const d=list.find(x=>x.id===dgId)||list[0];
+  if(!d){ toastModal('副本','未配置组队副本'); return; }
+  const my=info.myPower||0, rec=d.recPower||0, col=pdPowColor(my,rec), ok=my>=rec;
+  showModal(`<h2>${d.name}</h2>
+    <div class="msub">Lv.${d.lv}+ · 最多 ${d.partyMax} 人 · ${d.unlimited?'每日不限次数':'每日限次'}</div>
+    <div class="pd-pow">
+      <div><span>推荐战力</span><b>${fmt(rec)}</b></div>
+      <div><span>我的战力</span><b style="color:${col}">${fmt(my)}</b></div>
+      <div><span>评估</span><b style="color:${col}">${ok?'达标':(my>=rec*0.7?'接近':'差距较大')}</b></div>
+    </div>
+    <div class="sec-sub">${d.drop||''}${ok?'':' · 战力不足时单人很可能打不过，建议组队'}</div>
+    <div class="pd-btns">
+      <button class="big-btn" id="pdSolo">单人挑战</button>
+      <button class="big-btn goldbtn" id="pdParty">组队大厅</button>
+    </div>
+    <div class="enc-btns"><button class="btn-gray" id="pdClose">关闭</button></div>`);
+  $('pdClose').onclick=()=>hideModal();
+  $('pdSolo').onclick=()=>soloPartyRun(d.id);
+  $('pdParty').onclick=()=>openPartyLobby(d.id);
+}
+
+async function soloPartyRun(dgId){
+  window.SFX&&SFX.dungeon();
+  showModal(`<h2>挑战中…</h2><div class="msub">正在结算这场战斗</div>`);
+  try{
+    await api('/api/party/create',{userId:uid(),dgId});
+    const r=await api('/api/party/start',{userId:uid()});
+    try{ await api('/api/party/leave',{userId:uid()}); }catch(e){}
+    hideModal();
+    await reloadPlayerState();
+    // v1.9.70 演出与结算解耦：战斗在服务端已完成，渲染出错不能误报成"挑战失败"
+    try{ playPartyBattle(r.report); }
+    catch(e2){ console.error(e2); toastModal('演出异常','战斗已结算，奖励已到账'); }
+  }catch(e){
+    try{ await api('/api/party/leave',{userId:uid()}); }catch(e2){}
+    hideModal(); toastModal('挑战失败',e.message);
+  }
+}
+
+async function openPartyLobby(dgId){
+  let r;
+  try{ r=await api('/api/party/list',{userId:uid()}); }catch(e){ toastModal('大厅',e.message); return; }
+  if(r.my){ openPartyRoom(); return; }
+  const ps=(r.parties||[]).filter(p=>!dgId||p.dgId===dgId);
+  const rows=ps.map(p=>{
+    const leader=(p.members||[]).find(m=>m.leader)||{};
+    return `<div class="pd-row">
+      <div class="pd-rl"><b>${p.dgName}</b><em>${p.size}/${p.max} 人</em></div>
+      <div class="pd-rs">队长 ${leader.name||'-'} · 平均战力 ${fmt(p.avgPower)}</div>
+      <button class="btn-gray pd-join" data-id="${p.id}">加入</button></div>`;
+  }).join('')||'<div class="sec-sub">当前没有等待中的队伍，创建一支吧</div>';
+  showModal(`<h2>组队大厅</h2><div class="msub">最多 ${ps.length?ps[0].max:3} 人 · 每日不限次数</div>
+    <div class="pd-list">${rows}</div>
+    <div class="pd-btns"><button class="big-btn goldbtn" id="plCreate">创建队伍</button>
+    <button class="btn-gray" id="plClose">关闭</button></div>`);
+  $('plClose').onclick=()=>hideModal();
+  $('plCreate').onclick=async()=>{
+    try{ await api('/api/party/create',{userId:uid(),dgId}); openPartyRoom(); }
+    catch(e){ toastModal('创建失败',e.message); }
+  };
+  document.querySelectorAll('.pd-join').forEach(b=>b.onclick=async()=>{
+    try{ await api('/api/party/join',{userId:uid(),partyId:b.dataset.id}); openPartyRoom(); }
+    catch(e){ toastModal('加入失败',e.message); }
+  });
+}
+
+async function openPartyRoom(){
+  if(partyPoll){ clearInterval(partyPoll); partyPoll=null; }
+  partyLastRun=0;
+  const paint=async()=>{
+    let r;
+    try{ r=await api('/api/party/status',{userId:uid()}); }catch(e){ return; }
+    if(!r.my){ if(partyPoll){clearInterval(partyPoll);partyPoll=null;} hideModal(); return; }
+    // 队友开战后，其他人轮询到这里也会播同一份战报
+    if(r.run&&r.runAt&&r.runAt>partyLastRun){
+      partyLastRun=r.runAt;
+      if(partyPoll){ clearInterval(partyPoll); partyPoll=null; }
+      await reloadPlayerState();
+      playPartyBattle(r.run);
+      return;
+    }
+    const me=(r.my.members||[]).find(m=>m.userId===uid())||{};
+    const isLeader=!!me.leader;
+    const rows=(r.my.members||[]).map(m=>`<div class="pd-m${m.online?'':' off'}">
+        <span class="pd-dot"></span><b>${m.name}${m.leader?' · 队长':''}</b>
+        <em>Lv.${m.level} · 战力 ${fmt(m.power)}${m.online?'':' · 离线'}</em></div>`).join('');
+    showModal(`<h2>${r.my.dgName}</h2>
+      <div class="msub">${r.my.size}/${r.my.max} 人 · 平均战力 ${fmt(r.my.avgPower)} · 推荐 ${fmt(r.my.recPower)}</div>
+      <div class="pd-members">${rows}</div>
+      <div class="pd-btns">
+        ${isLeader?'<button class="big-btn goldbtn" id="prStart">开始挑战</button>':''}
+        ${isLeader?'<button class="btn-gray" id="prInvite">邀请玩家</button>':''}
+        <button class="btn-gray" id="prLeave">退出队伍</button>
+      </div>`);
+    $('prLeave').onclick=async()=>{
+      try{ await api('/api/party/leave',{userId:uid()}); }catch(e){}
+      if(partyPoll){clearInterval(partyPoll);partyPoll=null;}
+      hideModal();
+    };
+    const st=$('prStart');
+    if(st) st.onclick=async()=>{
+      st.disabled=true; st.textContent='结算中…';
+      try{
+        const rr=await api('/api/party/start',{userId:uid()});
+        if(partyPoll){clearInterval(partyPoll);partyPoll=null;}
+        await reloadPlayerState();
+        playPartyBattle(rr.report);
+      }catch(e){ st.disabled=false; st.textContent='开始挑战'; toastModal('无法开始',e.message); }
+    };
+    const iv=$('prInvite');
+    if(iv) iv.onclick=()=>openPartyInvite();
+  };
+  await paint();
+  partyPoll=setInterval(paint,3000);
+}
+
+async function openPartyInvite(){
+  let r;
+  try{ r=await api('/api/players/online'); }catch(e){ toastModal('邀请',e.message); return; }
+  const me=uid();
+  const ps=(r.players||[]).filter(p=>p.userId&&p.userId!==me);
+  const rows=ps.map(p=>`<div class="pd-row">
+      <div class="pd-rl"><b>${p.name}</b><em>${p.worldId||''}</em></div>
+      <button class="btn-gray pd-inv" data-uid="${p.userId}" data-name="${p.name}">邀请</button></div>`).join('')
+    ||'<div class="sec-sub">当前没有其他玩家在线</div>';
+  showModal(`<h2>邀请玩家</h2><div class="msub">只能邀请在线玩家</div>
+    <div class="pd-list">${rows}</div>
+    <div class="enc-btns"><button class="btn-gray" id="piBack">返回队伍</button></div>`);
+  $('piBack').onclick=()=>openPartyRoom();
+  document.querySelectorAll('.pd-inv').forEach(b=>b.onclick=async()=>{
+    try{ await api('/api/party/invite',{userId:uid(),targetId:b.dataset.uid}); toastModal('已邀请',b.dataset.name+' 会在队伍面板看到邀请提示'); }
+    catch(e){ toastModal('邀请失败',e.message); }
+  });
+}
+
+/* ===== v1.9.71 组队副本战斗：复用打小怪的战斗场景，三个角色各自头顶血条 ===== */
+let partySlots=null;          // [{name,classId,x,hpMax,hpNow,actor}]
+let partyRunCtl=null;         // 取消令牌（离开战斗时中断）
+
+// v1.9.75 组队法师法球：从该英雄手侧飞向 BOSS 胸口
+function partyMagicShot(s, fx){
+  const color = fx==='fx_dmg_fire'?'#ff9b4a' : fx==='fx_dmg_holy'?'#ffe9a8'
+              : fx==='fx_dmg_dark'?'#b47bff' : '#7fd9ff';
+  magicShots.push({x0:(s.x||420)+28, y0:470, x1:MON_SLOT[0].x, y1:MON_SLOT[0].y-120,
+                   start:performance.now(), dur:165, color});
+  if(magicShots.length>8) magicShots.shift();
+}
+
+function partyClear(){
+  partySlots=null;
+  if(partyRunCtl){ partyRunCtl.dead=true; partyRunCtl=null; }
+}
+
+// 在 drawBattle 里被调用：把队友好几个立绘画出来 + 头顶血条
+function drawPartyHeroes(t,now){
+  if(!partySlots) return;
+  partySlots.forEach((s,i)=>{
+    if(!s.actor) return;
+    // v1.9.75 近战冲刺：算出本帧绘制用的 x，基准 s.x 不变
+    let hx=s.x;
+    if(s.lunge){
+      const e=(now-s.lunge.t0)/s.lunge.dur;
+      if(e>=1) s.lunge=null;
+      else{
+        let q;
+        if(e<0.35) q=1-Math.pow(1-e/0.35,3);
+        else{ const u=(e-0.35)/0.65; q=1-u*u*(3-2*u); }
+        hx=s.x+(s.lunge.tx-s.x)*q;
+      }
+    }
+    const dead = s.hpNow<=0;
+    // 影子
+    cvb.fillStyle='rgba(0,0,0,'+(dead?0.12:0.3)+')';
+    cvb.beginPath();cvb.ellipse(hx,566,42,12,0,0,Math.PI*2);cvb.fill();
+    s.actor.render(cvb,hx,560,1.6,{dir:(s.faceR?1:-1),alpha:dead?0.45:1});
+    // 头顶血条
+    // v1.9.73 血条贴到头顶上方：立绘脚底在 y=560、高 96*1.6，头顶约 406，血条放 360
+    const w=92,h=9,bx=hx-w/2,by=Math.round(560-96*1.6)-46;
+    cvb.fillStyle='rgba(0,0,0,.62)';cvb.fillRect(bx-1,by-1,w+2,h+2);
+    cvb.fillStyle='#2a3a2a';cvb.fillRect(bx,by,w,h);
+    const pct=Math.max(0,Math.min(1,s.hpNow/Math.max(1,s.hpMax)));
+    cvb.fillStyle=dead?'#5a5f66':(pct>0.5?'#5fd38a':pct>0.25?'#ffd76b':'#ff8a8a');
+    cvb.fillRect(bx,by,w*pct,h);
+    cvb.strokeStyle='rgba(255,255,255,.35)';cvb.lineWidth=1;cvb.strokeRect(bx+.5,by+.5,w-1,h-1);
+    // 名字 + 数字
+    cvb.font='bold 12px "Microsoft YaHei",sans-serif';cvb.textAlign='center';
+    cvb.fillStyle='#e6eefc';cvb.fillText(s.name||'', hx, by-6);
+    cvb.font='11px "Microsoft YaHei",sans-serif';cvb.fillStyle='#cfe0f5';
+    cvb.fillText(Math.max(0,Math.round(s.hpNow))+' / '+Math.round(s.hpMax), hx, by+h+12);
+    cvb.textAlign='left';
+  });
+}
+
+async function playPartyBattle(rep){
+  if(!rep) return;
+  const heroes=rep.heroes||[];
+  const rounds=rep.rounds||[];
+  partyClear();
+  const ctl={dead:false}; partyRunCtl=ctl;
+
+  /* ===== ① 初始化：逐项对齐单人 playBattle ===== */
+  battlePlaying=true; paused=false;
+  bAnim={hero:'idle',mon:'idle',heroUntil:0,monUntil:0};
+  clearBattleFx();
+  if(battleHeroActor) battleHeroActor.play('idle');
+  // v1.9.77 三波车轮战：初始阵容取第一波
+  const waveDefs=rep.waves||[];
+  const firstWave=waveDefs[0]||{monsters:[{sprite:'boss_beetle',name:rep.bossName||'幽影主宰',isBoss:true,lv:30}]};
+  const toInfos=(w)=>(w&&w.monsters?w.monsters:[]).map(m=>({sprite:m.sprite||'boss_beetle',name:m.name||'怪物',isBoss:!!m.isBoss,lv:m.lv||30,elite:false}));
+  battleMonInfos=toInfos(firstWave);
+  battleMonSig='';
+  ensureBattleActors(battleMonInfos);
+  battleMonActors.forEach((a,i)=>{a.play('idle');setMonAnim(i,'idle',0);});
+
+  const me=heroes.find(h=>h.userId===uid())||heroes[0]||{};
+  const meIdx=Math.max(0,heroes.findIndex(h=>h.userId===me.userId));
+  skillSlots((state&&state.skills&&state.skills.slots)||[]);
+  $('battleLog').innerHTML='';
+  $('monName').textContent=rep.bossName||'幽影主宰';
+  const lvTag=$('monLvTag');
+  if(lvTag) lvTag.textContent='组队副本 · '+heroes.length+' 人';
+  const cdef=CFG.classes.classes.find(x=>x.id===(state&&state.core&&state.core.classId));
+  if(cdef&&cdef.icon&&$('btHeroFace')) $('btHeroFace').src=RES+'characters/cards/'+cdef.icon;
+  $('autoTag').classList.remove('paused');
+  $('autoTag').textContent='自动战斗中';
+  $('btPause').textContent='暂停';
+  showView('battle');
+  window.SFX&&SFX.battleStart();
+
+  const hMax=Math.max(50, me.hpStart||0);
+  // v1.9.77 多怪：顶部血条 = 当前波所有怪血量之和
+  const waveMaxOf=(w)=>Math.max(1,(w&&w.monsters?w.monsters:[]).reduce((a,m)=>a+(m.maxHp||0),0));
+  const mMax=waveMaxOf(firstWave);
+  bHp={hero:hMax,heroMax:hMax,mon:mMax,monMax:mMax};
+  updateHp();
+  logLine('sys',`组队副本 · ${heroes.length} 人 · 自动战斗`);
+
+  /* ===== ② 队友立绘（多人样式的差异部分）===== */
+  const BUNDLES=window.CLASS_BUNDLES||{};
+  const xs=heroes.length===1?[420]:heroes.length===2?[360,520]:[300,430,560];
+  partySlots=heroes.map((h,i)=>({
+    name:h.name, classId:h.classId, x:xs[i]||420,
+    hpMax:h.hpStart||1, hpNow:h.hpStart||1, actor:null,
+  }));
+  const SA=window.StandeeActor;
+  await Promise.all(partySlots.map(async s=>{
+    if(!SA) return;
+    try{ const a=new SA(BUNDLES[s.classId]||'char_warrior'); await a.init(); a.play('idle'); s.actor=a; }catch(e){}
+  }));
+  if(ctl.dead) return;
+
+  /* ===== ③ 逐回合演出（节奏/音效/日志与单人一致）===== */
+  const skills=(CFG&&CFG.skills&&CFG.skills.skills)||[];
+  const bossX=MON_SLOT[0].x;
+  const total=rounds.length||1;
+  let curWave=0;                 // v1.9.77 当前波次
+  let curMonName='怪物';
+  for(const r of rounds){
+    while(paused && view==='battle') await sleep(120);
+    if(ctl.dead||view!=='battle') return;
+    // v1.9.77 波次切换：换阵容、重置 BOSS 血条、播报
+    if(r.wave && r.wave!==curWave){
+      curWave=r.wave;
+      const wd=waveDefs[curWave-1];
+      battleMonInfos=toInfos(wd);
+      ensureBattleActors(battleMonInfos);
+      battleMonActors.forEach((a,i)=>{a.play('idle');setMonAnim(i,'idle',0);});
+      bHp.monMax=waveMaxOf(wd); bHp.mon=bHp.monMax; updateHp();
+      $('monName')&&($('monName').textContent='第 '+curWave+' 波 · '+((wd&&wd.monsters&&wd.monsters[0]&&wd.monsters[0].name)||'怪物'));
+      $('monLvTag')&&($('monLvTag').textContent=(wd&&wd.monsters?wd.monsters.length:1)+' 只 · 第 '+curWave+'/'+(waveDefs.length||1)+' 波');
+      curMonName=(wd&&wd.monsters&&wd.monsters[0]&&wd.monsters[0].name)||'怪物';
+      logLine('sys','—— 第 '+curWave+' 波：'+(wd&&wd.monsters?wd.monsters.length:1)+' 只'+curMonName+' ——');
+      if(curWave>1){ window.SFX&&SFX.dungeon&&SFX.dungeon(); }
+      await sleep(520);
+    }
+    // v1.9.78 死亡表现：血量归零的瞬间播倒地，之后保持倒地位姿（服务端已不再给他出手）
+    if(r.heroHp) r.heroHp.forEach((hp,i)=>{
+      const ps=partySlots[i]; if(!ps) return;
+      if(ps.hpNow>0 && hp<=0 && ps.actor){ try{ ps.actor.playOnce('die'); }catch(e){} ps.deadPose=true; }
+      ps.hpNow=hp;
+    });
+    // 怪群血量：当前波各怪之和
+    if(r.monHp) bHp.mon=r.monHp.reduce((a,v)=>a+v,0);
+    else if(r.bossHp!=null) bHp.mon=r.bossHp;
+    const si=Math.max(0,(r.heroIdx||0)|0);
+    const s=partySlots[si];
+    if(si===meIdx) bHp.hero=s?s.hpNow:hMax;
+    $('roundVal').textContent=`${r.n} / ${total}`;
+    updateHp();
+    if(r.actor==='hero'){
+      const sk=skills.find(x=>x.id===r.action)||{};
+      const kind=r.action==='hot'?'heal':(sk.kind||'physical');
+      setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
+      if(kind==='physical') window.SFX&&SFX.slash();
+      else if(kind==='shield') window.SFX&&SFX.shield();
+      else window.SFX&&SFX.cast();
+      // v1.9.75 近战冲到 BOSS 身边再砍；法师从自己手侧发法球（与单人一致）
+      if(s && r.damage>0){
+        if(MELEE_CLASSES[s.classId]===1){
+          s.lunge={t0:performance.now(), dur:430, tx:Math.max(s.x+140, MON_SLOT[0].x-170)};
+        }else{
+          partyMagicShot(s, r.fx);
+        }
+      }
+      if(s&&s.actor){ try{ s.actor.play('attack'); }catch(e){} }
+      if(si===meIdx) setBAnim('hero','attack',420);
+      await sleep(150);
+      if(s&&s.actor){ try{ s.actor.play('idle'); }catch(e){} }
+      if(r.damage>0){
+        const mi=Math.max(0,(r.monIdx||0)|0);
+        setMonAnim(mi,'hit',300);
+        spawnFx('-'+Math.round(r.damage), (MON_SLOT[Math.min(mi,MON_SLOT.length-1)]||{x:bossX}).x, 430, '#ff6b6b');
+        if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
+        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${rep.bossName||'BOSS'} -${Math.round(r.damage)}`);
+      }else if(r.heal>0){
+        // v1.9.79 治疗落到「被治疗的人」头顶
+        const tgt=(r.targetIdx!=null&&partySlots[r.targetIdx])?partySlots[r.targetIdx]:s;
+        window.SFX&&SFX.heal();
+        spawnFx('+'+Math.round(r.heal), tgt?tgt.x:420, 440, '#7fe0a0');
+        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${tgt?tgt.name:'自己'} +${Math.round(r.heal)}`);
+      }else{
+        // v1.9.79 格挡/增益：浮字落在目标队友头顶
+        const tgt=(r.targetIdx!=null&&partySlots[r.targetIdx])?partySlots[r.targetIdx]:s;
+        if(kind==='shield'){
+          window.SFX&&SFX.shield();
+          spawnFx('格挡', tgt?tgt.x:420, 440, '#8fd0ff');
+          logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${(tgt&&tgt!==s)?tgt.name:'自己'}（减伤 ${Math.round((sk.drPct||0)*100)}%，${sk.drRounds||1} 回合）`);
+        }else{
+          logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''}（${kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
+        }
+      }
+    }else{
+      window.SFX&&SFX.enemySlash();
+      setMonAnim(0,'attack',420);
+      await sleep(150);
+      if(si===meIdx) setBAnim('hero','hit',300);
+      spawnFx('-'+Math.round(r.damage||0), s?s.x:420, 440, '#ff6b6b');
+      window.SFX&&SFX.hurt();
+      logLine('mon',`R${r.n} ${rep.bossName||'BOSS'} → ${s?s.name:'队友'} -${Math.round(r.damage||0)}`);
+    }
+    // 本波全灭：整排怪物倒地（最后一波即通关）
+    if(r.monHp && r.monHp.length && r.monHp.every(v=>v<=0)){
+      battleMonActors.forEach((a,i)=>setMonAnim(i,'die',1400+i*120));
+      await sleep(500);
+    }
+    tickSkillCds();                 // v1.9.75 每步推进 CD
+    await sleep(210);
+  }
+  if(ctl.dead||view!=='battle') return;
+
+  /* ===== ④ 结算 ===== */
+  battlePlaying=false;
+  const win=rep.result==='win';
+  if(win){ battleMonActors.forEach((a,i)=>setMonAnim(i,'die',1600+i*120)); window.SFX&&SFX.victory(); }
+  else{ window.SFX&&SFX.death(); }
+  const tt=document.createElement('div');
+  tt.className='toast-win'+(win?'':' lose'); tt.textContent=win?'战 斗 胜 利':'战 斗 失 败';
+  $('fxLayer').appendChild(tt); setTimeout(()=>tt.remove(),1200);
+  await sleep(1500);
+  if(view!=='battle') return;
+  const wrows=(rep.waves||[]).map(w=>`<div class="pd-m"><span class="pd-dot${w.result==='win'?'':' off'}"></span>
+      <b>第 ${w.index} 波</b><em>${w.monsters?w.monsters.length:1} 只 · ${w.result==='win'?'通过':'失败'} · ${w.rounds} 回合</em></div>`).join('');
+  const rows=(rep.heroes||[]).map(h=>`<div class="pd-m"><span class="pd-dot${h.alive?'':' off'}"></span><b>${h.name}</b>
+      <em>${h.alive?'存活':'倒下'} · 剩余 ${Math.round(h.hpEnd)} · 输出 ${fmt(Math.round(h.damage||0))}</em></div>`).join('');
+  showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
+    <div class="msub">通过 ${rep.waveDone||0}/${rep.waveTotal||3} 波 · ${rep.partyMult} 倍人数加成</div>
+    <div class="sec-title">关卡进度</div>${wrows}
+    <div class="sec-title">成员结算</div>${rows}
+    <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(rep.exp||0)}</span></div>
+    <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(rep.gold||0)}</span></div>
+    <div class="enc-btns"><button class="big-btn goldbtn" id="partyOk">收下</button></div>`);
+  $('partyOk').onclick=async()=>{
+    hideModal(); partyClear(); showView('world');
+    await reloadPlayerState();
+  };
+}
+
+/* 邀请接收：未在队伍中时轻量轮询（8s），有邀请就弹窗 */
+let inviteTimer=null;
+function startInviteWatch(){
+  if(inviteTimer) return;
+  inviteTimer=setInterval(async()=>{
+    if(!state||!state.core) return;
+    if(panel||view!=='world') return;                       // 面板/战斗中不打扰
+    if(!document.getElementById('modalLayer').classList.contains('hidden')) return;
+    let r; try{ r=await api('/api/party/status',{userId:uid()}); }catch(e){ return; }
+    if(r.my||!r.invite) return;
+    const inv=r.invite;
+    showModal(`<h2>组队邀请</h2>
+      <div class="msub"><b style="color:#f0d590">${inv.fromName}</b> 邀请你加入队伍</div>
+      <div class="pd-btns">
+        <button class="big-btn goldbtn" id="invYes">接受</button>
+        <button class="btn-gray" id="invNo">拒绝</button>
+      </div>`);
+    $('invYes').onclick=async()=>{
+      try{ await api('/api/party/accept',{userId:uid()}); hideModal(); openPartyRoom(); }
+      catch(e){ hideModal(); toastModal('接受失败',e.message); }
+    };
+    $('invNo').onclick=async()=>{
+      try{ await api('/api/party/decline',{userId:uid()}); }catch(e){}
+      hideModal();
+    };
+  },8000);
+}
 })();

@@ -7,3 +7,8 @@ data/zjcs-server
 node_modules/
 data/guilds.json
 data/*.pid
+data/zjcs-server.exe
+data/server.out.log
+data/server.err.log
+msg.txt
+commit-msg.txt
