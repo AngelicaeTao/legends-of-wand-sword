@@ -89,9 +89,20 @@ function WMap(canvas, opts){
   this.actorCache={}; // bundle -> PartActor 实例（怪物/宝箱每类一个）
 
   // v1.9.64 地图旗标：大地图上点选地点后可选择是否跟踪（仅存本地，不落服务端）
-  // {wid,x,y,track}；wid 用于切图后不误显示别的地图的旗标
-  this.pin=null;
-  try{ const s=localStorage.getItem('zjcs.mapPin'); if(s)this.pin=JSON.parse(s)||null; }catch(e){}
+  // v1.9.82 改为多标记点：[{id,wid,x,y,track}]；wid 用于切图后不误显示别的地图的标记
+  this.pins=[];
+  try{
+    const s=localStorage.getItem('zjcs.mapPins');
+    if(s){ const a=JSON.parse(s); if(Array.isArray(a))this.pins=a.filter(p=>p&&p.wid&&isFinite(p.x)&&isFinite(p.y)); }
+    else{
+      // 旧版单个旗标（zjcs.mapPin）迁移成数组，迁完即删旧键，避免下次重复导入
+      const o=localStorage.getItem('zjcs.mapPin');
+      if(o){ const p=JSON.parse(o);
+        if(p&&p.wid&&isFinite(p.x)&&isFinite(p.y))this.pins=[{id:'p_legacy',wid:p.wid,x:p.x,y:p.y,track:!!p.track}];
+        localStorage.removeItem('zjcs.mapPin');
+      }
+    }
+  }catch(e){}
 }
 
 /* ---------- 加载真实地形全图 + 通行掩码（异步） ---------- */
@@ -982,11 +993,17 @@ WMap.prototype.update=function(dt){
   for(const d of this.dust){ d.x+=d.vx*dt; d.y+=d.vy*dt; d.vy+=26*dt; d.life-=dt; }
   this.dust=this.dust.filter(d=>d.life>0);
   this.centerCam();
-  // v1.9.68 走到标记点附近 → 自动取消跟踪（旗标本身保留，玩家可自行清除或重新跟踪）
-  const gp=this.curPin();
-  if(gp&&gp.track&&Math.hypot(gp.x-h.x,gp.y-h.y)<=PIN_ARRIVE_R){
-    gp.track=false; this.savePin();
-    this.pinToast={text:'已到达标记点 · 自动取消跟踪',until:this.time+3.0};
+  // v1.9.68 走到标记点附近 → 自动取消跟踪（标记本身保留，玩家可自行删除或重新跟踪）
+  // v1.9.82 多个标记点：逐个判定，可能一次到达多个
+  let arrived=0;
+  for(const gp of this.worldPins()){
+    if(gp.track&&Math.hypot(gp.x-h.x,gp.y-h.y)<=PIN_ARRIVE_R){
+      gp.track=false; arrived++;
+    }
+  }
+  if(arrived){
+    this.savePins();
+    this.pinToast={text:arrived>1?('已到达 '+arrived+' 个标记点 · 自动取消跟踪'):'已到达标记点 · 自动取消跟踪',until:this.time+3.0};
     if(window.SFX&&SFX.tab)SFX.tab();
   }
   // 掉落物理
@@ -1394,34 +1411,57 @@ WMap.prototype.applySnapshot=function(players,selfId){
 
 /* ---------- v1.9.64 地图旗标：点选地点 + 是否跟踪 ---------- */
 /* 旗标只存本地（localStorage），不上报服务端：它不是玩法状态，只是玩家的导航便签。
-   切图后旗标仍保留，但只在它所属的世界（wid）绘制，避免"在森林标的点出现在沙漠"。 */
+   切图后旗标仍保留，但只在它所属的世界（wid）绘制，避免"在森林标的点出现在沙漠"。
+   v1.9.82 支持多个标记点：id 唯一，各自独立 track；上限 PIN_MAX 防止满屏箭头。 */
 const PIN_SVG='<svg class="pin-ico" viewBox="0 0 12 12" aria-hidden="true">'+
   '<path d="M2.2 11V1.2" stroke="#6b4c00" stroke-width="1.7"/>'+
   '<path d="M3 1.6 10.2 4.1 3 6.6Z" fill="#ffd65a" stroke="#6b4c00" stroke-width=".9"/></svg>';
-WMap.prototype.setPin=function(x,y){
-  this.pin={wid:this.worldId,x:Math.round(x),y:Math.round(y),track:this.pin?!!this.pin.track:true};
-  this.savePin();
+const PIN_MAX=8;
+let _pinSeq=0;
+const newPinId=()=>'p'+Date.now().toString(36)+'_'+(++_pinSeq);
+/* 当前世界的标记点（别的地图标的点不返回） */
+WMap.prototype.worldPins=function(){
+  if(!Array.isArray(this.pins))this.pins=[];
+  return this.pins.filter(p=>p&&p.wid===this.worldId);
 };
-WMap.prototype.setPinTrack=function(on){
-  if(!this.pin||this.pin.wid!==this.worldId)return;
-  this.pin.track=!!on; this.savePin();
+/* 新增标记点；超出上限返回 null（由调用方提示） */
+WMap.prototype.addPin=function(x,y){
+  if(this.worldPins().length>=PIN_MAX)return null;
+  const p={id:newPinId(),wid:this.worldId,x:Math.round(x),y:Math.round(y),track:true};
+  this.pins.push(p); this.savePins(); return p;
 };
-WMap.prototype.clearPin=function(){
-  this.pin=null; this.savePin();
+WMap.prototype.findPin=function(id){ return (this.pins||[]).find(p=>p.id===id)||null; };
+WMap.prototype.removePin=function(id){
+  this.pins=(this.pins||[]).filter(p=>p.id!==id); this.savePins();
 };
-WMap.prototype.savePin=function(){
-  try{ localStorage.setItem('zjcs.mapPin', JSON.stringify(this.pin||null)); }catch(e){}
+WMap.prototype.clearPins=function(){
+  const wid=this.worldId; this.pins=(this.pins||[]).filter(p=>p.wid!==wid); this.savePins();
+};
+/* 不传 id 时操作最近的那个（兼容旧调用） */
+WMap.prototype.setPinTrack=function(on,id){
+  const p=id?this.findPin(id):this.curPin();
+  if(!p)return; p.track=!!on; this.savePins();
+};
+WMap.prototype.savePins=function(){
+  try{ localStorage.setItem('zjcs.mapPins',JSON.stringify(this.pins||[])); }catch(e){}
   if(this._pinBarRefresh)this._pinBarRefresh();
 };
-/* 当前世界的旗标（别的地图标的点返回 null） */
+/* 离角色最近的标记点（旧单旗标接口的等价物；地图条/小地图摘要用它） */
 WMap.prototype.curPin=function(){
-  return (this.pin&&this.pin.wid===this.worldId)?this.pin:null;
+  const wp=this.worldPins(); if(!wp.length)return null;
+  let best=wp[0],bd=Infinity;
+  for(const p of wp){ const d=Math.hypot(p.x-this.hero.x,p.y-this.hero.y); if(d<bd){bd=d;best=p;} }
+  return best;
 };
 /* 世界坐标 → 距离文案（1 格 = 160 世界单位，与探索格一致） */
-WMap.prototype.pinDist=function(){
-  const p=this.curPin(); if(!p)return 0;
+WMap.prototype.pinDistOf=function(p){
+  if(!p)return 0;
   return Math.round(Math.hypot(p.x-this.hero.x,p.y-this.hero.y)/160);
 };
+WMap.prototype.pinDist=function(){ return this.pinDistOf(this.curPin()); };
+/* 旧签名兼容：setPin 现在等于"新增一个标记"，clearPin 等于"删掉最近的那个" */
+WMap.prototype.setPin=function(x,y){ return this.addPin(x,y); };
+WMap.prototype.clearPin=function(){ const p=this.curPin(); if(p)this.removePin(p.id); };
 
 /* ---------- v1.9.68 主界面旗标方位提示（仅跟踪中） ----------
    两套画法按"旗标是否在视口内"切换：
@@ -1463,57 +1503,133 @@ WMap.prototype.drawPinHud=function(g,cx,cy,t){
       g.restore();
     }
   }
-  const p=this.curPin();
-  if(!p||!p.track)return;                            // 只有跟踪中才提示，未跟踪不制造常驻噪音
-  const px=p.x-cx, py=p.y-cy;
-  const cells=Math.max(0,Math.round(Math.hypot(p.x-this.hero.x,p.y-this.hero.y)/160));
-  const label=cells>0?(cells+' 格'):'就在附近';
-  // ---- 视口内：地标旗（旗杆 + 旗面 + 地面光环 + 渐隐光柱） ----
-  if(px>10&&px<VW-10&&py>34&&py<VH-14){
-    const pul=0.5+0.5*Math.sin(t*3.2), bob=Math.sin(t*2.2)*2;
-    const top=py-62+bob;
-    g.save();
-    // 光柱：先画，让旗杆压在上面
-    const grd=g.createLinearGradient(px,top-26,px,py);
-    grd.addColorStop(0,'rgba(255,214,90,0)');
-    grd.addColorStop(1,'rgba(255,214,90,.34)');
-    g.fillStyle=grd; g.fillRect(px-8,top-26,16,88);
-    // 地面光环：深底 + 金环，保证在土黄/草地/石板上都能看清
-    g.fillStyle='rgba(12,10,4,.20)';
-    g.beginPath(); g.ellipse(px,py,22+pul*7,11+pul*3.5,0,0,Math.PI*2); g.fill();
-    g.strokeStyle='rgba(255,224,120,'+(0.62+0.28*pul).toFixed(3)+')';
-    g.lineWidth=2.6;
-    g.beginPath(); g.ellipse(px,py,22+pul*7,11+pul*3.5,0,0,Math.PI*2); g.stroke();
-    // 旗杆：深色打底 + 金色覆盖，顶端略高
-    g.lineCap='round';
-    g.strokeStyle='#231706'; g.lineWidth=4;
-    g.beginPath(); g.moveTo(px,py); g.lineTo(px,top); g.stroke();
-    g.strokeStyle='#ffd65a'; g.lineWidth=2;
-    g.beginPath(); g.moveTo(px,py); g.lineTo(px,top); g.stroke();
-    // 旗面：朝右的三角，深描边
-    g.lineJoin='round';
-    g.fillStyle='#ffd65a'; g.strokeStyle='#231706'; g.lineWidth=2;
-    g.beginPath(); g.moveTo(px+1,top); g.lineTo(px+38,top+13); g.lineTo(px+1,top+26); g.closePath();
-    g.fill(); g.stroke();
-    g.restore();
-    this.drawPinLabel(g,px,py+33,label);
-    return;
-  }
-  // ---- 视口外：角色周围的圆形徽章箭头（深色圆底，任何地形都不糊） ----
-  const ang=Math.atan2(p.y-this.hero.y,p.x-this.hero.x);
-  const R=78, ax=hx+Math.cos(ang)*R, ay=hy+Math.sin(ang)*R-26;
+  const pins=this.worldPins().filter(p=>p.track);     // 只有跟踪中才提示，未跟踪不制造常驻噪音
+  if(!pins.length)return;
+  pins.forEach((p,i)=>{
+    const px=p.x-cx, py=p.y-cy;
+    const cells=this.pinDistOf(p);
+    // 多个标记时前缀序号，和大地图/小地图上的编号一一对应
+    const label=(pins.length>1?((i+1)+' · '):'')+(cells>0?(cells+' 格'):'就在附近');
+    // ---- 视口内：地标旗（旗杆 + 旗面 + 地面光环 + 渐隐光柱） ----
+    if(px>10&&px<VW-10&&py>34&&py<VH-14){ this.drawPinFlag(g,px,py,t,label); return; }
+    // ---- 视口外：画面边缘的方位箭头（闪烁） ----
+    const ang=Math.atan2(p.y-this.hero.y,p.x-this.hero.x);
+    const rs=this.hudBlockRects(g,t);
+    // 命中 HUD 就沿同一条边微调角度（±8°…±40°）找个空位；箭头旋转仍用真实方位
+    let e=this.pinEdgePoint(hx,hy,ang);
+    if(this.rectHit(e.x,e.y,rs)){
+      for(const d of [8,-8,16,-16,24,-24,32,-32,40,-40]){
+        const a=ang+d*Math.PI/180;
+        const c=this.pinEdgePoint(hx,hy,a);
+        if(!this.rectHit(c.x,c.y,rs)){ e=c; break; }
+      }
+    }
+    this.drawPinEdgeArrow(g,e.x,e.y,ang,label,t);
+  });
+};
+
+/* 视口内的地标旗：旗杆 + 旗面 + 地面呼吸光环 + 向上的渐隐光柱 */
+WMap.prototype.drawPinFlag=function(g,px,py,t,label){
+  const pul=0.5+0.5*Math.sin(t*3.2), bob=Math.sin(t*2.2)*2;
+  const top=py-62+bob;
   g.save();
-  g.translate(ax,ay);
-  g.fillStyle='rgba(10,14,22,.72)';
-  g.beginPath(); g.arc(0,0,18,0,Math.PI*2); g.fill();
-  g.strokeStyle='rgba(255,214,90,.85)'; g.lineWidth=1.8;
-  g.beginPath(); g.arc(0,0,18,0,Math.PI*2); g.stroke();
-  g.rotate(ang);
-  g.fillStyle='#ffd65a'; g.strokeStyle='rgba(26,16,0,.95)'; g.lineWidth=1.6; g.lineJoin='round';
-  g.beginPath(); g.moveTo(12,0); g.lineTo(-6,-8); g.lineTo(-2.5,0); g.lineTo(-6,8); g.closePath();
+  // 光柱：先画，让旗杆压在上面
+  const grd=g.createLinearGradient(px,top-26,px,py);
+  grd.addColorStop(0,'rgba(255,214,90,0)');
+  grd.addColorStop(1,'rgba(255,214,90,.34)');
+  g.fillStyle=grd; g.fillRect(px-8,top-26,16,88);
+  // 地面光环：深底 + 金环，保证在土黄/草地/石板上都能看清
+  g.fillStyle='rgba(12,10,4,.20)';
+  g.beginPath(); g.ellipse(px,py,22+pul*7,11+pul*3.5,0,0,Math.PI*2); g.fill();
+  g.strokeStyle='rgba(255,224,120,'+(0.62+0.28*pul).toFixed(3)+')';
+  g.lineWidth=2.6;
+  g.beginPath(); g.ellipse(px,py,22+pul*7,11+pul*3.5,0,0,Math.PI*2); g.stroke();
+  // 旗杆：深色打底 + 金色覆盖，顶端略高
+  g.lineCap='round';
+  g.strokeStyle='#231706'; g.lineWidth=4;
+  g.beginPath(); g.moveTo(px,py); g.lineTo(px,top); g.stroke();
+  g.strokeStyle='#ffd65a'; g.lineWidth=2;
+  g.beginPath(); g.moveTo(px,py); g.lineTo(px,top); g.stroke();
+  // 旗面：朝右的三角，深描边
+  g.lineJoin='round';
+  g.fillStyle='#ffd65a'; g.strokeStyle='#231706'; g.lineWidth=2;
+  g.beginPath(); g.moveTo(px+1,top); g.lineTo(px+38,top+13); g.lineTo(px+1,top+26); g.closePath();
   g.fill(); g.stroke();
   g.restore();
-  this.drawPinLabel(g,ax+Math.cos(ang)*50,ay+Math.sin(ang)*50,label);
+  this.drawPinLabel(g,px,py+33,label);
+};
+
+/* HUD 占位矩形（画布坐标系）：边缘箭头必须避开，否则等于画在面板底下
+   —— 左上角色条（名字/经验/血量/药水）就压在 y≈24..175，只按固定边距收边是不够的。
+   实测 DOM 矩形而不是写死像素：HUD 会随窗口宽度/任务栏收起而变化。 */
+WMap.prototype.hudBlockRects=function(g,t){
+  if(this._hudRects && this._hudRectsTs!=null && t-this._hudRectsTs<0.4)return this._hudRects;
+  const cv=g.canvas, cr=cv.getBoundingClientRect();
+  const k=(cr.width||cv.width)/cv.width;
+  // 用选择器而不是 id：左上角色条是一整块（名字 + 经验 + 血量 + 药水按钮），
+  // 只记 worldName 会漏掉中间的经验条/血量条，箭头就藏在那两条底下。
+  const sel=['.world-hud-left','#minimap','.mm-info','#mmPin','#hudCurrency','#questTracker',
+             '#bottomNav','.world-hint','#sfxBtn','#logoutBtn'];
+  const out=[],pad=26;
+  for(const s of sel){
+    const el=document.querySelector(s); if(!el)continue;
+    const r=el.getBoundingClientRect();
+    if(!r.width||!r.height)continue;
+    out.push({l:(r.left-cr.left)/k-pad, tp:(r.top-cr.top)/k-pad, r:(r.right-cr.left)/k+pad, b:(r.bottom-cr.top)/k+pad});
+  }
+  this._hudRects=out; this._hudRectsTs=t;
+  return out;
+};
+WMap.prototype.rectHit=function(x,y,rs){
+  for(const r of rs)if(x>r.l&&x<r.r&&y>r.tp&&y<r.b)return true;
+  return false;
+};
+/* 视口外标记点 → 画面边缘落点
+   从角色屏幕位置沿 atan2 方向射一条线，与"安全框"求交。安全框不是整屏：
+   小地图（左上 24..252）、任务栏（右上 112..~300）、底部导航与操作提示（y>~560）
+   都会压住边缘，箭头落进去就等于没提示，所以先把边收进来，
+   贴边后再按左右上下把坐标挤出 HUD 占据的区间。 */
+WMap.prototype.pinEdgePoint=function(hx,hy,ang){
+  const L=84, R=VW-84, T=96, B=VH-192;
+  const ca=Math.cos(ang), sa=Math.sin(ang);
+  let k=Infinity;
+  if(ca>1e-6)k=Math.min(k,(R-hx)/ca); else if(ca<-1e-6)k=Math.min(k,(L-hx)/ca);
+  if(sa>1e-6)k=Math.min(k,(B-hy)/sa); else if(sa<-1e-6)k=Math.min(k,(T-hy)/sa);
+  if(!isFinite(k)||k<0)k=0;
+  let x=hx+ca*k, y=hy+sa*k;
+  if(x<=L+0.5)y=Math.min(Math.max(y,266),B);                 // 左边沿：让开小地图下方的旗标条
+  else if(x>=R-0.5)y=Math.min(Math.max(y,318),B);            // 右边沿：让开主线任务栏（含收起/展开）
+  else if(y<=T+0.5)x=Math.min(Math.max(x,236),1000);         // 上边沿：让开左上小地图
+  else if(y>=B-0.5)x=Math.min(Math.max(x,236),1040);         // 下边沿：让开底部导航
+  return {x,y};
+};
+
+/* 边缘方位箭头：深色圆底 + 金环 + 指向真实方位的三角，整体呼吸式闪烁 */
+WMap.prototype.drawPinEdgeArrow=function(g,x,y,ang,label,t){
+  const bl=0.52+0.48*Math.sin(t*4.6);                        // 闪烁：几乎全亮 ↔ 半透明
+  const pu=0.5+0.5*Math.sin(t*4.6);
+  g.save();
+  // 外层扩散金光：让边缘这一点在余光里也能被注意到
+  g.globalAlpha=0.16+0.30*pu;
+  g.fillStyle='#ffd65a';
+  g.beginPath(); g.arc(x,y,21+pu*9,0,Math.PI*2); g.fill();
+  // 深色圆底 + 金环：任何地形/亮度下都清晰
+  g.globalAlpha=0.60+0.36*bl;
+  g.fillStyle='rgba(10,14,22,.88)';
+  g.beginPath(); g.arc(x,y,17,0,Math.PI*2); g.fill();
+  g.strokeStyle='rgba(255,214,90,.95)'; g.lineWidth=2;
+  g.beginPath(); g.arc(x,y,17,0,Math.PI*2); g.stroke();
+  // 三角箭头：旋转到真实方位（贴边后被 HUD 挤动位置时，方向依然正确）
+  g.save(); g.translate(x,y); g.rotate(ang);
+  g.fillStyle='#ffd65a'; g.strokeStyle='rgba(26,16,0,.95)'; g.lineWidth=1.6; g.lineJoin='round';
+  g.beginPath(); g.moveTo(13,0); g.lineTo(-6,-8.5); g.lineTo(-2.6,0); g.lineTo(-6,8.5); g.closePath();
+  g.fill(); g.stroke();
+  g.restore();
+  // 距离标签朝屏幕中心放，避免被画布边界裁掉
+  const dx=VW/2-x, dy=VH/2-y, dd=Math.hypot(dx,dy)||1;
+  g.globalAlpha=0.72+0.28*bl;
+  this.drawPinLabel(g,x+dx/dd*38,y+dy/dd*38,label);
+  g.restore();
 };
 
 /* ---------- v1.9.29 大地图弹窗（M 键开关 / Esc / ✕ / 遮罩点击关闭） ---------- */
@@ -1528,7 +1644,7 @@ WMap.prototype.openMapModal=function(){
   const layer=document.createElement('div');
   layer.id='wmapLayer';
   layer.innerHTML=`<div class="wmap-box">
-    <div class="wmap-head"><b>${title}</b><span class="wmap-tip">点地图标记地点 · M / Esc 关闭 · 点✕退出</span>
+    <div class="wmap-head"><b>${title}</b><span class="wmap-tip">点空地加标记 · 点标记开关跟踪 · 下方列表可删 · M / Esc 关闭</span>
       <button class="btn-gray" id="wmapOnline" style="margin-right:8px;padding:3px 12px">在线玩家</button>
       <button id="wmapClose" title="关闭 (Esc / M)">✕</button></div>
     <canvas id="wmapCv" width="960" height="540"></canvas>
@@ -1575,19 +1691,32 @@ WMap.prototype.openMapModal=function(){
   const cv=layer.querySelector('#wmapCv'), g=cv.getContext('2d');
   layer.querySelector('.wmap-legend').innerHTML=legend;
 
-  /* v1.9.64 旗标交互 */
+  /* v1.9.64 旗标交互；v1.9.82 支持多个标记点（列表 + 逐个删除） */
   const bar=layer.querySelector('#wmapPinBar');
   const refreshBar=()=>{
-    const p=self.curPin();
-    if(!p){
-      bar.innerHTML=`<span class="wmap-pin-none">${PIN_SVG}点地图任意位置放置旗标，可自由选择是否跟踪</span>`;
+    const wp=self.worldPins();
+    if(!wp.length){
+      bar.innerHTML=`<span class="wmap-pin-none">${PIN_SVG}点地图任意位置放置标记点（最多 ${PIN_MAX} 个），点已有标记可开关跟踪</span>`;
       return;
     }
-    bar.innerHTML=`<span class="wmap-pin-txt">${PIN_SVG}旗标 (${p.x}, ${p.y}) · 距你 ${self.pinDist()} 格</span>`+
-      `<button class="wmap-pin-btn${p.track?' on':''}" id="wmapPinTrack" type="button" title="小地图上持续指向该点">${p.track?'跟踪中 ✓':'跟踪'}</button>`+
-      `<button class="wmap-pin-btn ghost" id="wmapPinClear" type="button">清除</button>`;
-    bar.querySelector('#wmapPinTrack').onclick=()=>{ self.setPinTrack(!p.track); refreshBar(); };
-    bar.querySelector('#wmapPinClear').onclick=()=>{ self.clearPin(); refreshBar(); };
+    let h=`<span class="wmap-pin-title">${PIN_SVG}标记 ${wp.length}/${PIN_MAX}</span>`;
+    wp.forEach((p,i)=>{
+      h+=`<span class="wmap-pin-chip${p.track?'':' off'}" data-id="${p.id}">`+
+        `<i class="pc-idx">${i+1}</i>`+
+        `<b class="pc-dist">${self.pinDistOf(p)} 格</b>`+
+        `<button class="wmap-pin-btn pc-t${p.track?' on':''}" type="button" title="主界面边缘持续指向该点">${p.track?'跟踪中 ✓':'跟踪'}</button>`+
+        `<button class="wmap-pin-btn ghost pc-x" type="button" title="删除这个标记点">✕</button>`+
+      `</span>`;
+    });
+    h+=`<button class="wmap-pin-btn ghost" id="wmapPinAllClear" type="button">全部清除</button>`;
+    bar.innerHTML=h;
+    wp.forEach(p=>{
+      const chip=bar.querySelector(`.wmap-pin-chip[data-id="${p.id}"]`);
+      if(!chip)return;
+      chip.querySelector('.pc-t').onclick=()=>{ self.setPinTrack(!p.track,p.id); refreshBar(); };
+      chip.querySelector('.pc-x').onclick=()=>{ self.removePin(p.id); refreshBar(); };
+    });
+    bar.querySelector('#wmapPinAllClear').onclick=()=>{ self.clearPins(); refreshBar(); };
   };
   self._pinBarRefresh=refreshBar;
   refreshBar();
@@ -1601,7 +1730,20 @@ WMap.prototype.openMapModal=function(){
     if(wx<0||wy<0||wx>self.WM||wy>self.HM)return null;
     return {x:wx,y:wy};
   };
-  cv.addEventListener('click',e=>{ const p=pick(e); if(!p)return; self.setPin(p.x,p.y); refreshBar(); });
+  // 命中已有标记？用来区分"新建"与"开关跟踪"
+  const hitPin=w=>{
+    const S=cv.width/self.WM, tol=15/S;
+    return self.worldPins().find(p=>Math.hypot(p.x-w.x,p.y-w.y)<=tol)||null;
+  };
+  cv.addEventListener('click',e=>{
+    const p=pick(e); if(!p)return;
+    const hit=hitPin(p);
+    if(hit){ self.setPinTrack(!hit.track,hit.id); }              // 点已有标记 → 开关跟踪
+    else if(!self.addPin(p.x,p.y)){                              // 位置空 → 新建；满则提示
+      self.pinToast={text:'标记点最多 '+PIN_MAX+' 个 · 先删掉一些',until:self.time+2.4};
+    }
+    refreshBar();
+  });
   cv.addEventListener('mousemove',e=>{ self._pinHover=pick(e); });
   cv.addEventListener('mouseleave',()=>{ self._pinHover=null; });
 
@@ -1651,34 +1793,41 @@ WMap.prototype.drawMapModal=function(cv,g){
   dot(hp.x,hp.y,9+Math.sin(t*2.5)*2.5,'rgba(255,214,90,.25)');
   dot(hp.x,hp.y,6,'#ffd65a','#6b4c00');
   // v1.9.64 旗标：金色小旗 + 距离；跟踪开启时画角色→旗标的虚线
-  const pin=this.curPin();
-  if(pin){
+  // v1.9.82 多个标记点：编号与下方列表一致，未跟踪的画灰色（一眼看出哪些在导航）
+  const wp=this.worldPins();
+  wp.forEach((pin,i)=>{
     const pp=P(pin.x,pin.y);
+    const gold=pin.track;
     if(pin.track){
       g.save(); g.strokeStyle='rgba(255,214,90,.62)'; g.lineWidth=2.6; g.setLineDash([8,6]);
       g.beginPath(); g.moveTo(hp.x,hp.y); g.lineTo(pp.x,pp.y); g.stroke(); g.restore();
     }
     // 落点光晕（脉动）：小旗在满屏地形里容易被忽略，用一圈呼吸光勾出来
-    dot(pp.x,pp.y,10+Math.sin(t*2.2)*2.5,'rgba(255,214,90,.2)');
+    dot(pp.x,pp.y,10+Math.sin(t*2.2+i)*2.5,gold?'rgba(255,214,90,.2)':'rgba(150,168,190,.18)');
     g.save();
     g.lineCap='round';
     // 旗杆：深棕描边 + 亮金内芯，深色草地/雪地上都能看清
-    g.strokeStyle='#6b4c00'; g.lineWidth=4.2;
+    g.strokeStyle=gold?'#6b4c00':'#2a3442'; g.lineWidth=4.2;
     g.beginPath(); g.moveTo(pp.x,pp.y); g.lineTo(pp.x,pp.y-26); g.stroke();
-    g.strokeStyle='#ffe9a8'; g.lineWidth=2.2;
+    g.strokeStyle=gold?'#ffe9a8':'#9fb0c6'; g.lineWidth=2.2;
     g.beginPath(); g.moveTo(pp.x,pp.y); g.lineTo(pp.x,pp.y-26); g.stroke();
-    g.fillStyle='#ffd65a'; g.strokeStyle='#6b4c00'; g.lineWidth=1.8; g.lineJoin='round';
-    g.beginPath(); g.moveTo(pp.x+1,pp.y-26); g.lineTo(pp.x+22,pp.y-18.5); g.lineTo(pp.x+1,pp.y-11); g.closePath();
+    // 旗面朝内：紧贴右边缘时翻到左边，不然旗子会被画布切掉一半
+    const fs=pp.x>cv.width-46?-1:1;
+    g.fillStyle=gold?'#ffd65a':'#8fa0b8'; g.strokeStyle=gold?'#6b4c00':'#2a3442'; g.lineWidth=1.8; g.lineJoin='round';
+    g.beginPath(); g.moveTo(pp.x+fs*1,pp.y-26); g.lineTo(pp.x+fs*22,pp.y-18.5); g.lineTo(pp.x+fs*1,pp.y-11); g.closePath();
     g.fill(); g.stroke();
     g.restore();
-    const dm=this.pinDist(), txt=dm+' 格';
+    // 距离牌：多个标记时带上序号，和列表/小地图对应；贴边时往内推，避免被画布裁掉
+    const dm=this.pinDistOf(pin), txt=(wp.length>1?(i+1)+' · ':'')+dm+' 格';
     g.save(); g.font='bold 13px sans-serif'; g.textAlign='center';
     const tw=g.measureText(txt).width;
-    g.fillStyle='rgba(8,12,20,.78)'; g.fillRect(pp.x-tw/2-6,pp.y+8,tw+12,18);
-    g.strokeStyle='rgba(217,180,91,.5)'; g.lineWidth=1; g.strokeRect(pp.x-tw/2-6,pp.y+8,tw+12,18);
-    g.fillStyle='#ffd65a'; g.fillText(txt,pp.x,pp.y+21);
+    const bx=Math.min(Math.max(pp.x,tw/2+10),cv.width-tw/2-10);
+    const by=Math.min(pp.y+8,cv.height-26);
+    g.fillStyle='rgba(8,12,20,.78)'; g.fillRect(bx-tw/2-6,by,tw+12,18);
+    g.strokeStyle=gold?'rgba(217,180,91,.5)':'rgba(120,140,165,.42)'; g.lineWidth=1; g.strokeRect(bx-tw/2-6,by,tw+12,18);
+    g.fillStyle=gold?'#ffd65a':'#9fb0c6'; g.fillText(txt,bx,by+13);
     g.restore();
-  }
+  });
 };
 
 WMap.prototype.closeMapModal=function(){
