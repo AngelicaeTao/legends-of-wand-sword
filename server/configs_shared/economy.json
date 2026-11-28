@@ -241,7 +241,25 @@
       "mon": "skeleton",
       "elite": true
     },
-    {
+{
+      "id": "trial",
+      "name": "幽影试炼",
+      "lv": 30,
+      "perDay": 0,
+      "drop": "组队副本 · 经验/金币/强化材料",
+      "mon": "trial_boss",
+      "elite": false,
+      "recPower": 2400,
+      "partyMax": 3,
+      "bossHpMult": 1,
+      "waves": [
+        { "mon": "bat_crimson", "lv": 32, "count": 3, "hpMult": 2.5, "atkMult": 8.0, "name": "第一波 · 蝠群" },
+        { "mon": "skeleton",    "lv": 34, "count": 2, "hpMult": 2.5, "atkMult": 5.5,  "name": "第二波 · 守卫" },
+        { "mon": "trial_boss",  "lv": 32, "count": 1, "hpMult": 3.4, "atkMult": 1.6,  "name": "第三波 · 幽影主宰" }
+      ],
+      "_note": "v1.9.77 三波车轮战：血量跨波不重置、波间不回血、任何一波团灭即整场失败且无奖励。回合数不设上限。hpMult/atkMult 相对同等级怪物基础值。"
+    },
+        {
       "id": "frost",
       "name": "霜冻之巅",
       "lv": 30,
