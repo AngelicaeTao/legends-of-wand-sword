@@ -120,7 +120,7 @@ const worldMap=new WorldMap($('cvExplore'),{
   onPlayer:(p)=>askPlayerProfile(p),             // v1.9.42 点其他玩家 → 查看档案
   onOnlineList:()=>showOnlinePlayers(),          // v1.9.42 大地图 → 在线玩家列表
   onHomeItem:(h)=>openHomeFunc(h),               // v1.9.31 家园功能点（仓库/挂机修炼/换装镜）
-  onHint:(msg)=>{ const el=$('worldHintText'); if(el){ el.textContent=msg; clearTimeout(el._t); el._t=setTimeout(()=>{el.textContent='WASD/方向键移动 · 点怪交战 · 点宝箱开启 · 点⇄传送';},2200);} },
+  onHint:()=>{},                                  // v1.9.85 底部操作提示条已移除（世界提示改由交互提示/任务栏承担）
   onTile:(k)=>{ /* 记录探索格子 */ }
 });
 window.__wm=worldMap; // 调试钩子：便于自动化读取实体坐标（不影响玩法）
@@ -572,7 +572,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.84';
+const BUILD_VER='v1.9.85';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -884,7 +884,6 @@ function connectWS(){
       wsRetry=0; // 连接成功重置退避
       // 带旧 channel 重连，服务端未满则复用原线
       ws.send(JSON.stringify({type:'match_join',worldId:worldMap.worldId,channel:wsChannel,name:loggedUser,classId:(state&&state.core&&state.core.classId)||''}));
-      $('wsHint').textContent='多人已连接'+(wsChannel>0?'·'+wsChannel+'线':'');
       wsTimers.push(setInterval(()=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'heartbeat'}));},5000));
       // 定期上报位置（10Hz）
       wsTimers.push(setInterval(()=>{
@@ -898,20 +897,20 @@ function connectWS(){
       let d;try{d=JSON.parse(e.data);}catch(err){return;}
       if(d.type==='match_joined'){
         wsChannel=d.channel||0;
-        $('wsHint').textContent='多人已连接'+(wsChannel>0?'·'+wsChannel+'线':'');
       }else if(d.type==='state_snapshot'){
         worldMap.applySnapshot(d.players||[],clientId); // 视野裁剪在 worldmap 内做
-        // v1.9.63 徽标只统计"本图其他玩家"：原来把自己也算进去，徽标与在线列表永远差 1
-        onlineCount=(d.players||[]).filter(p=>p&&p.id!==clientId).length;
+        // v1.9.85 徽标改为「全服总在线」（服务端 state_snapshot 带 onlineTotal，按 userId 去重）。
+        // 旧版统计的是本图其他玩家：冷门地图永远是 0，玩家会以为游戏没人。
+        // 旧服务端没有该字段时回退到本图人数，避免显示成 undefined。
+        onlineCount=(typeof d.onlineTotal==='number')?d.onlineTotal:(d.players||[]).filter(p=>p&&p.id!==clientId).length;
         $('onlineBadge').textContent='● 在线 '+onlineCount;
       }
     };
     ws.onclose=()=>{
-      $('wsHint').textContent='连接断开·重连中';
       scheduleReconnect();
     };
-    ws.onerror=()=>{ $('wsHint').textContent='连接异常·重连中'; };
-  }catch(e){ $('wsHint').textContent='单人模式'; scheduleReconnect(); }
+    ws.onerror=()=>{};
+  }catch(e){ scheduleReconnect(); }
 }
 // 退避重连：1s→2s→4s→8s，上限 8s
 function scheduleReconnect(){

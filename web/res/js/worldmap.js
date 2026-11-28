@@ -1467,15 +1467,19 @@ WMap.prototype.clearPin=function(){ const p=this.curPin(); if(p)this.removePin(p
    两套画法按"旗标是否在视口内"切换：
    · 视口内 → 直接在地上画旗（旗杆 + 旗面 + 地面光环 + 向上的渐隐光柱），
      玩家看见的是"那个点在画面里"，距离贴在旗下沿。
-   · 视口外 → 以角色为圆心、半径 64 画箭头指向目标。不用屏幕边缘箭头，
-     是因为 HUD（小地图 / 任务栏 / 底部导航）都贴边，边缘箭头会被压住，
-     而且窗口越窄越容易撞上；绕角色画在任何分辨率下都不会被遮挡。 */
+   · 视口外 → 贴在屏幕边缘画方位箭头（v1.9.85）。早期版本因为怕被 HUD 压住，
+     改成绕角色半径 64~78 画，结果远目标的方向感很弱：目标在正下方 20 格时，
+     箭头停在画面中间，玩家以为就在附近，实际还要走很远。现在一律贴边，
+     被面板盖住就盖住——层级本来就是地图之上、HUD 之下。 */
 WMap.prototype.drawPinLabel=function(g,x,y,text,size){
   const fs=size||13, padX=Math.round(fs*0.72), h=Math.round(fs+7), r=h/2;
   g.save();
   g.font='700 '+fs+'px system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
   g.textAlign='center'; g.textBaseline='middle';
   const w=g.measureText(text).width+padX*2;
+  // 标签跟着箭头贴边时会被画布裁掉，这里统一夹进屏内（左右各留 4px，上下各留 2px）
+  x=Math.min(Math.max(x,w/2+4),VW-w/2-4);
+  y=Math.min(Math.max(y,h/2+2),VH-h/2-2);
   const l=x-w/2, tp=y-h/2, rt=x+w/2, bt=y+h/2;
   g.beginPath();
   g.moveTo(l+r,tp); g.arcTo(rt,tp,rt,bt,r); g.arcTo(rt,bt,l,bt,r);
@@ -1514,16 +1518,7 @@ WMap.prototype.drawPinHud=function(g,cx,cy,t){
     if(px>10&&px<VW-10&&py>34&&py<VH-14){ this.drawPinFlag(g,px,py,t,label); return; }
     // ---- 视口外：画面边缘的方位箭头（闪烁） ----
     const ang=Math.atan2(p.y-this.hero.y,p.x-this.hero.x);
-    const rs=this.hudBlockRects(g,t);
-    // 命中 HUD 就沿同一条边微调角度（±8°…±40°）找个空位；箭头旋转仍用真实方位
-    let e=this.pinEdgePoint(hx,hy,ang);
-    if(this.rectHit(e.x,e.y,rs)){
-      for(const d of [8,-8,16,-16,24,-24,32,-32,40,-40]){
-        const a=ang+d*Math.PI/180;
-        const c=this.pinEdgePoint(hx,hy,a);
-        if(!this.rectHit(c.x,c.y,rs)){ e=c; break; }
-      }
-    }
+    const e=this.pinEdgePoint(hx,hy,ang);
     this.drawPinEdgeArrow(g,e.x,e.y,ang,label,t);
   });
 };
@@ -1559,49 +1554,23 @@ WMap.prototype.drawPinFlag=function(g,px,py,t,label){
   this.drawPinLabel(g,px,py+33,label);
 };
 
-/* HUD 占位矩形（画布坐标系）：边缘箭头必须避开，否则等于画在面板底下
-   —— 左上角色条（名字/经验/血量/药水）就压在 y≈24..175，只按固定边距收边是不够的。
-   实测 DOM 矩形而不是写死像素：HUD 会随窗口宽度/任务栏收起而变化。 */
-WMap.prototype.hudBlockRects=function(g,t){
-  if(this._hudRects && this._hudRectsTs!=null && t-this._hudRectsTs<0.4)return this._hudRects;
-  const cv=g.canvas, cr=cv.getBoundingClientRect();
-  const k=(cr.width||cv.width)/cv.width;
-  // 用选择器而不是 id：左上角色条是一整块（名字 + 经验 + 血量 + 药水按钮），
-  // 只记 worldName 会漏掉中间的经验条/血量条，箭头就藏在那两条底下。
-  const sel=['.world-hud-left','#minimap','.mm-info','#mmPin','#hudCurrency','#questTracker',
-             '#bottomNav','.world-hint','#sfxBtn','#logoutBtn'];
-  const out=[],pad=26;
-  for(const s of sel){
-    const el=document.querySelector(s); if(!el)continue;
-    const r=el.getBoundingClientRect();
-    if(!r.width||!r.height)continue;
-    out.push({l:(r.left-cr.left)/k-pad, tp:(r.top-cr.top)/k-pad, r:(r.right-cr.left)/k+pad, b:(r.bottom-cr.top)/k+pad});
-  }
-  this._hudRects=out; this._hudRectsTs=t;
-  return out;
-};
-WMap.prototype.rectHit=function(x,y,rs){
-  for(const r of rs)if(x>r.l&&x<r.r&&y>r.tp&&y<r.b)return true;
-  return false;
-};
 /* 视口外标记点 → 画面边缘落点
-   从角色屏幕位置沿 atan2 方向射一条线，与"安全框"求交。安全框不是整屏：
-   小地图（左上 24..252）、任务栏（右上 112..~300）、底部导航与操作提示（y>~560）
-   都会压住边缘，箭头落进去就等于没提示，所以先把边收进来，
-   贴边后再按左右上下把坐标挤出 HUD 占据的区间。 */
+   纯几何：从角色屏幕位置沿 atan2 方向射一条线，与屏幕内接矩形求交。
+   内边距只留箭头圆底半径（17）+ 3px 余量，保证整个徽章都在屏内、紧贴边缘。
+
+   v1.9.85 起不再读取 HUD 矩形、不再为了避开面板把箭头往画面中间挤：
+   箭头画在 canvas 上，层级天然是「地图之上、HUD 之下」，被面板盖住可以接受，
+   位置不准（明明目标在正下方，箭头却停在画面中间的底部导航上方）才是真问题。
+   之前那套挤位逻辑会在底部导航/任务栏一带把箭头横向推几百像素，方向感全丢。 */
 WMap.prototype.pinEdgePoint=function(hx,hy,ang){
-  const L=84, R=VW-84, T=96, B=VH-192;
+  const PAD=20;                       // 圆底半径 17 + 3
+  const L=PAD, R=VW-PAD, T=PAD, B=VH-PAD;
   const ca=Math.cos(ang), sa=Math.sin(ang);
   let k=Infinity;
   if(ca>1e-6)k=Math.min(k,(R-hx)/ca); else if(ca<-1e-6)k=Math.min(k,(L-hx)/ca);
   if(sa>1e-6)k=Math.min(k,(B-hy)/sa); else if(sa<-1e-6)k=Math.min(k,(T-hy)/sa);
   if(!isFinite(k)||k<0)k=0;
-  let x=hx+ca*k, y=hy+sa*k;
-  if(x<=L+0.5)y=Math.min(Math.max(y,266),B);                 // 左边沿：让开小地图下方的旗标条
-  else if(x>=R-0.5)y=Math.min(Math.max(y,318),B);            // 右边沿：让开主线任务栏（含收起/展开）
-  else if(y<=T+0.5)x=Math.min(Math.max(x,236),1000);         // 上边沿：让开左上小地图
-  else if(y>=B-0.5)x=Math.min(Math.max(x,236),1040);         // 下边沿：让开底部导航
-  return {x,y};
+  return {x:hx+ca*k, y:hy+sa*k};
 };
 
 /* 边缘方位箭头：深色圆底 + 金环 + 指向真实方位的三角，整体呼吸式闪烁 */

@@ -24,7 +24,7 @@ const wsMagic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 type WsClient struct {
 	id       string
 	worldID  string
-	channel  int    // 分线号：同 world 同 channel 的玩家互相可见，满载自动开新线
+	channel  int // 分线号：同 world 同 channel 的玩家互相可见，满载自动开新线
 	userID   string
 	name     string
 	classID  string
@@ -38,7 +38,9 @@ type WsClient struct {
 // channelCapacity 每线容量（交付包：40人/线），从 economy.json 读取。
 func channelCapacity() int {
 	n := int(numAny(game.C().Economy.Multiplayer, "channelCapacity", 40))
-	if n <= 0 { n = 40 }
+	if n <= 0 {
+		n = 40
+	}
 	return n
 }
 
@@ -70,24 +72,39 @@ func (h *Hub) loop() {
 		h.mu.Lock()
 		// 踢掉 15s 无心跳的连接
 		for c := range h.clients {
-			if now-c.lastSeen > 15000 { c.conn.Close(); delete(h.clients, c) }
+			if now-c.lastSeen > 15000 {
+				c.conn.Close()
+				delete(h.clients, c)
+			}
 		}
 		// 按世界+分线分组广播快照（同线可见，跨线不可见）
-		type groupKey struct{ world string; ch int }
+		type groupKey struct {
+			world string
+			ch    int
+		}
 		groups := map[groupKey][]map[string]any{}
+		// onlineTotal：全服在线人数（按 userId 去重，同一账号多标签/多设备只算 1 人）。
+		// 小地图下方的「在线 N」要的是全服总人数，不是当前地图/分线的人数——
+		// 后者在冷门地图永远是 0，玩家会以为游戏没人。
+		onlineIDs := map[string]bool{}
 		for c := range h.clients {
+			onlineIDs[c.userID] = true
 			k := groupKey{c.worldID, c.channel}
 			groups[k] = append(groups[k], map[string]any{
 				"id": c.id, "userId": c.userID, "name": c.name, "classId": c.classID,
 				"x": c.x, "y": c.y, "seq": c.seq,
 			})
 		}
+		onlineTotal := len(onlineIDs)
 		h.mu.Unlock()
 		for k, players := range groups {
-			snap := map[string]any{"type": "state_snapshot", "worldId": k.world, "channel": k.ch, "players": players, "ts": now}
+			snap := map[string]any{"type": "state_snapshot", "worldId": k.world, "channel": k.ch,
+				"players": players, "onlineTotal": onlineTotal, "ts": now}
 			h.mu.RLock()
 			for c := range h.clients {
-				if c.worldID == k.world && c.channel == k.ch { c.send(snap) }
+				if c.worldID == k.world && c.channel == k.ch {
+					c.send(snap)
+				}
 			}
 			h.mu.RUnlock()
 		}
@@ -102,9 +119,13 @@ func OnlinePlayers() []map[string]any {
 	seen := map[key]*WsClient{}
 	now := time.Now().UnixMilli()
 	for c := range hub.clients {
-		if now-c.lastSeen > 15000 { continue }
+		if now-c.lastSeen > 15000 {
+			continue
+		}
 		k := key{c.userID}
-		if old, ok := seen[k]; ok && c.lastSeen <= old.lastSeen { continue }
+		if old, ok := seen[k]; ok && c.lastSeen <= old.lastSeen {
+			continue
+		}
 		seen[k] = c
 	}
 	out := make([]map[string]any, 0, len(seen))
@@ -125,26 +146,38 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hj, ok := w.(http.Hijacker)
-	if !ok { http.Error(w, "不支持 Hijack", 500); return }
+	if !ok {
+		http.Error(w, "不支持 Hijack", 500)
+		return
+	}
 	conn, buf, err := hj.Hijack()
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	accept := sha1.Sum([]byte(key + wsMagic))
 	resp := "HTTP/1.1 101 Switching Protocols\r\n" +
 		"Upgrade: websocket\r\nConnection: Upgrade\r\n" +
 		"Sec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(accept[:]) + "\r\n\r\n"
-	buf.WriteString(resp); buf.Flush()
+	buf.WriteString(resp)
+	buf.Flush()
 	startHub()
 
 	// token 从 query 取
 	uid, _ := authUserID(r)
 	c := &WsClient{id: r.URL.Query().Get("clientId"), userID: uid, worldID: "W1", name: "玩家", conn: conn, lastSeen: time.Now().UnixMilli()}
-	if c.id == "" { c.id = uid }
-	hub.mu.Lock(); hub.clients[c] = true; hub.mu.Unlock()
+	if c.id == "" {
+		c.id = uid
+	}
+	hub.mu.Lock()
+	hub.clients[c] = true
+	hub.mu.Unlock()
 
 	br := bufio.NewReader(conn)
 	for {
 		msg, err := readWSFrame(br)
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 		var env struct {
 			Type    string `json:"type"`
 			WorldID string `json:"worldId"`
@@ -156,25 +189,37 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			Seq     int64  `json:"seq"`
 			V       any    `json:"v"`
 		}
-		if json.Unmarshal(msg, &env) != nil { continue }
+		if json.Unmarshal(msg, &env) != nil {
+			continue
+		}
 		c.lastSeen = time.Now().UnixMilli()
 		switch env.Type {
 		case "match_join":
 			hub.mu.Lock()
 			c.worldID = env.WorldID
-			if env.Name != "" { c.name = env.Name }
-			if env.ClassID != "" { c.classID = env.ClassID }
+			if env.Name != "" {
+				c.name = env.Name
+			}
+			if env.ClassID != "" {
+				c.classID = env.ClassID
+			}
 			// 分线分配：找该世界未满的线（重连优先复用旧线），否则开新线
 			capN := channelCapacity()
 			counts := map[int]int{}
 			for other := range hub.clients {
-				if other.worldID == c.worldID && other != c { counts[other.channel]++ }
+				if other.worldID == c.worldID && other != c {
+					counts[other.channel]++
+				}
 			}
 			chosen := env.Channel
-			if chosen <= 0 { chosen = c.channel }
+			if chosen <= 0 {
+				chosen = c.channel
+			}
 			if chosen < 0 || counts[chosen] >= capN {
 				chosen = 0
-				for counts[chosen] >= capN { chosen++ }
+				for counts[chosen] >= capN {
+					chosen++
+				}
 			}
 			c.channel = chosen
 			hub.mu.Unlock()
@@ -183,16 +228,31 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			// 服务端权威：限速（防瞬移）——单帧位移上限 160px，超出则 clamp
 			hub.mu.Lock()
 			dx, dy := env.X-c.x, env.Y-c.y
-			if dx > 160 { dx = 160 }; if dx < -160 { dx = -160 }
-			if dy > 160 { dy = 160 }; if dy < -160 { dy = -160 }
-			c.x += dx; c.y += dy
-			if env.Seq > c.seq { c.seq = env.Seq }
+			if dx > 160 {
+				dx = 160
+			}
+			if dx < -160 {
+				dx = -160
+			}
+			if dy > 160 {
+				dy = 160
+			}
+			if dy < -160 {
+				dy = -160
+			}
+			c.x += dx
+			c.y += dy
+			if env.Seq > c.seq {
+				c.seq = env.Seq
+			}
 			hub.mu.Unlock()
 		case "heartbeat":
 			c.send(map[string]any{"type": "heartbeat_ack", "ts": time.Now().UnixMilli()})
 		}
 	}
-	hub.mu.Lock(); delete(hub.clients, c); hub.mu.Unlock()
+	hub.mu.Lock()
+	delete(hub.clients, c)
+	hub.mu.Unlock()
 	conn.Close()
 }
 
@@ -222,23 +282,33 @@ func writeWSFrame(conn net.Conn, payload []byte) {
 
 func readWSFrame(r *bufio.Reader) ([]byte, error) {
 	var h [2]byte
-	if _, err := io.ReadFull(r, h[:]); err != nil { return nil, err }
+	if _, err := io.ReadFull(r, h[:]); err != nil {
+		return nil, err
+	}
 	masked := h[1]&0x80 != 0
 	n := int(h[1] & 0x7F)
 	switch n {
 	case 126:
 		var b [2]byte
-		io.ReadFull(r, b[:]); n = int(binary.BigEndian.Uint16(b[:]))
+		io.ReadFull(r, b[:])
+		n = int(binary.BigEndian.Uint16(b[:]))
 	case 127:
 		var b [8]byte
-		io.ReadFull(r, b[:]); n = int(binary.BigEndian.Uint64(b[:]))
+		io.ReadFull(r, b[:])
+		n = int(binary.BigEndian.Uint64(b[:]))
 	}
 	var mask [4]byte
-	if masked { io.ReadFull(r, mask[:]) }
-	payload := make([]byte, n)
-	if _, err := io.ReadFull(r, payload); err != nil { return nil, err }
 	if masked {
-		for i := range payload { payload[i] ^= mask[i%4] }
+		io.ReadFull(r, mask[:])
+	}
+	payload := make([]byte, n)
+	if _, err := io.ReadFull(r, payload); err != nil {
+		return nil, err
+	}
+	if masked {
+		for i := range payload {
+			payload[i] ^= mask[i%4]
+		}
 	}
 	return payload, nil
 }
