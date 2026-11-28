@@ -137,7 +137,7 @@ func (p *PlayerState) UnequipItem(itemID string) ([]string, error) {
 // 返回新品质档与更新后的属性。
 func (p *PlayerState) QualityUp(itemID string, goldCost, matCost int, mults []float64) (int, map[string]float64, error) {
 	if p.Core.Gold < goldCost || p.Core.Material < matCost {
-		return 0, nil, fmt.Errorf("资源不足（需 %d 金币 / %d 材料）", goldCost, matCost)
+		return 0, nil, fmt.Errorf("资源不足（需 %d 金币 / %d 强化材料）", goldCost, matCost)
 	}
 	for i := range p.Equip {
 		if p.Equip[i].ID == itemID {
@@ -190,7 +190,7 @@ func qualityUpOne(e *Equip, goldCost, matCost int, mults []float64, p *PlayerSta
 	p.Core.Gold -= goldCost
 	p.Core.Material -= matCost
 	p.refreshPower()
-	p.appendLogs([]string{fmt.Sprintf("装备升品：%s → 品质+%d（消耗 %d 金币 / %d 材料）", e.ID, e.Quality, goldCost, matCost)})
+	p.appendLogs([]string{fmt.Sprintf("装备升品：%s → 品质+%d（消耗 %d 金币 / %d 强化材料）", e.ID, e.Quality, goldCost, matCost)})
 	return e.Quality, e.Stats, nil
 }
 
@@ -204,7 +204,7 @@ func (p *PlayerState) EnhanceEquip(itemID, slot string, goldCost, matCost int) (
 		hit := (itemID != "" && p.Equip[i].ID == itemID) || (itemID == "" && p.Equip[i].Slot == slot)
 		if hit {
 			if p.Core.Gold < goldCost || p.Core.Material < matCost {
-				return 0, fmt.Errorf("资源不足（需 %d 金币 / %d 材料）", goldCost, matCost)
+				return 0, fmt.Errorf("资源不足（需 %d 金币 / %d 强化材料）", goldCost, matCost)
 			}
 			p.Core.Gold -= goldCost
 			p.Core.Material -= matCost

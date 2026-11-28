@@ -1012,7 +1012,7 @@ function syncHud(){
   if(hc) hc.innerHTML=
     `<b class="hc hc-gold" title="金币">${ICON.gold(15)}<em>金币</em><i>${fmt(c.gold)}</i></b>`+
     `<b class="hc hc-gem" title="钻石">${ICON.gem(15)}<em>钻石</em><i>${fmt(c.gem)}</i></b>`+
-    `<b class="hc hc-mat" title="强化材料">${ICON.crystal(15,'#9ad6ff')}<em>材料</em><i>${fmt(c.material)}</i></b>`;
+    `<b class="hc hc-mat" title="强化材料">${ICON.crystal(15,'#9ad6ff')}<em>强化材料</em><i>${fmt(c.material)}</i></b>`;
   const iconKey=(cdef&&cdef.icon)?cdef.icon.replace('ui_card_','').replace('.png',''):'warrior';
   $('worldClsIco').src=RES+'characters/cards/ui_card_'+iconKey+'.png';
   $('heroName').textContent=(c.name||'英雄')+' Lv.'+c.level;
@@ -1121,7 +1121,7 @@ function shopCostOf(it, qty){
 }
 function renderShop(){
   $('panelTitle').textContent='商店';
-  $('panelSub').textContent='金币/钻石兑换材料与经验 · 背包材料药水（含秘银/金币袋）可回收 · 数量自填';
+  $('panelSub').textContent='金币/钻石兑换强化材料与经验 · 背包材料药水（含秘银/金币袋）可回收 · 数量自填';
   const c=(state&&state.core)||{};
   const cards=SHOP_ITEMS.map(it=>{
     const id='sq_'+it.key+'_'+it.pay;
@@ -1152,10 +1152,10 @@ function renderShop(){
   }).join('');
   window._sellList=sellList;
   $('panelBody').innerHTML=`<div class="sec-title">兑换商店</div>
-    <div class="sec-sub" style="margin-bottom:6px">材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）</div>
+    <div class="sec-sub" style="margin-bottom:6px">强化材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）</div>
     <div class="shop-grid">${cards}</div>
     <div class="shop-tip">兑换即时到账：强化材料计入角色材料数（强化/升品时消耗）；经验直接加到当前等级进度，攒够会自动升级。</div>
-    <div class="sec-title" style="margin-top:16px">背包回收（材料 / 药水 → 金币或钻石）</div>
+    <div class="sec-title" style="margin-top:16px">背包回收（材料/药水 · 可回收物品 → 金币或钻石）</div>
     <div class="sec-sub" style="margin-bottom:6px">按件计价，卖出即时到账；含初始背包里的秘银、金币袋。装备请到家园›仓库分解，不在本列表。</div>
     <div class="sell-grid">${sellRows||'<div class="sec-sub">背包里没有可回收的材料或药水</div>'}</div>`;
   SHOP_ITEMS.forEach(it=>{
@@ -1368,7 +1368,7 @@ function renderBag(){
     <div class="sec-title">背包 · 药水 <span class="sec-sub" style="display:inline">（${potList.length} 种 · 点击直接喝 · 任意地点可用）</span></div>
     <div class="wg-grid">${potList.map(([id,n])=>`
       <div class="wg-cell pot" data-pot="${id}"><div class="wgi" style="background:#5fd38a">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n}</div></div>`).join('')||'<div class="sec-sub">暂无药水 · 开宝箱/采集草药可获得</div>'}</div>
-    <div class="sec-title">背包 · 材料 <span class="sec-sub" style="display:inline">（${matGoods.length} 种 · ${inHome?'点击存入仓库':'材料存取需回家园'}）</span></div>
+    <div class="sec-title">背包 · 可回收物品 <span class="sec-sub" style="display:inline">（${matGoods.length} 种 · ${inHome?'点击存入仓库':'材料存取需回家园'}）</span></div>
     <div class="wg-grid">${matGoods.map(([id,n])=>`
       <div class="wg-cell" data-g="${id}" data-n="${n|0}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
     <div class="wh-flash hidden" id="bagFlash"></div>`;
@@ -1960,8 +1960,8 @@ function renderWarehouse(){
           <div class="sec-title">数值对比（每级装备属性 +${Math.round(gain*100)}%）</div>
           <div class="fp-props">${props}</div>
           <div class="forge-cost">
-            <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(nextCost)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} 2 材料</b></div>
-            <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 材料</b></div>
+            <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(nextCost)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} 2 强化材料</b></div>
+            <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 强化材料</b></div>
           </div>
           <button class="big-btn goldbtn" id="doForge" ${canPay?'':'disabled style="opacity:.45;cursor:not-allowed"'}>${canPay?'强 化':'资源不足'}</button>
           <div class="strength-note">强化必成功 · 服务端权威结算，战力即时更新</div>
@@ -1998,8 +1998,8 @@ function renderWarehouse(){
               <span class="fs-lv"><b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b> → <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b></span></div>
             <div class="sec-sub">全部属性 × ${ratio.toFixed(2)}（品质乘数 ${mOld} → ${mNew}）· 强化等级保持不变</div>
             <div class="forge-cost">
-              <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(qGold)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} ${qMat} 材料</b></div>
-              <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 材料</b></div>
+              <div class="fco-row"><span>消耗</span><b style="color:#f0d590">${ICON.gold(14)} ${fmt(qGold)} 金币</b><b style="color:#5fd38a">${ICON.crystal(14,'#5fd38a')} ${qMat} 强化材料</b></div>
+              <div class="fco-row sub"><span>持有</span><b>${fmt(c.gold||0)} 金币</b><b>${fmt(c.material||0)} 强化材料</b></div>
             </div>
             <button class="big-btn goldbtn" id="doQuBtn" ${qCan?'':'disabled style="opacity:.45;cursor:not-allowed"'}>${qCan?'升 品':'资源不足'}</button>
             <div class="strength-note">升品不可逆 · 服务端权威结算 · 战力即时更新</div>
@@ -2031,7 +2031,7 @@ function renderWarehouse(){
         window.SFX&&SFX.forge();
         const cost=r.enhanceCost||{};
         toastModal('强化成功',eqCN(sel)+' 强化至 +'+(r.enhanceLevel||'?')+
-          (cost.gold?('（消耗 '+fmt(cost.gold)+' 金币 / '+fmt(cost.material||0)+' 材料）'):''));
+          (cost.gold?('（消耗 '+fmt(cost.gold)+' 金币 / '+fmt(cost.material||0)+' 强化材料）'):''));
         if(window.Quest)Quest.progress('enhance',1);
         renderWarehouse();
       }catch(e){window.SFX&&SFX.fail();toastModal('强化失败',e.message);}
@@ -2046,7 +2046,7 @@ function renderWarehouse(){
       const gM=qu.goldMult!=null?qu.goldMult:1.2, mM=qu.matMult!=null?qu.matMult:0.6;
       const sqi=Math.max(0,Math.min(7,sel.quality||0)), nq=sqi+1;
       const qGold=Math.round((GB[Math.min(nq,7)]||40)*gM), qMat=Math.round((MB[Math.min(nq,7)]||10)*mM);
-      showModal(`<h2>装备升品</h2><div class="msub">将 <b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b>「${eqCN(sel)}${sel.enhance?(' +'+sel.enhance):''}」提升为 <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b>？<br>属性按品质乘数重算提升 · 消耗 <b style="color:#ffd76b">${fmt(qGold)} 金币</b> + <b style="color:#9ad6ff">${qMat} 材料</b><br><span style="color:#e07b7b">升品不可逆，无法找回原品质</span></div>
+      showModal(`<h2>装备升品</h2><div class="msub">将 <b style="color:${QCOLOR[sqi]}">${QUALITY[sqi]}</b>「${eqCN(sel)}${sel.enhance?(' +'+sel.enhance):''}」提升为 <b style="color:${QCOLOR[nq]}">${QUALITY[nq]}</b>？<br>属性按品质乘数重算提升 · 消耗 <b style="color:#ffd76b">${fmt(qGold)} 金币</b> + <b style="color:#9ad6ff">${qMat} 强化材料</b><br><span style="color:#e07b7b">升品不可逆，无法找回原品质</span></div>
         <div class="divider"></div>
         <div class="enc-btns"><button class="big-btn goldbtn" id="quConfirm">确认升品</button><button class="btn-gray" id="quCancel">再想想</button></div>`);
       $('quCancel').onclick=hideModal;
@@ -2056,7 +2056,7 @@ function renderWarehouse(){
           hideModal();
           if(r.state){state=r.state;await applyStats(r.stats);}
           window.SFX&&SFX.buy&&SFX.buy();
-          toastModal('升品成功',eqCN(sel)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||qGold)+' 金币 / '+(r.cost&&r.cost.material||qMat)+' 材料）');
+          toastModal('升品成功',eqCN(sel)+' → '+QUALITY[Math.min(r.quality||nq,7)]+'（消耗 '+fmt(r.cost&&r.cost.gold||qGold)+' 金币 / '+(r.cost&&r.cost.material||qMat)+' 强化材料）');
           forgeSel=null;
           renderWarehouse();
         }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('升品失败',err.message); }
@@ -2139,7 +2139,7 @@ function renderWarehouse(){
         ${pwBadge(e)||''}
         <span class="wg-detail" data-detail="${e.slot}">详情</span>
       </div>`).join('')||'<div class="sec-sub">背包暂无未穿戴装备</div>'}</div>
-    <div class="sec-title">背包 · 材料与消耗品 <span class="sec-sub" style="display:inline">（${batchOn&&whBatch==='in'?'点击勾选存入':'点击选择数量存入'}）</span></div>
+    <div class="sec-title">背包 · 可回收物品 <span class="sec-sub" style="display:inline">（${batchOn&&whBatch==='in'?'点击勾选存入':'点击选择数量存入'}）</span></div>
     <div class="wg-grid">${bagGoods.map(([id,n])=>`
       <div class="wg-cell${batchOn&&whBatch==='in'?selCls('mat',id):''}" data-gin="${id}" data-n="${n|0}" data-selkey="mat:${id}"><div class="wgi" style="background:#8892a4">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(id)}<div class="wq">x${n|0}</div></div>`).join('')||'<div class="sec-sub">背包暂无材料</div>'}</div>
     <div class="sec-title">仓库 · 装备 <span class="sec-sub" style="display:inline">（${whEq.length} 件 · ${batchOn?(whBatch==='out'||whBatch==='dec'?'点击勾选':'当前不可选'):'点击装备取出 · 点 ♻ 分解换金币/材料'}）</span><button class="wh-batch ${whBatch==='dec'?'on':''}" id="batchDec" ${whEq.length?'':'disabled style="opacity:.45"'}>♻ 批量分解</button><button class="wh-batch ${whBatch==='out'?'on':''}" id="batchOut">⇩ 批量取出</button></div>
@@ -2151,7 +2151,7 @@ function renderWarehouse(){
         ${pwBadge(it.equip)||''}
         <span class="wg-detail dec" data-dec="${it.id}" title="分解">♻ ${Math.round((DEC[qi]||40)*(1+(e.enhance||0)*0.15))}金+${MAT[qi]||10}材</span>
       </div>`;}).join('')||'<div class="sec-sub">仓库暂无装备</div>'}</div>
-    <div class="sec-title">仓库 · 材料与消耗品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · ${batchOn&&whBatch==='out'?'点击勾选取出':'点击选择数量取出'}）</span></div>
+    <div class="sec-title">仓库 · 可回收物品 <span class="sec-sub" style="display:inline">（已用 ${wh.length} / 200 格 · ${batchOn&&whBatch==='out'?'点击勾选取出':'点击选择数量取出'}）</span></div>
     <div class="wg-grid">${whGoods.map(it=>`
       <div class="wg-cell${batchOn&&whBatch==='out'?selCls('mat',it.id):''}" data-gout="${it.id}" data-n="${it.qty}" data-selkey="mat:${it.id}"><div class="wgi" style="background:${it.kind==='consume'?'#5fd38a':'#8892a4'}">${ICON.crystal(20,'#2a1c08')}</div>${itemCN(it.id)}<div class="wq">x${it.qty}</div></div>`).join('')||'<div class="sec-sub">空</div>'}</div>
     <div class="wh-flash hidden" id="whFlash"></div>`;
@@ -2211,7 +2211,7 @@ function renderWarehouse(){
       const it=(state.warehouse||[]).find(x=>x.id===id&&!x.hidden&&x.kind==='equip');
       const e=it&&it.equip||{};
       const est=decEst(e);
-      showModal(`<h2>分解装备</h2><div class="msub">将 <b style="color:#f0d590">${eqCN(e)}${e.enhance?(' +'+e.enhance):''}</b> 分解为金币与材料？<br>预计返还 <b style="color:#ffd76b">${fmt(est.gold)} 金币</b> + <b style="color:#9ad6ff">${est.mat} 材料</b>（分解后装备消失，无法找回）</div>
+      showModal(`<h2>分解装备</h2><div class="msub">将 <b style="color:#f0d590">${eqCN(e)}${e.enhance?(' +'+e.enhance):''}</b> 分解为金币与材料？<br>预计返还 <b style="color:#ffd76b">${fmt(est.gold)} 金币</b> + <b style="color:#9ad6ff">${est.mat} 强化材料</b>（分解后装备消失，无法找回）</div>
         <div class="divider"></div>
         <div class="enc-btns"><button class="btn-red" id="doDec">确认分解</button><button class="btn-gray" id="cancelDec">再想想</button></div>`);
       $('cancelDec').onclick=hideModal;
@@ -2221,7 +2221,7 @@ function renderWarehouse(){
           hideModal();
           if(r.state){state=r.state;syncHud();}
           window.SFX&&SFX.coin&&SFX.coin();
-          toastModal('分解成功',eqCN(e)+(e.enhance?(' +'+e.enhance):'')+' → 金币 +'+fmt(r.goldGain||est.gold)+' · 材料 +'+(r.matGain||est.mat));
+          toastModal('分解成功',eqCN(e)+(e.enhance?(' +'+e.enhance):'')+' → 金币 +'+fmt(r.goldGain||est.gold)+' · 强化材料 +'+(r.matGain||est.mat));
           renderPanel();
         }catch(err){ hideModal(); window.SFX&&SFX.fail(); toastModal('分解失败',err.message); }
       };
@@ -2296,7 +2296,7 @@ function renderWarehouse(){
       hideModal(); clearWhBatch();
       renderPanel();
       window.SFX&&(mode==='dec'?SFX.coin&&SFX.coin():SFX.bagIn&&SFX.bagIn());
-      if(mode==='dec') toastModal('批量分解成功','分解 '+eqN+' 件装备 → 金币 +'+fmt(tg)+' · 材料 +'+tm+(err?'（部分失败：'+err+'）':''));
+      if(mode==='dec') toastModal('批量分解成功','分解 '+eqN+' 件装备 → 金币 +'+fmt(tg)+' · 强化材料 +'+tm+(err?'（部分失败：'+err+'）':''));
       else flash((mode==='in'?'批量存入完成':'批量取出完成')+'：装备 '+eqN+' 件 · 材料 '+matN+' 种'+(err?'（部分失败：'+err+'）':''));
     };
     // 分解不可逆：确认弹窗汇总收益（存入/取出直接执行）
@@ -2304,7 +2304,7 @@ function renderWarehouse(){
       let tg=0,tm=0;
       keys.forEach(k=>{ const [kind,id]=k.split(':'); if(kind!=='eq')return;
         const it=wh.find(x=>x.id===id&&x.kind==='equip'); if(it){const s=decEst(it.equip||{});tg+=s.gold;tm+=s.mat;} });
-      showModal(`<h2>批量分解装备</h2><div class="msub">将勾选的 <b style="color:#f0d590">${keys.length} 件装备</b> 分解？<br>预计返还 <b style="color:#ffd76b">${fmt(tg)} 金币</b> + <b style="color:#9ad6ff">${tm} 材料</b><br><span style="font-size:12px;color:#8a93a6">分解后装备消失，无法找回</span></div>
+      showModal(`<h2>批量分解装备</h2><div class="msub">将勾选的 <b style="color:#f0d590">${keys.length} 件装备</b> 分解？<br>预计返还 <b style="color:#ffd76b">${fmt(tg)} 金币</b> + <b style="color:#9ad6ff">${tm} 强化材料</b><br><span style="font-size:12px;color:#8a93a6">分解后装备消失，无法找回</span></div>
         <div class="divider"></div>
         <div class="enc-btns"><button class="btn-red" id="doBatchDecConfirm">确认分解</button><button class="btn-gray" id="cancelBatchDec">再想想</button></div>`);
       $('cancelBatchDec').onclick=()=>{hideModal();wbbRun.disabled=false;};
@@ -2377,7 +2377,7 @@ function renderMap(){
                const open=dungeons.filter(d=>lv>=d.lv).length;
                return `<div class="dgs"><em>今日已挑战</em><b>${used} / ${total}</b></div>
                        <div class="dgs"><em>已解锁</em><b>${open} / ${dungeons.length}</b></div>
-                       <div class="dgs"><em>主要产出</em><b>材料 · 装备 · 强化石</b></div>`;})()}
+                       <div class="dgs"><em>主要产出</em><b>强化材料 · 装备 · 强化石</b></div>`;})()}
       </div>
       <div class="dg-reset">${ICON.hourglass(13,'#f0d590')}<span>距离每日次数重置 <b>${(()=>{
         const now=new Date(); const t=new Date(now); t.setHours(24,0,0,0);
@@ -2413,7 +2413,7 @@ function renderIdle(){
     <div class="sec-title">挂机设置</div>
     <div class="sec-sub">选择挂机地图 / 查看产出效率 / 领取离线收益</div>
     <div class="preview-box"><div class="pt">挂机地图</div><div class="sec-sub">翡翠草原 · 推荐 Lv.40-50 · 效率 ★★★☆</div></div>
-    <div class="preview-box"><div class="pt">产出效率（每小时）</div><div class="sec-sub">经验 ~1,200 ｜ 金币 ~640 ｜ 材料 ~5 ｜ 回血药水 ~2</div></div>
+    <div class="preview-box"><div class="pt">产出效率（每小时）</div><div class="sec-sub">经验 ~1,200 ｜ 金币 ~640 ｜ 强化材料 ~5 ｜ 回血药水 ~2</div></div>
     <div class="preview-box"><div class="pt">封顶时长</div><div class="sec-sub">8 小时（超出部分不再累计）</div></div>
     <button class="big-btn goldbtn" id="settleIdle">领取离线收益</button>`;
   if(inHome)$('backToHome').onclick=()=>{homeSub=null;window.SFX&&SFX.tab();renderHome();};
@@ -2675,9 +2675,9 @@ function showBattleResult(rep,mon){
   // v1.9.59 自动分解要写清"每件分解出了什么"，不只是总数：逐件列出 品质·部位 → 金币/材料
   const decompRows=(rep.decomposed||[]).map(d=>{
     const q=Math.min(7,d.quality==null?0:d.quality), qc=QCOLOR[q], qn=QUALCN[q], sn=slotCN[d.slot]||d.slot;
-    return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 材料 +${fmt(d.mat||0)}</span></div>`;
+    return `<div class="dc-row" style="border-left-color:${qc}"><span class="dc-name">${qn} · ${sn}</span><span class="dc-yield">金币 +${fmt(d.gold||0)} · 强化材料 +${fmt(d.mat||0)}</span></div>`;
   }).join('');
-  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
+  const decomp=(rep.decomposedCount>0)?`<div class="drop-decomp"><div class="dc-head">${ICON.bag(15,'#c9a4e8')}<span>自动分解 <b>${rep.decomposedCount}</b> 件 <i>（战力低于在穿装备，已折成材料）</i></span><em>合计 金币 +${fmt(rep.decomposedGold||0)} · 强化材料 +${fmt(rep.decomposedMat||0)}</em></div>${decompRows?`<div class="dc-list">${decompRows}</div>`:''}</div>`:'';
   const maxHp2=(heroStats&&heroStats.hp)||0, endHp=(rep.heroHpEnd||0);
   const hpRow=(maxHp2>0)?('<div class="reward-row" title="不自动回满 · 用回血药水或采草药恢复"><span class="rk">剩余血量</span><span class="rv" style="color:#ff9c8f">'+Math.ceil(endHp)+' / '+Math.ceil(maxHp2)+'</span></div>'):'';
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
@@ -2748,7 +2748,7 @@ function showIdleReward(res){
     <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(res&&res.exp)}</span></div>
     <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(res&&res.gold)}</span></div>
     <div class="reward-row"><span class="rk">装备</span><span class="rv g">x${res&&res.equip||0}</span></div>
-    <div class="reward-row"><span class="rk">材料</span><span class="rv g">x${res&&res.material||0}</span></div>
+    <div class="reward-row"><span class="rk">强化材料</span><span class="rv g">x${res&&res.material||0}</span></div>
     <div class="reward-row"><span class="rk">回血药水</span><span class="rv g">x${res&&res.potions||0}</span></div>
     <div class="reward-row"><span class="rk">血量</span><span class="rv" style="color:#ff9c8f">离线休息已回满</span></div>
     <button class="big-btn" id="idleClaim">一键领取 · 返回大世界</button>`);
