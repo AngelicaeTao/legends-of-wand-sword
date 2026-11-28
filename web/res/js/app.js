@@ -555,7 +555,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.67';
+const BUILD_VER='v1.9.68';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1118,7 +1118,7 @@ function shopCostOf(it, qty){
 }
 function renderShop(){
   $('panelTitle').textContent='商店';
-  $('panelSub').textContent='金币/钻石兑换材料与经验 · 背包材料药水（含秘银/金币袋）可回收 · 数量自填';
+  $('panelSub').textContent='金币/钻石兑换材料与经验 · 强化材料可兑金币(1:10)或钻石(1:1) · 数量自填';
   const c=(state&&state.core)||{};
   const cards=SHOP_ITEMS.map(it=>{
     const id='sq_'+it.key+'_'+it.pay;
@@ -1152,8 +1152,8 @@ function renderShop(){
     <div class="sec-sub" style="margin-bottom:6px">材料 10 金币/件 或 1 钻石/件；经验 1 金币/点 或 1 钻石/10 点（钻石档按 10 的倍数）</div>
     <div class="shop-grid">${cards}</div>
     <div class="shop-tip">兑换即时到账：强化材料计入角色材料数（强化/升品时消耗）；经验直接加到当前等级进度，攒够会自动升级。</div>
-    <div class="sec-title" style="margin-top:16px">背包回收（材料 / 药水 → 金币或钻石）</div>
-    <div class="sec-sub" style="margin-bottom:6px">按件计价，卖出即时到账；含初始背包里的秘银、金币袋。装备请到家园›仓库分解，不在本列表。</div>
+    <div class="sec-title" style="margin-top:16px">材料兑换（强化材料 → 金币或钻石）</div>
+    <div class="sec-sub" style="margin-bottom:6px">强化材料统一 1 件 = 10 金币 或 1 钻石（金币 1:10 / 钻石 1:1）；药水、秘银、金币袋按专价回收。装备请到家园›仓库分解，不在本列表。</div>
     <div class="sell-grid">${sellRows||'<div class="sec-sub">背包里没有可回收的材料或药水</div>'}</div>`;
   SHOP_ITEMS.forEach(it=>{
     const id='sq_'+it.key+'_'+it.pay;
@@ -1206,7 +1206,7 @@ function sellPriceOf(id,kind,pay){
   const g=(kind==='consume'||kind==='药水'||kind==='potion')?'consume':'material';
   const def=((sell.default||{})[g]||{});
   if(Number(def[pay])>0) return Number(def[pay]);
-  return pay==='gold'?(g==='consume'?150:100):10; // v1.9.57 兜底价 ×10，与后端一致
+  return pay==='gold'?(g==='consume'?150:10):(g==='consume'?10:1); // v1.9.68 材料 1:10金/1:1钻、药水兜底不变，与后端一致
 }
 // 物品中文名：装备之外的中文 id 直接用，内部 id 走 ITEM_CN
 function itemCN(id){ return ITEM_CN[id]||id; }

@@ -91,6 +91,8 @@ func TestSkillUpgradeMaxLevel(t *testing.T) {
 
 // v1.9.56 背包回收：材料/药水 → 金币或钻石，按件计价，扣减正确。
 // v1.9.57 单价整体 ×10，并支持初始背包（ext.bag）里的 秘银 / 金币袋。
+// v1.9.68 强化材料统一 1 件 = 10 金币 / 1 钻石（金币 1:10、钻石 1:1）；
+// 药水与特殊物品（potion_s/potion_l/秘银/金币袋）保留 v1.9.57 专价。
 func TestShopSell(t *testing.T) {
 	if err := game.Init("../../../configs"); err != nil {
 		t.Fatal(err)
@@ -103,15 +105,15 @@ func TestShopSell(t *testing.T) {
 		{ID: "钢锭", Qty: 5, Kind: "材料"}, // 同 id 多堆叠
 	}
 
-	// 钢锭 120 金币/件（v1.9.57：配置 12 → 120，整体 ×10），15 件全部堆叠合计
+	// 钢锭 10 金币/件（v1.9.68：强化材料统一 1:10 金币），15 件全部堆叠合计
 	unit, got, err := p.ShopSell("钢锭", 15, "gold")
 	if err != nil {
 		t.Fatalf("回收钢锭失败：%v", err)
 	}
-	if unit != 120 || got != 1800 {
-		t.Fatalf("钢锭应 120 金/件、15 件共 1800，实际 unit=%d got=%d", unit, got)
+	if unit != 10 || got != 150 {
+		t.Fatalf("钢锭应 10 金/件、15 件共 150，实际 unit=%d got=%d", unit, got)
 	}
-	if p.Core.Gold != 1800 {
+	if p.Core.Gold != 150 {
 		t.Fatalf("金币到账错误：%d", p.Core.Gold)
 	}
 	for _, it := range p.Warehouse {
@@ -197,5 +199,26 @@ func TestShopSell(t *testing.T) {
 	}
 	if n := bagQty(p, "金币袋"); n != 3 {
 		t.Fatalf("报错后不应扣减，背包应仍为 3，实际 %d", n)
+	}
+
+	// ---- v1.9.68 强化材料 → 钻石：统一 1 件 = 1 钻（1:1），与 id 无关 ----
+	p.Core.Gem = 0
+	p.Warehouse = []Item{
+		{ID: "精铁", Qty: 8, Kind: "材料"},
+		{ID: "未知新材料", Qty: 5, Kind: "材料"}, // 未列入 items 的材料走 default.material
+	}
+	unit, got, err = p.ShopSell("精铁", 8, "gem")
+	if err != nil {
+		t.Fatalf("精铁换钻石失败：%v", err)
+	}
+	if unit != 1 || got != 8 || p.Core.Gem != 8 {
+		t.Fatalf("精铁应 1 钻/件、8 件共 8 钻，实际 unit=%d got=%d gem=%d", unit, got, p.Core.Gem)
+	}
+	unit, got, err = p.ShopSell("未知新材料", 5, "gold") // 兜底材料 10 金/件
+	if err != nil {
+		t.Fatalf("兜底材料换金币失败：%v", err)
+	}
+	if unit != 10 || got != 50 {
+		t.Fatalf("未定价材料应走 default.material 10 金/件、5 件共 50，实际 unit=%d got=%d", unit, got)
 	}
 }

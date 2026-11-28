@@ -407,10 +407,11 @@ func sellUnitPrice(itemID, kind, pay string) int {
 		}
 		return 10
 	}
+	// v1.9.68：强化材料统一 1 件 = 10 金币 / 1 钻石（金币 1:10、钻石 1:1）
 	if pay == "gold" {
-		return 100 // v1.9.57 兜底价 ×10（原 10）
+		return 10
 	}
-	return 10
+	return 1
 }
 
 // bagQty 读取 Ext.bag（初始背包）里某物品的数量。
