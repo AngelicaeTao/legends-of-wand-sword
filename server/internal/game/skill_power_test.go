@@ -35,12 +35,15 @@ func TestSkillPower(t *testing.T) {
 		}
 	}
 
-	// 3) 未知技能 id 不贡献、不 panic
-	if got := SkillPower("wl_drain", 5); got != 0 {
-		t.Fatalf("已删除的 wl_drain 不应贡献战力，实际 %.0f", got)
+	// 3) 吸取 = advanced(120) × magic(1.0) = 120（v1.9.86 已恢复）；未知 id 不贡献、不 panic
+	if got := SkillPower("wl_drain", 1); got != 120 {
+		t.Fatalf("吸取 1 级战力应为 120，实际 %.0f", got)
+	}
+	if got := SkillPower("no_such_skill", 5); got != 0 {
+		t.Fatalf("未知技能不应贡献战力，实际 %.0f", got)
 	}
 
-	// 4) 合计：术士四技能 = 60 + 42 + 84 + 120 = 306；重复槽位只算一次
+	// 4) 合计：术士四格 = 60 + 42 + 84 + 120 = 306；重复槽位只算一次
 	ids := []string{"m_fireball", "m_heal", "wl_curse", "wl_summon"}
 	if got := SkillPowerSum(ids, nil); got != 306 {
 		t.Fatalf("术士四技能 1 级合计应为 306，实际 %.0f", got)

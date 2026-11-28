@@ -29,7 +29,7 @@ var LegacySkillAlias = map[string]string{
 	"frost_nova":  "s_purify",
 	"arcane_bolt": "s_bless",
 	"summon":      "wl_summon",
-	"meteor":      "m_fireball", // v1.9.85 吸取 wl_drain 已删除，旧「陨石」并入火球术
+	"meteor":      "wl_drain",
 	"curse":       "wl_curse",
 	"holy_guard":  "k_aegis",
 	"taunt":       "k_taunt",
@@ -236,7 +236,7 @@ func (p *PlayerState) Migrate() bool {
 	}
 	p.Skills.Unlocked = un
 
-	// v1.9.85 清理已删除技能的等级残留（如 wl_drain）：技能表里没有了，等级也不该留。
+	// 清理已删除技能的等级残留：技能表里已经不存在的 id，等级也不该留。
 	if len(p.Skills.Levels) > 0 {
 		lv := make(map[string]int, len(p.Skills.Levels))
 		for id, v := range p.Skills.Levels {

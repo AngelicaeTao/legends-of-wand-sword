@@ -15,17 +15,18 @@ func setMonsterBase(id, key string, v float64) func() {
 	return func() {}
 }
 
-// v1.9.85 火球术继承原「吸取」的 50% 吸血（吸取 wl_drain 已删除，火球术是法师/术士通用初始技能）。
-func TestFireballLifesteal(t *testing.T) {
+// v1.9.86 撤销 v1.9.85 的「吸血并入火球」：吸血效果回到术士「吸取」wl_drain，火球术恢复纯输出。
+func TestWarlockDrainLifesteal(t *testing.T) {
 	if err := Init("../../../configs"); err != nil {
 		t.Fatal(err)
 	}
-	sk, ok := C().SkillByID("m_fireball")
+	sk, ok := C().SkillByID("wl_drain")
 	if !ok || sk.Lifesteal != 0.5 {
-		t.Fatalf("m_fireball 应配置 lifesteal=0.5，实际 %+v", sk)
+		t.Fatalf("wl_drain 应配置 lifesteal=0.5，实际 %+v", sk)
 	}
-	if _, ok := C().SkillByID("wl_drain"); ok {
-		t.Fatalf("wl_drain 已删除，不应再出现在技能表里")
+	// 火球术不应再带吸血，否则等于吸血的术士专属效果被全职业共享
+	if fb, ok := C().SkillByID("m_fireball"); !ok || fb.Lifesteal != 0 {
+		t.Fatalf("m_fireball 不应有吸血，实际 %+v", fb)
 	}
 	// 木桩：高血低攻，保证打满多轮且不会被打死
 	restoreHP := setMonsterBase("boss_beetle", "hp", 5000)
@@ -33,23 +34,23 @@ func TestFireballLifesteal(t *testing.T) {
 	defer restoreHP()
 	defer restoreAtk()
 
-	av := Avatar{Level: 30, ClassID: "mage"}
+	av := Avatar{Level: 30, ClassID: "warlock"}
 	hero := CalcStats(av)
 	rep := ResolveBattle(BattleRequest{
 		MonsterID: "boss_beetle", MonsterLv: 1, Seed: 20261128,
-		StartHP: hero.HP * 0.3, BD: []string{"m_fireball"}, Avatar: av,
+		StartHP: hero.HP * 0.3, BD: []string{"wl_drain"}, Avatar: av,
 	})
 	hits, exact := 0, 0
 	for _, r := range rep.Rounds {
-		if r.Action != "m_fireball" {
+		if r.Action != "wl_drain" {
 			continue
 		}
 		hits++
 		if r.Damage <= 0 {
-			t.Fatalf("火球术应造成伤害：%+v", r)
+			t.Fatalf("吸取应造成伤害：%+v", r)
 		}
 		if r.Heal <= 0 {
-			t.Fatalf("火球术命中必须回血：damage=%.1f heal=%.1f", r.Damage, r.Heal)
+			t.Fatalf("吸取命中必须回血：damage=%.1f heal=%.1f", r.Damage, r.Heal)
 		}
 		// 回血 = min(伤害×50%, 血量缺口)，所以永远不应超过 50%+取整误差
 		if r.Heal > r.Damage*0.5+2 {
@@ -60,12 +61,12 @@ func TestFireballLifesteal(t *testing.T) {
 		}
 	}
 	if hits == 0 {
-		t.Fatalf("整场一次火球术都没放出来")
+		t.Fatalf("整场一次吸取都没放出来")
 	}
 	if exact == 0 {
 		t.Fatalf("没有任何一次回血达到伤害的 50%%（疑似未生效）")
 	}
-	t.Logf("火球术命中 %d 次，其中 %d 次精确 50%%", hits, exact)
+	t.Logf("吸取命中 %d 次，其中 %d 次精确 50%%", hits, exact)
 }
 
 // v1.9.83 术士「召唤」：施放当回合不出手，之后 6 个英雄回合每回合造成 0.5× 攻击伤害（v1.9.82 为 0.2×）。

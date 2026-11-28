@@ -1,5 +1,5 @@
 {
-  "_readme": "技能配置（v1.9.7：按《角色创建与换装-完整交付包》配置/skills.json 的 6 职业 + 职业过滤规则重写；v1.9.85 删除术士「吸取」wl_drain，其 50% 吸血并入火球术，现 6 职业 15 技能）。power 为系数（交付包 100 制 → 本表 1.0 制，已 /100）。",
+  "_readme": "技能配置（v1.9.7：按《角色创建与换装-完整交付包》配置/skills.json 的 6 职业 + 职业过滤规则重写；v1.9.86 撤销 v1.9.85 的「吸取并入火球」，恢复术士「吸取」wl_drain、火球术回归纯输出，现 6 职业 16 技能）。power 为系数（交付包 100 制 → 本表 1.0 制，已 /100）。",
   "_bdRule": "技能库显示 = unlocked[] ∩ (当前 classId 的 initial ∪ advanced)；不显示跨职业技能；转职后原职业技能自动卸下。",
   "_balanceNote": "全部数值来自交付包 [PLACEHOLDER]，PT-2 验证后只改本表，不改代码。 v1.9.40：m_heal 改持续回血（hotRounds/hotPer），w_guard 改持续减伤（drRounds/drPct）。",
   "slots": 4,
@@ -105,7 +105,8 @@
       ],
       "advanced": [
         "wl_curse",
-        "wl_summon"
+        "wl_summon",
+        "wl_drain"
       ]
     }
   },
@@ -146,8 +147,7 @@
       "fx": "fx_dmg_fire",
       "classId": "mage",
       "tier": "initial",
-      "desc": "火系单体攻击，命中回复本次伤害的 50%",
-      "lifesteal": 0.5
+      "desc": "火系单体"
     },
     {
       "id": "m_heal",
@@ -296,6 +296,19 @@
       "desc": "召唤魔物协战 6 回合：召唤当回合不出手，之后每回合额外造成 0.5× 攻击的暗系伤害",
       "summonRounds": 6,
       "summonPower": 0.5
+    },
+    {
+      "id": "wl_drain",
+      "name": "吸取",
+      "kind": "magic",
+      "power": 1.1,
+      "cd": 4,
+      "element": "dark",
+      "fx": "fx_dmg_dark",
+      "classId": "warlock",
+      "tier": "advanced",
+      "desc": "吸血攻击：命中回复本次伤害的 50%",
+      "lifesteal": 0.5
     }
   ]
 }
