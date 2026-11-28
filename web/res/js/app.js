@@ -3157,7 +3157,8 @@ function drawPartyHeroes(t,now){
     cvb.beginPath();cvb.ellipse(s.x,566,42,12,0,0,Math.PI*2);cvb.fill();
     s.actor.render(cvb,s.x,560,1.6,{dir:(s.faceR?1:-1),alpha:dead?0.45:1});
     // 头顶血条
-    const w=88,h=9,bx=s.x-w/2,by=470;
+    // v1.9.73 血条贴到头顶上方：立绘脚底在 y=560、高 96*1.6，头顶约 406，血条放 360
+    const w=92,h=9,bx=s.x-w/2,by=Math.round(560-96*1.6)-46;
     cvb.fillStyle='rgba(0,0,0,.62)';cvb.fillRect(bx-1,by-1,w+2,h+2);
     cvb.fillStyle='#2a3a2a';cvb.fillRect(bx,by,w,h);
     const pct=Math.max(0,Math.min(1,s.hpNow/Math.max(1,s.hpMax)));
@@ -3178,7 +3179,7 @@ async function playPartyBattle(rep){
   const heroes=rep.heroes||[];
   partyClear();
   const ctl={dead:false}; partyRunCtl=ctl;
-  // 1) 复用正式战斗场景
+  // —— 1) 复用正式战斗场景（与单人同一套视图/背景/血条/日志）——
   showView('battle');
   battlePlaying=true; paused=false;
   battleMonInfos=[{sprite:'boss_beetle',name:rep.bossName||'幽影主宰',isBoss:true,lv:30,elite:false}];
@@ -3187,64 +3188,88 @@ async function playPartyBattle(rep){
   const mMax=rep.bossMaxHp||1;
   bHp={hero:1,heroMax:1,mon:mMax,monMax:mMax};
   updateHp();
-  $('roundVal')&&($('roundVal').textContent='组队副本');
+  const me=heroes.find(h=>h.userId===uid())||heroes[0]||{};
+  $('heroName')&&($('heroName').textContent=(me.name||'我')+'  Lv.'+((state&&state.core&&state.core.level)||''));
+  $('monName')&&($('monName').textContent=rep.bossName||'幽影主宰');
+  $('monLvTag')&&($('monLvTag').textContent='组队副本');
   $('battleLog')&&($('battleLog').innerHTML='');
-  logLine('sys',`组队副本 · ${heroes.length} 人 · 服务端权威结算`);
-  // 2) 三个立绘
+  $('roundVal')&&($('roundVal').textContent='0 / '+((rep.rounds||[]).length||1));
+  logLine('sys',`组队副本 · ${heroes.length} 人 · 服务端权威结算 seed=${rep.seed}`);
+  // —— 2) 队友立绘 ——
   const BUNDLES=window.CLASS_BUNDLES||{};
-  const xs=heroes.length===1?[420]:heroes.length===2?[380,520]:[330,450,570];
+  const xs=heroes.length===1?[420]:heroes.length===2?[360,520]:[300,430,560];
   partySlots=heroes.map((h,i)=>({
     name:h.name, classId:h.classId, x:xs[i]||420,
-    hpMax:h.hpStart||1, hpNow:h.hpStart||1, faceR:true, actor:null,
+    hpMax:h.hpStart||1, hpNow:h.hpStart||1, actor:null,
   }));
   const SA=window.StandeeActor;
   await Promise.all(partySlots.map(async s=>{
     if(!SA) return;
-    try{
-      const a=new SA(BUNDLES[s.classId]||'char_warrior');
-      await a.init(); a.play('idle');
-      s.actor=a;
-    }catch(e){ /* 立绘加载失败就用血条兜底 */ }
+    try{ const a=new SA(BUNDLES[s.classId]||'char_warrior'); await a.init(); a.play('idle'); s.actor=a; }catch(e){}
   }));
   if(ctl.dead) return;
-  // 3) 逐回合演出
+  // 自己的血量接到顶部英雄血条上（和单人战斗一致）
+  const meIdx=Math.max(0,partySlots.findIndex(s=>s.name===me.name));
+  bHp.heroMax=partySlots[meIdx]?partySlots[meIdx].hpMax:1;
+  bHp.hero=bHp.heroMax;
+  updateHp();
+  // —— 3) 逐回合演出（节奏/音效对齐单人）——
+  const skills=(CFG&&CFG.skills&&CFG.skills.skills)||[];
+  const bossSlot=MON_SLOT[0];
   const rounds=rep.rounds||[];
-  const per=Math.max(110,Math.min(300,7000/Math.max(1,rounds.length)));
   for(const r of rounds){
     if(ctl.dead||view!=='battle') return;
     if(r.heroHp) r.heroHp.forEach((hp,i)=>{ if(partySlots[i]) partySlots[i].hpNow=hp; });
     if(r.bossHp!=null){ bHp.mon=r.bossHp; updateHp(); }
+    const si=Math.max(0,(r.heroIdx||0)|0);
+    const s=partySlots[si];
+    $('roundVal')&&($('roundVal').textContent=`${r.n} / ${rounds.length}`);
     if(r.actor==='hero'){
-      const s=partySlots[r.heroIdx];
-      if(s&&s.actor){ setBAnim('hero','attack',320); }
-      if(s) s.faceR=true;
-      if(r.damage>0){ setMonAnim(0,'hit',260); spawnFx('-'+Math.round(r.damage),760,430,'#ff6b6b'); }
-      if(r.heal>0){ spawnFx('+'+Math.round(r.heal), s?s.x:420, 440,'#7fe0a0'); }
+      const sk=skills.find(x=>x.id===r.action)||{};
+      const kind=r.action==='hot'?'heal':(sk.kind||'physical');
+      if(kind==='physical') window.SFX&&SFX.slash();
+      else if(kind==='shield') window.SFX&&SFX.shield();
+      else window.SFX&&SFX.cast();
+      if(s&&s.actor){ try{ s.actor.play('attack'); setTimeout(()=>{ if(s.actor) s.actor.play('idle'); },420); }catch(e){} }
+      await sleep(150);
+      if(r.damage>0){
+        setMonAnim(0,'hit',300);
+        spawnFx('-'+Math.round(r.damage), bossSlot.x, 430, '#ff6b6b');
+        window.SFX&&SFX.hit();
+        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${rep.bossName||'BOSS'} -${Math.round(r.damage)}`);
+      }else if(r.heal>0){
+        window.SFX&&SFX.heal();
+        spawnFx('+'+Math.round(r.heal), s?s.x:420, 440, '#7fe0a0');
+        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → 恢复 +${Math.round(r.heal)}`);
+      }else{
+        logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''}`);
+      }
     }else{
-      const s=partySlots[r.heroIdx];
-      setMonAnim(0,'attack',320);
-      if(s){ s.faceR=false; }
-      if(r.damage>0) spawnFx('-'+Math.round(r.damage), s?s.x:420, 440,'#ff6b6b');
+      window.SFX&&SFX.enemySlash();
+      setMonAnim(0,'attack',420);
+      await sleep(150);
+      spawnFx('-'+Math.round(r.damage||0), s?s.x:420, 440, '#ff6b6b');
+      window.SFX&&SFX.hurt();
+      if(si===meIdx) setBAnim('hero','hit',300);
+      logLine('mon',`R${r.n} ${rep.bossName||'BOSS'} → ${s?s.name:'队友'} -${Math.round(r.damage||0)}`);
     }
-    const who=r.actor==='boss'?'BOSS':(partySlots[r.heroIdx]||{}).name||'队友';
-    if(r.damage>0) logLine(r.actor==='boss'?'mon':'hero',`${who} → ${r.actor==='boss'?'-':'-'}${Math.round(r.damage)}`);
-    else if(r.heal>0) logLine('hero',`${who} → 恢复 +${Math.round(r.heal)}`);
+    if(si===meIdx){ bHp.hero=partySlots[meIdx].hpNow; updateHp(); }
     if(r.bossHp<=0){ setMonAnim(0,'die',1600); }
-    await new Promise(res=>setTimeout(res,per));
+    await sleep(270);
   }
   if(ctl.dead) return;
-  // 4) 结算
+  // —— 4) 结算 ——
   battlePlaying=false;
   window.SFX&&(rep.result==='win'?SFX.victory():SFX.death());
   const win=rep.result==='win';
-  const t=document.createElement('div');
-  t.className='toast-win'+(win?'':' lose');t.textContent=win?'战 斗 胜 利':'战 斗 失 败';
-  $('fxLayer').appendChild(t);setTimeout(()=>t.remove(),1200);
-  await new Promise(res=>setTimeout(res,900));
-  const rows=(rep.heroes||[]).map(h=>`<div class="pd-m"><span class="pd-dot"></span><b>${h.name}</b>
+  const tt=document.createElement('div');
+  tt.className='toast-win'+(win?'':' lose');tt.textContent=win?'战 斗 胜 利':'战 斗 失 败';
+  $('fxLayer').appendChild(tt);setTimeout(()=>tt.remove(),1200);
+  await sleep(1200);
+  const rows=(rep.heroes||[]).map(h=>`<div class="pd-m"><span class="pd-dot${h.alive?'':' off'}"></span><b>${h.name}</b>
       <em>${h.alive?'存活':'倒下'} · 剩余 ${Math.round(h.hpEnd)} · 输出 ${fmt(Math.round(h.damage||0))}</em></div>`).join('');
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
-    <div class="msub">${rep.bossName||'幽影主宰'} · ${rep.rounds.length} 步 · ${rep.partyMult}x 人数加成</div>
+    <div class="msub">${rep.bossName||'幽影主宰'} · ${rounds.length} 步 · ${rep.partyMult}x 人数加成</div>
     <div class="sec-title">成员结算</div>${rows}
     <div class="reward-row"><span class="rk">经验</span><span class="rv">+${fmt(rep.exp||0)}</span></div>
     <div class="reward-row"><span class="rk">金币</span><span class="rv">+${fmt(rep.gold||0)}</span></div>
