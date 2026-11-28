@@ -280,9 +280,9 @@
       "fx": "fx_dmg_dark",
       "classId": "warlock",
       "tier": "advanced",
-      "desc": "召唤魔物协战 6 回合：召唤当回合不出手，之后每回合额外造成 0.2× 攻击的暗系伤害",
+      "desc": "召唤魔物协战 6 回合：召唤当回合不出手，之后每回合额外造成 0.5× 攻击的暗系伤害",
       "summonRounds": 6,
-      "summonPower": 0.2
+      "summonPower": 0.5
     },
     {
       "id": "wl_drain",

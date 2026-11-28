@@ -65,14 +65,14 @@ func TestWarlockDrainLifesteal(t *testing.T) {
 	t.Logf("吸取命中 %d 次，其中 %d 次精确 50%%", hits, exact)
 }
 
-// v1.9.82 术士「召唤」：施放当回合不出手，之后 6 个英雄回合每回合造成 0.2× 攻击伤害。
+// v1.9.83 术士「召唤」：施放当回合不出手，之后 6 个英雄回合每回合造成 0.5× 攻击伤害（v1.9.82 为 0.2×）。
 func TestWarlockSummonCompanion(t *testing.T) {
 	if err := Init("../../../configs"); err != nil {
 		t.Fatal(err)
 	}
 	sk, ok := C().SkillByID("wl_summon")
-	if !ok || sk.Kind != "summon" || sk.SummonRounds != 6 || sk.SummonPower != 0.2 {
-		t.Fatalf("wl_summon 应配置 kind=summon/summonRounds=6/summonPower=0.2，实际 %+v", sk)
+	if !ok || sk.Kind != "summon" || sk.SummonRounds != 6 || sk.SummonPower != 0.5 {
+		t.Fatalf("wl_summon 应配置 kind=summon/summonRounds=6/summonPower=0.5，实际 %+v", sk)
 	}
 	if sk.Power != 0 {
 		t.Fatalf("召唤本体不应再有直接伤害，power 应为 0，实际 %v", sk.Power)
@@ -117,10 +117,10 @@ func TestWarlockSummonCompanion(t *testing.T) {
 	if ticks < 6 {
 		t.Fatalf("召唤物协战跳数不足：%d（应为 6）", ticks)
 	}
-	// 单跳约 0.2×攻击（含 ±10% 浮动与怪物魔防减免）
-	lo, hi := hero.ATK*0.2*0.85, hero.ATK*0.2*1.12
+	// 单跳约 0.5×攻击（含 ±10% 浮动与怪物魔防减免）
+	lo, hi := hero.ATK*0.5*0.85, hero.ATK*0.5*1.12
 	if first < lo || first > hi {
-		t.Fatalf("召唤单跳 %.1f 超出预期范围 [%.1f, %.1f]（0.2×攻击）", first, lo, hi)
+		t.Fatalf("召唤单跳 %.1f 超出预期范围 [%.1f, %.1f]（0.5×攻击）", first, lo, hi)
 	}
 	t.Logf("召唤：施放 %d 次 / 协战 %d 跳 / 单跳 %.1f / 合计 %.1f（攻击 %.1f）", cast, ticks, first, total, hero.ATK)
 
