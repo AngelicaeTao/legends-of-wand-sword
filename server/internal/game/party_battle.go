@@ -111,6 +111,10 @@ type partyUnit struct {
 	shield  float64
 	atkBuff float64
 	dealt   float64
+	// v1.9.82 召唤物协战（术士 wl_summon）
+	summonLeft  int
+	summonPower float64
+	summonName  string
 }
 
 type partySkill struct {
@@ -294,6 +298,31 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 						})
 					}
 				}
+				// v1.9.82 召唤物协战：本人行动前先结算一次（独立战报行）
+				if u.summonLeft > 0 && aliveMons() > 0 {
+					u.summonLeft--
+					if mi := firstAliveMon(); mi >= 0 {
+						tgt := mons[mi]
+						dmg := u.stats.ATK * u.summonPower * (1 - tgt.mdef/(tgt.mdef+100))
+						dmg *= 0.9 + rng.Float64()*0.2
+						if dmg > tgt.hp {
+							dmg = tgt.hp
+						}
+						if dmg < 0 {
+							dmg = 0
+						}
+						tgt.hp -= dmg
+						n++
+						rep.Rounds = append(rep.Rounds, PartyRound{
+							N: n, Wave: wi + 1, Actor: "hero", HeroIdx: idx, Action: "summonHit",
+							SkillName: u.summonName + "（协战）", Damage: round2(dmg), MonIdx: mi,
+							MonHP: monHP(), HeroHP: heroHP(), HeroDead: heroDead(), MonDead: monDead(),
+						})
+					}
+					if aliveMons() == 0 {
+						break
+					}
+				}
 				// 技能 CD
 				for i := range u.queue {
 					if u.queue[i].remain > 0 {
@@ -389,6 +418,13 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 					rd.TargetIdx = tgtAlly
 				case "buff":
 					u.atkBuff = act.Power
+				case "summon":
+					// v1.9.82 召唤：当回合登场不出手，之后每个本人回合由召唤物补伤害
+					if act.SummonRounds > 0 {
+						u.summonLeft = act.SummonRounds
+						u.summonPower = act.SummonPower
+						u.summonName = act.Name
+					}
 				default:
 					mi := firstAliveMon()
 					if mi >= 0 {
@@ -402,6 +438,17 @@ func ResolvePartyBattle(dgID string, waves []WaveSpec, heroes []PartyHero, seed 
 						u.dealt += dmg
 						rd.MonIdx = mi
 						rd.Damage = round2(dmg)
+						// v1.9.82 吸取：命中回复本次伤害的 lifesteal（按目标剩余血量计，防溢出）
+						if act.Lifesteal > 0 && dmg > 0 {
+							heal := dmg * act.Lifesteal
+							if room := u.stats.HP - u.hp; heal > room {
+								heal = room
+							}
+							if heal > 0 {
+								u.hp += heal
+								rd.Heal = round2(heal)
+							}
+						}
 					}
 				}
 				rd.MonHP = monHP()

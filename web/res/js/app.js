@@ -572,7 +572,7 @@ function renderLoop(now){
   requestAnimationFrame(renderLoop);
 }
 /* 性能角标：版本 + FPS + 本机 GPU 纹理上限（判断超大地图是否触碰硬件上限） */
-const BUILD_VER='v1.9.82';
+const BUILD_VER='v1.9.83';
 let _perfFrames=0,_perfTs=0,_perfFps=0,_texMax='?';
 function perfTick(now){
   _perfFrames++;
@@ -1751,8 +1751,12 @@ function renderRole(){
     const unlocked=(state.skills?.unlocked||[]).filter(id=>poolIds.indexOf(id)>=0);
     const visible=all.filter(s=>poolIds.indexOf(s.id)>=0);
     const color=['sk-fire','sk-ice','sk-heal','sk-shield'];
-    const kindDesc=s=>s.kind==='heal'?'恢复生命':s.kind==='shield'?'吸收伤害':s.kind==='buff'?'增益':s.kind==='debuff'?'减益':'单体伤害';
-    const kindIco={physical:'sword',magic:'bolt',heal:'flask',shield:'shield',buff:'star',debuff:'skull'};
+    const kindDesc=s=>s.kind==='heal'?'恢复生命':s.kind==='shield'?'吸收伤害':s.kind==='buff'?'增益':s.kind==='debuff'?'减益':s.kind==='summon'?'召唤协战':'单体伤害';
+    const kindIco={physical:'sword',magic:'bolt',heal:'flask',shield:'shield',buff:'star',debuff:'skull',summon:'skull'};
+    // v1.9.82 技能卡数值行：召唤显示持续回合与每跳倍率，吸血在威力后标注
+    const powerText=s=>s.kind==='summon'
+      ? `召唤 ${s.summonRounds||6} 回合 · 每回合 ${Number(s.summonPower||0).toFixed(1)}×`
+      : `威力 ${Number(s.power||1).toFixed(1)}${s.lifesteal?' · 吸血 '+Math.round(s.lifesteal*100)+'%':''}`;
     // v1.9.56 技能升级：每级 +8%，消耗钻石随等级递增（数值读 CFG.economy.skillUpgrade）
     const SU=(CFG&&CFG.economy&&CFG.economy.skillUpgrade)||{};
     const suPer=Number(SU.perLevel||0.08), suMax=Number(SU.maxLevel||20),
@@ -1774,7 +1778,7 @@ function renderRole(){
       return `<div class="skill-card ${color[i%4]}" data-slot="${i}" style="cursor:pointer">
         <div class="sk-ico">${ICON[ic]?ICON[ic](24,'#fff3c4'):''}</div>
         <div style="flex:1;min-width:0"><div class="sn">${s.name}</div>
-          <div class="sd">${kindDesc(s)} · 威力 ${Number(s.power||1).toFixed(1)} · CD ${s.cd||2}s</div></div>
+          <div class="sd">${kindDesc(s)} · ${powerText(s)} · CD ${s.cd||2}s</div></div>
         <div class="srm" style="font-size:10px;color:#ffd590">点击卸下</div>
       </div>`;
     }).join('');
@@ -2898,7 +2902,7 @@ async function playBattle(rep,mon,bd){
         logLine('hero',`R${r.n} ${r.skillName} → 持续恢复 +${Math.round(r.heal||0)}`);
       }else{
       const sk=skills.find(x=>x.id===r.action)||{};
-      const kind=sk.kind||'physical';
+      const kind=r.action==='summonHit'?'summon':(sk.kind||'physical');
       setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
       const ti=Math.max(0,(r.monIdx||0)|0);
       const tgt=monInfos[ti]||monInfos[0];
@@ -2911,16 +2915,24 @@ async function playBattle(rep,mon,bd){
       const sp=slotOf(ti);
       // v1.9.51 攻击位移/投射：按职业系判定（含普攻 basic 兜底），均在 150ms 抵达时点触发受击
       // 不按 kind 判定——普攻 action='basic' 会落到 physical 默认值，法师普攻也应发法球
-      if(r.damage>0){
+      if(r.damage>0&&r.action!=='summonHit'){
         if(heroIsMelee()) startHeroLunge(sp);       // 战士系（战士/拳师/骑士）：冲到怪物身边再砍
         else if(heroIsCaster()) fireMagicShot(sp,r.fx);  // 法师系（法师/祭祀/术士）：法球飞向怪物
       }
-      setBAnim('hero','attack',420);await sleep(150);
+      if(r.action!=='summonHit') setBAnim('hero','attack',420);
+      await sleep(150);
       if(r.damage>0){
         setMonAnim(ti,'hit',300);
-        spawnFx('-'+Math.round(r.damage),sp.x,430,'#ff6b6b');
+        // v1.9.82 召唤物协战：紫色浮字，不播英雄出手动画
+        spawnFx('-'+Math.round(r.damage),sp.x,430,r.action==='summonHit'?'#c08bff':'#ff6b6b');
         if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${r.skillName} → ${tgtName} -${Math.round(r.damage)}`);
+        // v1.9.82 吸取：同回合伤害 + 回血一起显示
+        if(r.heal>0){
+          spawnFx('+'+Math.round(r.heal),420,430,'#7fe0a0');
+          window.SFX&&SFX.heal();
+          logLine('hero',`R${r.n} ${r.skillName} → 吸取恢复 +${Math.round(r.heal)}`);
+        }
       }else if(r.heal>0){
         spawnFx('+'+Math.round(r.heal),420,430,'#7fe0a0');
         window.SFX&&SFX.heal();
@@ -2928,7 +2940,7 @@ async function playBattle(rep,mon,bd){
       }else{
         if(kind==='buff'||kind==='debuff') window.SFX&&SFX.buff();
         else if(kind==='shield') window.SFX&&SFX.shield();
-        logLine('hero',`R${r.n} ${r.skillName}（${kind==='shield'?'持续减伤':kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
+        logLine('hero',`R${r.n} ${r.skillName}（${kind==='shield'?'持续减伤':kind==='buff'?'增益':kind==='debuff'?'减益':kind==='summon'?'召唤物登场':'效果'}）`);
       }
       }
     }else{
@@ -3367,29 +3379,36 @@ async function playPartyBattle(rep){
     updateHp();
     if(r.actor==='hero'){
       const sk=skills.find(x=>x.id===r.action)||{};
-      const kind=r.action==='hot'?'heal':(sk.kind||'physical');
+      const kind=r.action==='hot'?'heal':(r.action==='summonHit'?'summon':(sk.kind||'physical'));
       setSkillCd(sk.id, sk.cd||0);   // v1.9.75 技能栏 CD
       if(kind==='physical') window.SFX&&SFX.slash();
       else if(kind==='shield') window.SFX&&SFX.shield();
       else window.SFX&&SFX.cast();
       // v1.9.75 近战冲到 BOSS 身边再砍；法师从自己手侧发法球（与单人一致）
-      if(s && r.damage>0){
+      // v1.9.82 召唤物协战不播英雄出手动画（伤害来自召唤物）
+      if(s && r.damage>0 && r.action!=='summonHit'){
         if(MELEE_CLASSES[s.classId]===1){
           s.lunge={t0:performance.now(), dur:430, tx:Math.max(s.x+140, MON_SLOT[0].x-170)};
         }else{
           partyMagicShot(s, r.fx);
         }
       }
-      if(s&&s.actor){ try{ s.actor.play('attack'); }catch(e){} }
-      if(si===meIdx) setBAnim('hero','attack',420);
+      if(s&&s.actor&&r.action!=='summonHit'){ try{ s.actor.play('attack'); }catch(e){} }
+      if(si===meIdx&&r.action!=='summonHit') setBAnim('hero','attack',420);
       await sleep(150);
-      if(s&&s.actor){ try{ s.actor.play('idle'); }catch(e){} }
+      if(s&&s.actor&&r.action!=='summonHit'){ try{ s.actor.play('idle'); }catch(e){} }
       if(r.damage>0){
         const mi=Math.max(0,(r.monIdx||0)|0);
         setMonAnim(mi,'hit',300);
-        spawnFx('-'+Math.round(r.damage), (MON_SLOT[Math.min(mi,MON_SLOT.length-1)]||{x:bossX}).x, 430, '#ff6b6b');
+        spawnFx('-'+Math.round(r.damage), (MON_SLOT[Math.min(mi,MON_SLOT.length-1)]||{x:bossX}).x, 430, r.action==='summonHit'?'#c08bff':'#ff6b6b');
         if(r.fx==='fx_dmg_crit') window.SFX&&SFX.crit(); else window.SFX&&SFX.hit();
         logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${rep.bossName||'BOSS'} -${Math.round(r.damage)}`);
+        // v1.9.82 吸取：同回合伤害 + 回血一起显示
+        if(r.heal>0){
+          window.SFX&&SFX.heal();
+          spawnFx('+'+Math.round(r.heal), s?s.x:420, 440, '#7fe0a0');
+          logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → 吸取恢复 +${Math.round(r.heal)}`);
+        }
       }else if(r.heal>0){
         // v1.9.79 治疗落到「被治疗的人」头顶
         const tgt=(r.targetIdx!=null&&partySlots[r.targetIdx])?partySlots[r.targetIdx]:s;
@@ -3404,7 +3423,7 @@ async function playPartyBattle(rep){
           spawnFx('格挡', tgt?tgt.x:420, 440, '#8fd0ff');
           logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''} → ${(tgt&&tgt!==s)?tgt.name:'自己'}（减伤 ${Math.round((sk.drPct||0)*100)}%，${sk.drRounds||1} 回合）`);
         }else{
-          logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''}（${kind==='buff'?'增益':kind==='debuff'?'减益':'效果'}）`);
+          logLine('hero',`R${r.n} ${s?s.name:''} ${r.skillName||''}（${kind==='buff'?'增益':kind==='debuff'?'减益':kind==='summon'?'召唤物登场':'效果'}）`);
         }
       }
     }else{
@@ -3480,4 +3499,5 @@ function startInviteWatch(){
     };
   },8000);
 }
+window.__battleReplay=playBattle;   // 调试钩子：自动化测试回放服务端战报（不影响玩法）
 })();
