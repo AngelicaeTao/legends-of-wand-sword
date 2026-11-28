@@ -48,6 +48,7 @@ type party struct {
 	Starting  bool
 	StartAt   int64
 	LastStart int64 // 上次开团时间：用于开团冷却，防止并发重复结算
+	LastActive int64 // 最近一次队伍活动时间（创建/加入/离开/踢人/邀请/开始/状态查询）
 	Run       *game.PartyBattleReport
 	RunAt     int64
 }
@@ -70,6 +71,52 @@ func nowMs() int64 { return time.Now().UnixMilli() }
 
 func newPartyID() string { return fmt.Sprintf("p_%d", time.Now().UnixNano()) }
 
+var partyJanitorOnce sync.Once
+
+// startPartyJanitor 启动 30s 周期回收器：清理过期邀请、超时结算态、超时战报与离线散队。
+// sync.Once 保证只启动一次（在 HandlerWithWeb 中调用）。
+func startPartyJanitor() {
+	partyJanitorOnce.Do(func() {
+		go func() {
+			t := time.NewTicker(30 * time.Second)
+			defer t.Stop()
+			for range t.C {
+				partyJanitorTick()
+			}
+		}()
+	})
+}
+
+func partyJanitorTick() {
+	partyMu.Lock()
+	defer partyMu.Unlock()
+	pruneInvites()
+	now := nowMs()
+	online := onlineSet()
+	const idleTTL = 10 * 60 * 1000 // 10 分钟
+	for _, p := range parties {
+		p.settleIfStuck()
+		// 战报超过 10 分钟清空，避免旧战报一直回放
+		if p.Run != nil && p.RunAt > 0 && now-p.RunAt > idleTTL {
+			p.Run = nil
+			p.RunAt = 0
+		}
+		// 所有成员离线且队伍长时间无活动 → 解散
+		if now-p.LastActive > idleTTL {
+			allOffline := true
+			for _, m := range p.Members {
+				if online[m.UserID] {
+					allOffline = false
+					break
+				}
+			}
+			if allOffline {
+				p.disband()
+			}
+		}
+	}
+}
+
 // mustUser 只认 token；body 里若带了 userId 必须与 token 一致
 func mustUser(w http.ResponseWriter, r *http.Request, bodyUserID string) (string, bool) {
 	uid, ok := authUserID(r)
@@ -78,7 +125,7 @@ func mustUser(w http.ResponseWriter, r *http.Request, bodyUserID string) (string
 		return "", false
 	}
 	if bodyUserID != "" && bodyUserID != uid {
-		log.Printf("[party] 越权请求被拒: token=%s body=%s path=%s", uid, bodyUserID, r.URL.Path)
+		log.Printf("[auth] 越权请求被拒: user=%s body=%s path=%s", uid, bodyUserID, r.URL.Path)
 		http.Error(w, "请求身份与登录身份不一致", 403)
 		return "", false
 	}
@@ -279,7 +326,7 @@ func partyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	np := &party{
-		ID: newPartyID(), LeaderID: uid, DGID: dg.ID, CreatedAt: nowMs(),
+		ID: newPartyID(), LeaderID: uid, DGID: dg.ID, CreatedAt: nowMs(), LastActive: nowMs(),
 		Members: []partyMember{{UserID: uid, Name: st.Core.Name, ClassID: st.Core.ClassID, JoinedAt: nowMs()}},
 	}
 	parties[np.ID] = np
@@ -335,6 +382,7 @@ func partyJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Members = append(p.Members, partyMember{UserID: uid, Name: st.Core.Name, ClassID: st.Core.ClassID, JoinedAt: nowMs()})
 	partyOf[uid] = p.ID
+	p.LastActive = nowMs()
 	delete(invites, uid)
 	jsonOut(w, map[string]any{"ok": true, "my": partyView(p)})
 }
@@ -360,7 +408,10 @@ func partyLeave(w http.ResponseWriter, r *http.Request) {
 	}
 	pid := p.ID
 	p.removeMember(uid)
-	_, alive := parties[pid]
+	cur, alive := parties[pid]
+	if alive && cur != nil {
+		cur.LastActive = nowMs()
+	}
 	jsonOut(w, map[string]any{"ok": true, "disbanded": !alive})
 }
 
@@ -399,6 +450,7 @@ func partyKick(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "该玩家不在队伍中", 404)
 		return
 	}
+	p.LastActive = nowMs()
 	p.removeMember(q.TargetID)
 	jsonOut(w, map[string]any{"ok": true, "my": partyView(p)})
 }
@@ -455,6 +507,7 @@ func partyInvite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	invites[q.TargetID] = &inviteRec{PartyID: p.ID, FromID: uid, FromName: fromName, CreatedAt: nowMs()}
+	p.LastActive = nowMs()
 	jsonOut(w, map[string]any{"ok": true})
 }
 
@@ -509,6 +562,7 @@ func partyAccept(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Members = append(p.Members, partyMember{UserID: uid, Name: st.Core.Name, ClassID: st.Core.ClassID, JoinedAt: nowMs()})
 	partyOf[uid] = p.ID
+	p.LastActive = nowMs()
 	delete(invites, uid)
 	jsonOut(w, map[string]any{"ok": true, "my": partyView(p)})
 }
@@ -549,6 +603,7 @@ func partyStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.settleIfStuck()
+	p.LastActive = nowMs()
 	resp := map[string]any{"my": partyView(p)}
 	if p.Run != nil {
 		resp["run"] = p.Run
@@ -590,6 +645,7 @@ func partyStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.LastStart = nowMs()
+	p.LastActive = nowMs()
 	dg, ok := partyDungeonOf(p.DGID)
 	if !ok {
 		partyMu.Unlock()

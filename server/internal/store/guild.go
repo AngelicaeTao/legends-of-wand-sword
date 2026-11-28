@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -151,7 +150,7 @@ func (r *GuildRegistry) GuildByUser(userID string) (*Guild, string) {
 
 // GuildCreate 创建公会：唯一名校验 + 会长入会。返回创建好的公会。
 func (r *GuildRegistry) GuildCreate(id, name, userID, userName string, level, power int) (*Guild, error) {
-	name = strings.TrimSpace(name)
+	name = SanitizeName(name)
 	if n := len([]rune(name)); n < 2 || n > 12 {
 		return nil, fmt.Errorf("公会名需 2~12 个字符")
 	}

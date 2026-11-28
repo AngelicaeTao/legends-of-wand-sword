@@ -20,6 +20,8 @@ const QDEFS=[
 
 let uid='', st={progress:{},claimed:{}}, hooks={};
 const $=id=>document.getElementById(id);
+// HTML 转义：任务名/描述等动态文本拼进 innerHTML 前统一处理
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function key(){ return 'zjcs_quest_'+uid; }
 function load(){
@@ -52,8 +54,8 @@ function render(){
     html+=`<div class="qt-item${i>0?' next':''}${ok?' done':''}" data-q="${q.id}">
       <span class="qt-ico">${(window.ICON&&ICON[q.ico])?ICON[q.ico](22,ok?'#7fe0a0':'#f0d590'):''}</span>
       <div class="qt-main">
-        <div class="qt-name">${q.name}</div>
-        <div class="qt-desc">${q.desc}</div>
+        <div class="qt-name">${esc(q.name)}</div>
+        <div class="qt-desc">${esc(q.desc)}</div>
         <div class="qt-bar${p>=q.goal?' full':''}"><i style="width:${Math.round(p/q.goal*100)}%"></i></div>
       </div>
       <span class="qt-right">${ok?'<b class="qt-claim">领取</b>':`<em>${p}/${q.goal}</em>`}</span>

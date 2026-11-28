@@ -103,11 +103,11 @@ func (p *PlayerState) CreateCharacter(classID string, look map[string]string, na
 		}
 	}
 	p.Core.ClassID = classID
-	if n := strings.TrimSpace(name); n != "" {
-		if len([]rune(n)) > 12 {
-			n = string([]rune(n)[:12])
-		}
+	if n := SanitizeName(name); n != "" {
 		p.Core.Name = n
+	} else if strings.TrimSpace(name) != "" {
+		// 用户确实填了名字，但清洗后为空（全是控制字符/敏感符号）→ 拒绝，避免脏名字
+		return fmt.Errorf("名字包含非法字符，请重新输入")
 	}
 	p.Skills.Unlocked = unlocked
 	p.Skills.Slots = slots

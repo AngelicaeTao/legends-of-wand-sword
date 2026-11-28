@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -139,10 +140,36 @@ func OnlinePlayers() []map[string]any {
 }
 
 // wsHandler HTTP Upgrade → WebSocket 连接。
+// 鉴权：优先从 Sec-WebSocket-Protocol 读取（客户端 new WebSocket(url, ['zjcs', token])），
+// 兼容 ?token= 回退；鉴权失败直接 401，不升级。
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get("Sec-WebSocket-Key")
 	if key == "" {
 		http.Error(w, "需要 WebSocket 升级", 400)
+		return
+	}
+	// 解析子协议：期望 "zjcs, <token>"；第一个 zjcs 用于确认回写协议头
+	token := ""
+	offerZjcs := false
+	if raw := r.Header.Get("Sec-WebSocket-Protocol"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			p := strings.TrimSpace(part)
+			if p == "" {
+				continue
+			}
+			if p == "zjcs" {
+				offerZjcs = true
+			} else if token == "" {
+				token = p
+			}
+		}
+	}
+	if token == "" {
+		token = r.URL.Query().Get("token") // 兼容旧客户端
+	}
+	uid, ok := verifyToken(token)
+	if token == "" || !ok || uid == "" {
+		http.Error(w, "登录状态已失效，请重新登录", 401)
 		return
 	}
 	hj, ok := w.(http.Hijacker)
@@ -157,14 +184,22 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	accept := sha1.Sum([]byte(key + wsMagic))
 	resp := "HTTP/1.1 101 Switching Protocols\r\n" +
 		"Upgrade: websocket\r\nConnection: Upgrade\r\n" +
-		"Sec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(accept[:]) + "\r\n\r\n"
+		"Sec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(accept[:]) + "\r\n"
+	if offerZjcs {
+		resp += "Sec-WebSocket-Protocol: zjcs\r\n"
+	}
+	resp += "\r\n"
 	buf.WriteString(resp)
 	buf.Flush()
 	startHub()
 
-	// token 从 query 取
-	uid, _ := authUserID(r)
-	c := &WsClient{id: r.URL.Query().Get("clientId"), userID: uid, worldID: "W1", name: "玩家", conn: conn, lastSeen: time.Now().UnixMilli()}
+	// 用存档里的名字/职业初始化客户端（不再固定「玩家」）
+	name, classID := "", ""
+	if st, err := disk.Load(uid); err == nil && st != nil {
+		name = st.Core.Name
+		classID = st.Core.ClassID
+	}
+	c := &WsClient{id: r.URL.Query().Get("clientId"), userID: uid, worldID: "W1", name: name, classID: classID, conn: conn, lastSeen: time.Now().UnixMilli()}
 	if c.id == "" {
 		c.id = uid
 	}

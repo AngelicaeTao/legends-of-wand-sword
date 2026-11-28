@@ -13,6 +13,8 @@
   const cbOf = (id) => (global.CLASS_BUNDLES && global.CLASS_BUNDLES[id]) || ('char_' + id);
 
   const $id = (i) => document.getElementById(i);
+  // HTML 转义：姓名/职业/技能等动态文本拼进 innerHTML/属性前统一处理
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const SLOT_ORDER = ['face', 'hair', 'top', 'pants', 'shoes', 'hat'];
   const NOUN = { face: '脸型', hair: '发型', top: '上衣', pants: '裤子', shoes: '鞋子', hat: '帽子' };
 
@@ -98,7 +100,7 @@
         const c = ((o.cfg.classes && o.cfg.classes.classes) || []).find(x => x.id === id) || {};
         const sk = (p.initial || []).map(sid => {
           const s = skillById(sid);
-          return `<span class="cr-chip"><b>${s.name}</b><i>CD ${s.cd || 2}s</i></span>`;
+          return `<span class="cr-chip"><b>${esc(s.name)}</b><i>CD ${s.cd || 2}s</i></span>`;
         }).join('');
         const b = c.bonus || {};
         const stat = (k, label) => {
@@ -110,8 +112,8 @@
         return `<button class="cr-class ${cls === id ? 'on' : ''}" data-cls="${id}">
           <span class="cc-pic"><img src="/res/characters/parts/${cbOf(id)}/${cbOf(id)}_standee.png" alt=""></span>
           <span class="cc-txt">
-            <b>${c.name || p.name}</b>
-            <em>${c.desc || ''}</em>
+            <b>${esc(c.name || p.name)}</b>
+            <em>${esc(c.desc || '')}</em>
             <span class="cr-chips">${sk}</span>
             ${stats}
           </span>
@@ -134,13 +136,13 @@
       const m = o.cfg.creator;
       const tabs = SLOT_ORDER.map(s => {
         const cur = look[s] === 'none' ? '不戴帽' : ((global.Look.optOf(s, look[s]) || {}).name || '');
-        return `<button class="cr-tab ${s === slot ? 'on' : ''}" data-slot="${s}">${NOUN[s]}<i>${cur}</i></button>`;
+        return `<button class="cr-tab ${s === slot ? 'on' : ''}" data-slot="${s}">${NOUN[s]}<i>${esc(cur)}</i></button>`;
       }).join('');
       const opts = [];
       const list = (m.slots[slot] && m.slots[slot].options) || [];
       for (const op of list) {
         opts.push(`<button class="cr-opt ${look[slot] === op.id ? 'on' : ''}" data-opt="${op.id}">
-          <span class="oi"><img src="${global.Look.BASE + op.file}" alt=""></span><em>${op.name}</em></button>`);
+          <span class="oi"><img src="${global.Look.BASE + op.file}" alt=""></span><em>${esc(op.name)}</em></button>`);
       }
       if (slot === 'hat') {
         opts.push(`<button class="cr-opt ${look.hat === 'none' ? 'on' : ''}" data-opt="none">
@@ -164,11 +166,11 @@
     const lookTxt = SLOT_ORDER.map(s => (look[s] === 'none' ? '不戴帽' : ((global.Look.optOf(s, look[s]) || {}).name || ''))).filter(Boolean).join(' · ');
     body.innerHTML = `
       <div class="cr-sec">给角色取个名字</div>
-      <div class="cr-name"><input id="crNameInput" maxlength="12" placeholder="输入角色名（最多 12 字）" value="${name.replace(/"/g, '&quot;')}"></div>
+      <div class="cr-name"><input id="crNameInput" maxlength="12" placeholder="输入角色名（最多 12 字）" value="${esc(name)}"></div>
       <div class="cr-sum">
-        <div class="sr"><span>职业</span><b>${c.name || p.name}</b></div>
-        <div class="sr"><span>初始技能</span><b>${sk}</b></div>
-        <div class="sr"><span>家园外观</span><b class="wide">${lookTxt}</b></div>
+        <div class="sr"><span>职业</span><b>${esc(c.name || p.name)}</b></div>
+        <div class="sr"><span>初始技能</span><b>${esc(sk)}</b></div>
+        <div class="sr"><span>家园外观</span><b class="wide">${esc(lookTxt)}</b></div>
       </div>
       <div class="cr-tip">创建后进入大世界；家园里可随时「换装」，外观只影响家园与创建预览，探索/战斗使用职业装备装立绘。</div>`;
     const inp = $id('crNameInput');

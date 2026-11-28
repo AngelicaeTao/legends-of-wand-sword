@@ -2,7 +2,11 @@
 // 对应 Nakama Storage（逻辑分表）+ 可选关系库；新增系统走 Ext 扩展位，不改表结构。
 package store
 
-import "zjcs/server/internal/game"
+import (
+	"strings"
+
+	"zjcs/server/internal/game"
+)
 
 // PlayerState 是角色完整存档的内存表示。每个字段对应一个逻辑表。
 type PlayerState struct {
@@ -90,6 +94,7 @@ func NewPlayer(userID, name, classID string) *PlayerState {
 	if classID == "" {
 		classID = "warrior"
 	}
+	name = SanitizeName(name)
 	pool := game.C().BDPoolOf(classID)
 	if len(pool) == 0 {
 		pool = []string{"w_slash", "w_guard"}
@@ -156,4 +161,24 @@ func (p *PlayerState) MigrateWeaponClass() bool {
 var TableNames = []string{
 	"characters", "world_progress", "warehouse", "equipment",
 	"skills", "pets", "pet_state", "home", "logs", "ext_data", "schema_meta",
+}
+
+// SanitizeName 清洗玩家名 / 公会名：去掉 ASCII 控制字符与 HTML/路径敏感字符，
+// TrimSpace 后最多保留 12 个 rune。用于所有接受用户昵称的入口，防注入与脏名字。
+func SanitizeName(s string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		switch r {
+		case '<', '>', '&', '"', '\'', '`', '/', '\\':
+			return -1
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+	cleaned = strings.TrimSpace(cleaned)
+	if r := []rune(cleaned); len(r) > 12 {
+		cleaned = string(r[:12])
+	}
+	return cleaned
 }

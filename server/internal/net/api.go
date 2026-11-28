@@ -6,10 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"zjcs/server/internal/game"
@@ -129,8 +136,11 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 		panic("公会数据初始化失败: " + err.Error())
 	}
 	game.InitSpawns()
+	startPartyJanitor()
+	startBackupLoop(dataDir)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", health)
+	mux.HandleFunc("/api/health", health)
 	mux.HandleFunc("/api/config", getConfig)
 	mux.HandleFunc("/api/tables", tables)
 
@@ -138,10 +148,10 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 	mux.HandleFunc("/api/state/load", stateLoad)
 	mux.HandleFunc("/api/player/create_character", createCharacter) // 角色创建（服务端权威）
 
-	// 账号体系（Nakama 语义同构）
-	mux.HandleFunc("/api/auth/device", deviceLogin)
-	mux.HandleFunc("/api/auth/register", registerAccount)
-	mux.HandleFunc("/api/auth/login", loginAccount)
+	// 账号体系（Nakama 语义同构）；登录/注册/设备登录按 IP 限流
+	mux.HandleFunc("/api/auth/device", rateLimit(deviceLogin))
+	mux.HandleFunc("/api/auth/register", rateLimit(registerAccount))
+	mux.HandleFunc("/api/auth/login", rateLimit(loginAccount))
 	mux.HandleFunc("/api/auth/bind-device", bindDevice)
 
 	// 世界/点位/宝箱权威接口
@@ -198,20 +208,149 @@ func HandlerWithWeb(cfgDir, webFileArg, resDir string) http.Handler {
 		}))
 	}
 	mux.HandleFunc("/", index)
-	return cors(mux)
+	// 顺序：限制请求体 → CORS → 统一鉴权 → 业务路由；管理入口独立校验本机直连。
+	publicHandler := bodyLimit(cors(requireAuth(mux)))
+	adminHandler := newAdminHandler(accounts)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/admin" || strings.HasPrefix(r.URL.Path, "/admin/") {
+			adminHandler.ServeHTTP(w, r)
+			return
+		}
+		publicHandler.ServeHTTP(w, r)
+	})
+}
+
+// maxBodyBytes 全局请求体上限（1MB）。
+const maxBodyBytes = 1 << 20
+
+// bodyLimit 用 http.MaxBytesReader 限制所有请求体大小。
+func bodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// publicAPIPaths 无需鉴权的 API 路径白名单（其余 /api/* 一律要求 token）。
+var publicAPIPaths = map[string]bool{
+	"/api/health":        true,
+	"/api/config":        true,
+	"/api/tables":        true,
+	"/api/auth/device":   true,
+	"/api/auth/register": true,
+	"/api/auth/login":    true,
+}
+
+// requireAuth 统一鉴权中间件：所有 /api/* 除白名单外都必须带有效 Bearer token。
+// 静态资源（/res/）、首页与 /ws（WS 单独做握手鉴权）不在此拦截。
+func requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		if !strings.HasPrefix(p, "/api/") || publicAPIPaths[p] {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if _, ok := authUserIDHeader(r); !ok {
+			http.Error(w, "登录状态已失效，请重新登录", 401)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ---------- 登录接口限流（按客户端 IP，每 IP 每分钟 20 次） ----------
+
+const rateLimitPerMin = 20
+
+type rateRec struct {
+	count int
+	start time.Time
+}
+
+var (
+	rateMu   sync.Mutex
+	rateHits = map[string]*rateRec{}
+)
+
+func clientIP(r *http.Request) string {
+	// 线上经 Cloudflare 隧道转发：优先取真实客户端 IP，直连时回落到 RemoteAddr。
+	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
+		return ip
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if first := strings.TrimSpace(strings.Split(xff, ",")[0]); first != "" {
+			return first
+		}
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+// rateLimit 对登录/注册类接口做简单固定窗口限流，超限返回 429。
+func rateLimit(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		now := time.Now()
+		rateMu.Lock()
+		rec := rateHits[ip]
+		if rec == nil || now.Sub(rec.start) >= time.Minute {
+			rec = &rateRec{start: now}
+			rateHits[ip] = rec
+		}
+		rec.count++
+		over := rec.count > rateLimitPerMin
+		// 顺手清理过期的窗口，防止 map 无限增长
+		if len(rateHits) > 4096 {
+			for k, v := range rateHits {
+				if now.Sub(v.start) >= time.Minute {
+					delete(rateHits, k)
+				}
+			}
+		}
+		rateMu.Unlock()
+		if over {
+			http.Error(w, "请求过于频繁，请稍后再试", 429)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// internalErr 服务端内部错误：只记日志，不把底层错误回显给客户端。
+func internalErr(w http.ResponseWriter, err error) {
+	log.Printf("[internal] %v", err)
+	http.Error(w, "服务内部错误，请稍后重试", 500)
 }
 
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		// 只对同源请求回显 Origin，不再使用 Access-Control-Allow-Origin: *
+		origin := r.Header.Get("Origin")
+		if origin != "" && sameOrigin(origin, r.Host) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(204)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// sameOrigin 判断 Origin 是否与请求 Host 同源（协议不比较，端口/主机一致即可）。
+func sameOrigin(origin, host string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return strings.EqualFold(u.Host, host)
 }
 
 func jsonOut(w http.ResponseWriter, v any) {
@@ -241,13 +380,14 @@ func tables(w http.ResponseWriter, r *http.Request) {
 func characterNew(w http.ResponseWriter, r *http.Request) {
 	var q struct{ UserID, Name, ClassID string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	if q.UserID == "" {
-		q.UserID = "anonymous"
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
 	}
-	p := store.NewPlayer(q.UserID, q.Name, q.ClassID)
+	p := store.NewPlayer(uid, q.Name, q.ClassID)
 	p.Core.HP = maxHpOf(p) // v1.9.27 满血开局
-	if err := disk.Save(q.UserID, p); err != nil {
-		http.Error(w, err.Error(), 500)
+	if err := disk.Save(uid, p); err != nil {
+		internalErr(w, err)
 		return
 	}
 	jsonOut(w, p)
@@ -256,12 +396,13 @@ func characterNew(w http.ResponseWriter, r *http.Request) {
 func stateLoad(w http.ResponseWriter, r *http.Request) {
 	var q struct{ UserID string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	if q.UserID == "" {
-		q.UserID = "anonymous"
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
 	}
-	p, err := disk.Load(q.UserID)
+	p, err := disk.Load(uid)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	if p == nil {
@@ -293,7 +434,7 @@ func stateLoad(w http.ResponseWriter, r *http.Request) {
 		migrated = true
 	}
 	if migrated {
-		_ = disk.Save(q.UserID, p)
+		_ = disk.Save(uid, p)
 	}
 	jsonOut(w, map[string]any{"exists": true, "state": p, "stats": playerStats(p)})
 }
@@ -312,17 +453,13 @@ func createCharacter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	uid, ok := authUserID(r)
-	if !ok && q.UserID != "" {
-		uid = q.UserID
-	}
-	if uid == "" {
-		http.Error(w, "缺少 userId", 400)
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
 		return
 	}
 	p, err := loadOrCreate(uid)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	if err := p.CreateCharacter(q.ClassID, q.HomeLook, q.Name, q.Skills); err != nil {
@@ -331,7 +468,7 @@ func createCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Core.HP = maxHpOf(p) // v1.9.27 新角色满血开局（落盘）
 	if err := disk.Save(uid, p); err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	jsonOut(w, map[string]any{"state": p, "appearance": p.Appearance})
@@ -538,12 +675,14 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	if q.UserID == "" {
-		q.UserID = "anonymous"
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
 	}
-	p, err := loadOrCreate(q.UserID)
+	q.UserID = uid
+	p, err := loadOrCreate(uid)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	equip := make([]game.EquipItem, 0, len(p.Equip))
@@ -579,7 +718,7 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 		logs = append(logs, "你被击败，已回到家园休整（战败保底 1 血，用回血药水恢复后再出发）")
 	}
 	if err := disk.Save(q.UserID, p); err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	jsonOut(w, map[string]any{"report": rep, "logs": logs, "state": p, "stats": playerStats(p)})
@@ -588,19 +727,20 @@ func battleFight(w http.ResponseWriter, r *http.Request) {
 func idleFinalize(w http.ResponseWriter, r *http.Request) {
 	var q struct{ UserID string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	if q.UserID == "" {
-		q.UserID = "anonymous"
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
 	}
-	p, err := loadOrCreate(q.UserID)
+	p, err := loadOrCreate(uid)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	now := game.ServerNow()
 	res := game.SettleIdle(game.IdleInput{Now: now, LastSeen: p.World.LastSeen, Level: p.Core.Level})
 	store.ApplyIdleResult(p, res, now, maxHpOf(p))
-	if err := disk.Save(q.UserID, p); err != nil {
-		http.Error(w, err.Error(), 500)
+	if err := disk.Save(uid, p); err != nil {
+		internalErr(w, err)
 		return
 	}
 	jsonOut(w, map[string]any{"result": res, "state": p, "stats": playerStats(p)})
@@ -609,12 +749,13 @@ func idleFinalize(w http.ResponseWriter, r *http.Request) {
 func transferClass(w http.ResponseWriter, r *http.Request) {
 	var q struct{ UserID, To string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	if q.UserID == "" {
-		q.UserID = "anonymous"
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
 	}
-	p, err := loadOrCreate(q.UserID)
+	p, err := loadOrCreate(uid)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	oldCls := p.Core.ClassID
@@ -632,8 +773,8 @@ func transferClass(w http.ResponseWriter, r *http.Request) {
 	for i := range p.Equip {
 		p.Equip[i].Stats = converted[i].Stats
 	}
-	if err := disk.Save(q.UserID, p); err != nil {
-		http.Error(w, err.Error(), 500)
+	if err := disk.Save(uid, p); err != nil {
+		internalErr(w, err)
 		return
 	}
 	jsonOut(w, map[string]any{"classId": q.To, "message": "转职成功，装备属性已按新职业系数换算", "state": p, "stats": playerStats(p)})
@@ -662,16 +803,13 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	uid, ok := authUserID(r)
-	if !ok && q.UserID != "" {
-		uid = q.UserID
-	}
-	if uid == "" {
-		uid = "anonymous"
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
 	}
 	p, err := loadOrCreate(uid)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 
@@ -1141,7 +1279,7 @@ func playerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := disk.Save(uid, p); err != nil {
-		http.Error(w, err.Error(), 500)
+		internalErr(w, err)
 		return
 	}
 	extra["logs"] = logs
@@ -1229,12 +1367,21 @@ func filterBD(p *store.PlayerState, bd []string) []string {
 	return out
 }
 
+// index() 静态托管首页：把 index.html 里 app.js / style.css 的 ?v= 自动替换为
+// 磁盘文件的 mtime 版本号（60s 内存缓存），改前端文件后无需手改版本号。
+var (
+	idxMu      sync.Mutex
+	idxCached  string
+	idxCacheAt time.Time
+	reAssetVer = regexp.MustCompile(`\?v=[^"'&\s]+`)
+)
+
 func index(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store") // HTML 强制不缓存，确保每次拿到最新脚本引用（v1.9.24 补充）
 	if webFile != "" {
-		if b, err := os.ReadFile(webFile); err == nil {
+		if html := renderIndex(webFile); html != "" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write(b)
+			w.Write([]byte(html))
 			return
 		}
 	}
@@ -1245,4 +1392,133 @@ func index(w http.ResponseWriter, r *http.Request) {
 <li>/api/character/new 创角</li><li>/api/state/load 读档</li>
 <li>/api/stats/calc 属性计算</li><li>/api/battle/resolve 纯战斗结算</li><li>/api/battle/fight 战斗+落库</li>
 <li>/api/idle/settle 纯离线结算</li><li>/api/idle/finalize 离线+落库</li><li>/api/transfer 转职+落库</li></ul>`))
+}
+
+// renderIndex 读取 index.html，把 app.js/style.css 的版本号替换为文件 mtime（60s 缓存）。
+func renderIndex(path string) string {
+	idxMu.Lock()
+	defer idxMu.Unlock()
+	if idxCached != "" && time.Since(idxCacheAt) < 60*time.Second {
+		return idxCached
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	html := string(b)
+	// 取 res/js 与 res/css 下最新 mtime 作为统一版本号：任何前端文件更新都会自动换掉所有 ?v=
+	ver := ""
+	if webResDir != "" {
+		for _, sub := range []string{"js", "css"} {
+			entries, e := os.ReadDir(filepath.Join(webResDir, sub))
+			if e != nil {
+				continue
+			}
+			for _, ent := range entries {
+				if ent.IsDir() {
+					continue
+				}
+				if fi, e2 := ent.Info(); e2 == nil {
+					if v := strconv.FormatInt(fi.ModTime().UnixNano(), 10); v > ver {
+						ver = v
+					}
+				}
+			}
+		}
+	}
+	if ver != "" {
+		html = reAssetVer.ReplaceAllString(html, "?v="+ver)
+	}
+	idxCached = html
+	idxCacheAt = time.Now()
+	return html
+}
+
+// ---------- 存档备份（每 6 小时，保留最近 7 份） ----------
+
+const backupKeep = 7
+
+func startBackupLoop(dataDir string) {
+	go func() {
+		backupSaves(dataDir) // 启动先备份一次
+		t := time.NewTicker(6 * time.Hour)
+		defer t.Stop()
+		for range t.C {
+			backupSaves(dataDir)
+		}
+	}()
+}
+
+// backupSaves 把 data/saves 复制到 data/backups/<yyyyMMdd-HHmmss>/；失败只记日志。
+func backupSaves(dataDir string) {
+	src := filepath.Join(dataDir, "saves")
+	root := filepath.Join(dataDir, "backups")
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		log.Printf("[backup] 读取存档目录失败: %v", err)
+		return
+	}
+	dst := filepath.Join(root, time.Now().Format("20060102-150405"))
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		log.Printf("[backup] 创建备份目录失败: %v", err)
+		return
+	}
+	fail := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if err := copyFile(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+			fail++
+			log.Printf("[backup] 复制 %s 失败: %v", e.Name(), err)
+		}
+	}
+	log.Printf("[backup] 已备份 %d 个文件到 %s（失败 %d）", len(entries)-fail, dst, fail)
+	pruneBackups(root, backupKeep)
+}
+
+// copyFile 先写临时文件再 rename，避免备份中出现半截文件。
+func copyFile(src, dst string) error {
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	tmp := dst + ".tmp"
+	if err := os.WriteFile(tmp, b, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, dst)
+}
+
+// pruneBackups 只保留最近 keep 份备份目录（按目录名时间戳排序）。
+func pruneBackups(root string, keep int) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	dirs := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, e.Name())
+		}
+	}
+	if len(dirs) <= keep {
+		return
+	}
+	sortStrings(dirs)
+	for _, name := range dirs[:len(dirs)-keep] {
+		if err := os.RemoveAll(filepath.Join(root, name)); err != nil {
+			log.Printf("[backup] 清理旧备份 %s 失败: %v", name, err)
+		}
+	}
+}
+
+func sortStrings(ss []string) {
+	for i := 0; i < len(ss); i++ {
+		for j := i + 1; j < len(ss); j++ {
+			if ss[j] < ss[i] {
+				ss[i], ss[j] = ss[j], ss[i]
+			}
+		}
+	}
 }

@@ -18,6 +18,8 @@ const RES='/res/';
 const API = location.protocol==='file:' ? 'http://127.0.0.1:8080' : '';
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
+// HTML 转义：所有把玩家名/公会名等动态文本拼进 innerHTML 的地方都必须经过它
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ---------- 全局状态 ---------- */
 let CFG=null, state=null;
@@ -72,11 +74,15 @@ async function api(path, body, method){
   if(authToken) headers['Authorization']='Bearer '+authToken;
   const opt = {method: method||(body?'POST':'GET'), headers};
   if(body) opt.body=JSON.stringify(body);
-  // 同时在 query 带 token：部分网关会剥离 Authorization 头，服务端 authUserID 支持 ?token= 兜底
-  let url=API+path;
-  if(authToken) url+=(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(authToken);
-  const r = await fetch(url, opt);
-  if(!r.ok){ let msg='HTTP '+r.status; try{const txt=await r.text(); try{const e=JSON.parse(txt);msg=e.error||e.message||msg;}catch(e){ if(txt&&txt.trim())msg=txt.trim(); }}catch(e){} throw new Error(msg); }
+  // token 只走 Authorization 头，不再拼到 URL（避免日志/Referer 泄露）
+  const r = await fetch(API+path, opt);
+  if(!r.ok){
+    // token 失效（如服务端换签名密钥）时自动回登录页，避免停在半死状态
+    if(r.status===401&&authToken){ try{ switchAccount(); }catch(e){} }
+    let msg='HTTP '+r.status;
+    try{const txt=await r.text(); try{const e=JSON.parse(txt);msg=e.error||e.message||msg;}catch(e){ if(txt&&txt.trim())msg=txt.trim(); }}catch(e){}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
@@ -123,11 +129,6 @@ const worldMap=new WorldMap($('cvExplore'),{
   onHint:()=>{},                                  // v1.9.87 底部操作提示条已移除（世界提示改由交互提示/任务栏承担）
   onTile:(k)=>{ /* 记录探索格子 */ }
 });
-window.__wm=worldMap; // 调试钩子：便于自动化读取实体坐标（不影响玩法）
-// 调试钩子：战斗倒地状态（自动化验证"死亡后不会自己站起来"）
-window.__bt=()=>{const a=battleHeroActor;return {b:bAnim.hero,state:a?a.state:null,sy:a&&a.cur&&a.cur.root?+a.cur.root.sy.toFixed(3):null,
-  modal:!document.getElementById('modalLayer').classList.contains('hidden'),
-  modalTxt:document.getElementById('modalLayer').innerText.replace(/\n/g,'|').slice(0,40)};};
 const miniCtx=$('miniMapCv').getContext('2d');
 
 // v1.9.64 点小地图直接打开大地图（原来只能按 M 或点底部「地图」入口）
@@ -313,10 +314,6 @@ function fireMagicShot(sp,fx){
   if(magicShots.length>8) magicShots.shift();   // 防止极端连击堆积
 }
 function clearBattleFx(){heroLunge=null;magicShots=[];lastHeroX=420;}
-// 实测钩子：暴露英雄实际 X 与法球轨迹，供 Playwright 逐帧采样
-window.__fx=()=>({heroX:lastHeroX,melee:heroIsMelee(),
-  lunge:heroLunge?{tx:heroLunge.tx,elapsed:performance.now()-heroLunge.start}:null,
-  shots:magicShots.map(s=>({x0:s.x0,y0:s.y0,x1:s.x1,y1:s.y1,elapsed:performance.now()-s.start,color:s.color}))});
 // 准备战斗部件 actor（英雄固定法师，怪物按战报阵容逐只建独立 actor，动画互不干扰）
 function ensureBattleActors(monInfos){
   const hb=(state&&state.core)?heroBundleOf(state.core.classId):'char_warrior';
@@ -677,7 +674,7 @@ async function doDeviceLogin(){
     refreshLoginView();
   }catch(e){ $('authErr').textContent=e.message; }
 }
-function switchAccount(){ setSession(null); $('authUser').value=''; $('authPwd').value=''; state=null; closeWS(); refreshLoginView(); }
+function switchAccount(){ setSession(null); stopInviteWatch(); $('authUser').value=''; $('authPwd').value=''; state=null; closeWS(); refreshLoginView(); }
 
 // 职业 → 整体立绘 bundle（探索/战斗同一套职业装备装，交付包 §4.2）
 // v1.9.65 战士/骑士立绘素材互换了：parts.json 里 char_warrior 写的是"钢甲红披"、
@@ -877,9 +874,10 @@ function connectWS(){
   closeWS(true); // 主动清理旧定时器，但不重置退避计数
   const proto=location.protocol==='https:'?'wss:':'ws:';
   clientId=authUserId||('c_'+Date.now());
-  const url=`${proto}//${location.host}/ws?token=${encodeURIComponent(authToken||'')}&clientId=${encodeURIComponent(clientId)}`;
+  const url=`${proto}//${location.host}/ws?clientId=${encodeURIComponent(clientId)}`;
   try{
-    ws=new WebSocket(url);
+    // token 通过子协议传递（服务端回 Sec-WebSocket-Protocol: zjcs），URL 不再带 token
+    ws=authToken?new WebSocket(url,['zjcs',authToken]):new WebSocket(url);
     ws.onopen=()=>{
       wsRetry=0; // 连接成功重置退避
       // 带旧 channel 重连，服务端未满则复用原线
@@ -964,6 +962,7 @@ async function travelTo(gate){
 function doLogout(){
   window.SFX&&SFX.panelClose();
   setSession(null); state=null; panel=null; equipDetailSlot=null;
+  stopInviteWatch();
   if(window.Quest&&$('questTracker'))$('questTracker').innerHTML='';
   closeWS(); worldMap.active=false;
   $('sfxBtn')&&$('sfxBtn').classList.add('hidden');
@@ -1013,7 +1012,6 @@ function fmt(n){return Number(n||0).toLocaleString('zh-CN');}
 let _lastLv=0;
 function syncHud(){
   if(!state||!state.core)return;
-  window.__st=state;   // 调试钩子：自动化测试读取金币/家园等级（不影响玩法）
   const c=state.core;
   if(_lastLv&&c.level>_lastLv&&window.SFX)SFX.level();
   _lastLv=c.level;
@@ -1301,7 +1299,7 @@ function renderHome(){
     <div class="home-avatar">
       <canvas id="homeAvatar" width="128" height="160"></canvas>
       <div class="ha-txt">
-        <div class="ha-name">${(state&&state.core&&state.core.name)||'英雄'} · ${cdef2.name||''}</div>
+        <div class="ha-name">${esc((state&&state.core&&state.core.name)||'英雄')} · ${cdef2.name||''}</div>
         <div class="ha-sub">家园休闲装 · 6 部件自由搭配（4⁶ = 4096 种）</div>
         <div class="ha-look">${lookTxt||'尚未设置外观'}</div>
       </div>
@@ -1513,8 +1511,8 @@ async function renderGuild(){
     <div class="guild-hero">
       <div class="gh-emblem">${ICON.shield(40,'#f0d590')}</div>
       <div class="gh-meta">
-        <div class="gh-name">${gv.name} <em>Lv.${lv}</em>${isPresident?'<span class="cl-req ok" style="margin-left:8px">我的公会</span>':''}</div>
-        <div class="gh-sub">会长 ${president?president.name:'-'} · 成员 ${gv.size}/30 · 创建于 ${new Date(gv.createdAt*1000).toLocaleDateString()}</div>
+        <div class="gh-name">${esc(gv.name)} <em>Lv.${lv}</em>${isPresident?'<span class="cl-req ok" style="margin-left:8px">我的公会</span>':''}</div>
+        <div class="gh-sub">会长 ${president?esc(president.name):'-'} · 成员 ${gv.size}/30 · 创建于 ${new Date(gv.createdAt*1000).toLocaleDateString()}</div>
         <div class="gh-bar"><i style="width:${Math.min(100,nextLv/10)}%"></i><span>公会进度 ${prog}（距 Lv.${lv+1} 还需 ${1000-nextLv}）</span></div>
       </div>
       <div class="gh-coin"><em>公会币</em><b>${fmt(coin)}</b></div>
@@ -1541,11 +1539,11 @@ async function renderGuild(){
       ${members.map(m=>{
         const me=m.userId===uid();
         return `<div class="gm-row ${me?'gm-me':''}"><span class="gm-dot ${m.userId===uid()?'on':''}"></span>
-          <span class="gm-name">${m.name}${me?'（你）':''}</span>
+          <span class="gm-name">${esc(m.name)}${me?'（你）':''}</span>
           <span class="gm-power">⚔ ${fmt(m.power||0)}</span>
           <span class="gm-role ${m.role==='president'?'r-p':m.role==='officer'?'r-o':''}">${GUILD_ROLE_TXT[m.role]||m.role}</span>
           <span class="gm-lv">Lv.${m.level}</span>
-          <button class="gm-pf" data-uid="${m.userId}" data-name="${m.name}" title="查看该成员档案">档案</button></div>`;
+          <button class="gm-pf" data-uid="${esc(m.userId)}" data-name="${esc(m.name)}" title="查看该成员档案">档案</button></div>`;
       }).join('')}
     </div>
     <div style="margin-top:12px;display:flex;gap:10px">
@@ -1578,7 +1576,7 @@ async function renderGuild(){
     };
   });
   $('guildLeave').onclick=()=>{
-    showModal(`<h2>退出公会</h2><div class="msub">${isPresident?'你是会长：退出后公会将转让给最早加入的成员；若无其他成员则解散。':'确定退出公会 '+gv.name+' ？退出后公会币保留，可随时加入新公会。'}</div>
+    showModal(`<h2>退出公会</h2><div class="msub">${isPresident?'你是会长：退出后公会将转让给最早加入的成员；若无其他成员则解散。':'确定退出公会 '+esc(gv.name)+' ？退出后公会币保留，可随时加入新公会。'}</div>
       <div class="divider"></div>
       <div class="enc-btns"><button class="btn-red" id="doLeave">确定退出</button><button class="btn-gray" id="cancelLeave">再想想</button></div>`);
     $('doLeave').onclick=async()=>{
@@ -1633,11 +1631,11 @@ async function renderGuildJoin(preloaded){
       const pres=(x.members||[]).find(m=>m.role==='president');
       return `<div class="gr-row">
         <div class="gr-emb">${ICON.shield(22,'#f0d590')}</div>
-        <div class="gr-main"><div class="gr-name">${x.name} <em>Lv.${x.level}</em></div>
-          <div class="gr-sub">会长 ${pres?pres.name:'-'} · ${x.size}/30 人 · 进度 ${x.progress}</div></div>
-        <button class="btn-gray gr-join" data-gid="${x.id}" data-gname="${x.name}" ${x.size>=30?'disabled style="opacity:.45"':''}>${x.size>=30?'已满员':'加入'}</button>
+        <div class="gr-main"><div class="gr-name">${esc(x.name)} <em>Lv.${x.level}</em></div>
+          <div class="gr-sub">会长 ${pres?esc(pres.name):'-'} · ${x.size}/30 人 · 进度 ${x.progress}</div></div>
+        <button class="btn-gray gr-join" data-gid="${esc(x.id)}" data-gname="${esc(x.name)}" ${x.size>=30?'disabled style="opacity:.45"':''}>${x.size>=30?'已满员':'加入'}</button>
       </div>`;
-    }).join(''):(kw?'没有名字包含「'+kw+'」的公会':'暂无公会，创建第一个吧！');
+    }).join(''):(kw?'没有名字包含「'+esc(kw)+'」的公会':'暂无公会，创建第一个吧！');
     el.querySelectorAll('.gr-join').forEach(b=>b.onclick=async()=>{
       try{
         const r2=await api('/api/guild/join',{userId:uid(),guildId:b.dataset.gid});
@@ -1700,7 +1698,7 @@ function renderRole(){
       <div class="hero-card">
         <div class="hero-portrait"><img src="${RES}v3/characters/cards/${(cdef&&cdef.icon)||'ui_card_mage.png'}" alt=""></div>
         <div class="hero-brief">
-          <div class="hb-name">${c.name||'英雄'}<em>${cdef?cdef.name:c.classId}</em></div>
+          <div class="hb-name">${esc(c.name||'英雄')}<em>${cdef?cdef.name:c.classId}</em></div>
           <div class="hb-lv">Lv.${c.level}<span>已装备 ${done}/4</span></div>
           <div class="hb-exp"><i style="width:${pct.toFixed(1)}%"></i><span>${fmt(exp)} / ${fmt(need)}</span></div>
         </div>
@@ -2429,7 +2427,6 @@ function renderMap(){
         const d=dungeons.find(x=>x.id===btn.dataset.dg);
         if(!d)return;
         if(btn.dataset.party==='1'){ hideModal(); closePanel(); openPartyDungeon(d.id); return; }
-        if(btn.dataset.party==='1'){ hideModal(); closePanel(); openPartyDungeon(d.id); return; }
         try{
           // 服务端权威校验等级+扣次数
           const r=await api('/api/player/action',{userId:uid(),action:'dungeon_enter',dungeonId:d.id});
@@ -2470,7 +2467,7 @@ function renderIdle(){
    弹窗（遇怪 / 结算 / 收益 / 提示）
    ============================================================ */
 function toastModal(title,sub){
-  showModal(`<h2>${title}</h2><div class="msub">${sub||''}</div><button class="big-btn goldbtn" id="toastOk">确定</button>`);
+  showModal(`<h2>${esc(title)}</h2><div class="msub">${esc(sub||'')}</div><button class="big-btn goldbtn" id="toastOk">确定</button>`);
   $('toastOk').onclick=()=>{ hideModal(); if(view==='world'&&panel) renderPanel(); };
 }
 // 点击地图上的怪物 → 交战确认（单出口：交战进战斗 / 绕行回地图）
@@ -2480,7 +2477,7 @@ async function askPlayerProfile(p){
   if(view!=='world')return;
   const hadPanel=!!panel;   // v1.9.61 从公会面板点进来时，关闭后回到面板而不是恢复地图
   worldMap.active=false;
-  showModal(`<h2>玩家档案</h2><div class="msub">正在查询 <b style="color:#f0d590">${p.name||'玩家'}</b> …</div>`);
+  showModal(`<h2>玩家档案</h2><div class="msub">正在查询 <b style="color:#f0d590">${esc(p.name||'玩家')}</b> …</div>`);
   try{
     const uid2=p.userId||p.uid;
     if(!uid2){ hideModal(); toastModal('玩家档案','该玩家信息暂不可见（未登录游客）'); if(!hadPanel)worldMap.active=true; return; }
@@ -2497,9 +2494,9 @@ async function askPlayerProfile(p){
       <div class="guild-hero" style="margin:10px 0">
         <div class="gh-emblem">${ICON.card?ICON.card(40):ICON.shield(40,'#5a6b80')}</div>
         <div class="gh-meta">
-          <div class="gh-name">${d.name} ${d.online?'<em style="color:#7fe0a0;font-style:normal">● 在线</em>':'<em style="color:#8a93a6;font-style:normal">● 离线</em>'}</div>
+          <div class="gh-name">${esc(d.name)} ${d.online?'<em style="color:#7fe0a0;font-style:normal">● 在线</em>':'<em style="color:#8a93a6;font-style:normal">● 离线</em>'}</div>
           <div class="gh-sub">${cls} · Lv.${d.level} · 战力 ${fmt(d.power)}</div>
-          <div class="gh-sub">${d.guild?('公会 '+d.guild+(gr?('（'+gr+'）'):'')):'未加入公会'} · 所在地图 ${wn}</div>
+          <div class="gh-sub">${d.guild?('公会 '+esc(d.guild)+(gr?('（'+esc(gr)+'）'):'')):'未加入公会'} · 所在地图 ${wn}</div>
         </div>
       </div>
       <div class="pf-attr">
@@ -2533,9 +2530,9 @@ async function showOnlinePlayers(){
       const wn={W1:'青草平原',W2:'迷雾森林',W3:'赤焰峡谷',W4:'冰霜高原',W5:'流沙遗迹',W6:'星陨之巅',HOME:'家园'}[p.worldId]||p.worldId;
       return `<div class="gr-row">
         <div class="gr-emb">${ICON.card?ICON.card(22,'#f0d590'):ICON.shield(22,'#f0d590')}</div>
-        <div class="gr-main"><div class="gr-name">${p.name} <em>${cls}</em></div>
+        <div class="gr-main"><div class="gr-name">${esc(p.name)} <em>${cls}</em></div>
           <div class="gr-sub">${wn} · ${(p.channel||0)+1} 线</div></div>
-        <button class="btn-gray gr-view" data-uid="${p.userId||''}" data-name="${p.name}" ${p.userId?'':'disabled style="opacity:.45"'}>档案</button>
+        <button class="btn-gray gr-view" data-uid="${esc(p.userId||'')}" data-name="${esc(p.name)}" ${p.userId?'':'disabled style="opacity:.45"'}>档案</button>
       </div>`;
     }).join('')||'<div class="sec-sub">当前没有其他玩家在线</div>';
     showModal(`<h2>在线玩家（${ps.length}）</h2><div style="max-height:340px;overflow:auto">${rows}</div>
@@ -2696,7 +2693,6 @@ async function dropChestFor(mon){
     console.warn('[chest] 掉落登记失败，本次不掉箱：',(e&&e.message)||e);
   }
 }
-window.__dropChest=dropChestFor;   // 调试钩子：自动化测试可直接触发掉落（不影响玩法）
 
 function showBattleResult(rep,mon){
   const win=rep.result==='win';
@@ -3108,7 +3104,7 @@ async function init(){
 init();
 
 /* ================= v1.9.68 组队副本（大厅 / 队伍 / 多人战斗演出） ================= */
-let partyPoll=null, partyLastRun=0;
+let partyPoll=null, partyRunSeen=Object.create(null);
 
 function pdPowColor(my,rec){ const r=rec>0?my/rec:1; return r>=1?'#7fe0a0':r>=0.7?'#ffd76b':'#ff8a8a'; }
 
@@ -3167,9 +3163,9 @@ async function openPartyLobby(dgId){
   const rows=ps.map(p=>{
     const leader=(p.members||[]).find(m=>m.leader)||{};
     return `<div class="pd-row">
-      <div class="pd-rl"><b>${p.dgName}</b><em>${p.size}/${p.max} 人</em></div>
-      <div class="pd-rs">队长 ${leader.name||'-'} · 平均战力 ${fmt(p.avgPower)}</div>
-      <button class="btn-gray pd-join" data-id="${p.id}">加入</button></div>`;
+      <div class="pd-rl"><b>${esc(p.dgName)}</b><em>${p.size}/${p.max} 人</em></div>
+      <div class="pd-rs">队长 ${esc(leader.name||'-')} · 平均战力 ${fmt(p.avgPower)}</div>
+      <button class="btn-gray pd-join" data-id="${esc(p.id)}">加入</button></div>`;
   }).join('')||'<div class="sec-sub">当前没有等待中的队伍，创建一支吧</div>';
   showModal(`<h2>组队大厅</h2><div class="msub">最多 ${ps.length?ps[0].max:3} 人 · 每日不限次数</div>
     <div class="pd-list">${rows}</div>
@@ -3188,14 +3184,16 @@ async function openPartyLobby(dgId){
 
 async function openPartyRoom(){
   if(partyPoll){ clearInterval(partyPoll); partyPoll=null; }
-  partyLastRun=0;
+  let stopPoll=false;
   const paint=async()=>{
     let r;
     try{ r=await api('/api/party/status',{userId:uid()}); }catch(e){ return; }
-    if(!r.my){ if(partyPoll){clearInterval(partyPoll);partyPoll=null;} hideModal(); return; }
-    // 队友开战后，其他人轮询到这里也会播同一份战报
-    if(r.run&&r.runAt&&r.runAt>partyLastRun){
-      partyLastRun=r.runAt;
+    if(!r.my){ stopPoll=true; if(partyPoll){clearInterval(partyPoll);partyPoll=null;} hideModal(); return; }
+    // 同一份战报只播一次：按队伍 id 记住已消费的 runAt，重开大厅不再回放旧战报
+    const pid=r.my.id||'', seen=partyRunSeen[pid]||0;
+    if(r.run&&r.runAt&&r.runAt>seen){
+      partyRunSeen[pid]=r.runAt;
+      stopPoll=true;
       if(partyPoll){ clearInterval(partyPoll); partyPoll=null; }
       await reloadPlayerState();
       playPartyBattle(r.run);
@@ -3204,9 +3202,9 @@ async function openPartyRoom(){
     const me=(r.my.members||[]).find(m=>m.userId===uid())||{};
     const isLeader=!!me.leader;
     const rows=(r.my.members||[]).map(m=>`<div class="pd-m${m.online?'':' off'}">
-        <span class="pd-dot"></span><b>${m.name}${m.leader?' · 队长':''}</b>
+        <span class="pd-dot"></span><b>${esc(m.name)}${m.leader?' · 队长':''}</b>
         <em>Lv.${m.level} · 战力 ${fmt(m.power)}${m.online?'':' · 离线'}</em></div>`).join('');
-    showModal(`<h2>${r.my.dgName}</h2>
+    showModal(`<h2>${esc(r.my.dgName)}</h2>
       <div class="msub">${r.my.size}/${r.my.max} 人 · 平均战力 ${fmt(r.my.avgPower)} · 推荐 ${fmt(r.my.recPower)}</div>
       <div class="pd-members">${rows}</div>
       <div class="pd-btns">
@@ -3225,6 +3223,7 @@ async function openPartyRoom(){
       try{
         const rr=await api('/api/party/start',{userId:uid()});
         if(partyPoll){clearInterval(partyPoll);partyPoll=null;}
+        stopPoll=true;
         await reloadPlayerState();
         playPartyBattle(rr.report);
       }catch(e){ st.disabled=false; st.textContent='开始挑战'; toastModal('无法开始',e.message); }
@@ -3233,7 +3232,7 @@ async function openPartyRoom(){
     if(iv) iv.onclick=()=>openPartyInvite();
   };
   await paint();
-  partyPoll=setInterval(paint,3000);
+  if(!stopPoll) partyPoll=setInterval(paint,3000);
 }
 
 async function openPartyInvite(){
@@ -3242,8 +3241,8 @@ async function openPartyInvite(){
   const me=uid();
   const ps=(r.players||[]).filter(p=>p.userId&&p.userId!==me);
   const rows=ps.map(p=>`<div class="pd-row">
-      <div class="pd-rl"><b>${p.name}</b><em>${p.worldId||''}</em></div>
-      <button class="btn-gray pd-inv" data-uid="${p.userId}" data-name="${p.name}">邀请</button></div>`).join('')
+      <div class="pd-rl"><b>${esc(p.name)}</b><em>${esc(p.worldId||'')}</em></div>
+      <button class="btn-gray pd-inv" data-uid="${esc(p.userId)}" data-name="${esc(p.name)}">邀请</button></div>`).join('')
     ||'<div class="sec-sub">当前没有其他玩家在线</div>';
   showModal(`<h2>邀请玩家</h2><div class="msub">只能邀请在线玩家</div>
     <div class="pd-list">${rows}</div>
@@ -3489,7 +3488,7 @@ async function playPartyBattle(rep){
   if(view!=='battle') return;
   const wrows=(rep.waves||[]).map(w=>`<div class="pd-m"><span class="pd-dot${w.result==='win'?'':' off'}"></span>
       <b>第 ${w.index} 波</b><em>${w.monsters?w.monsters.length:1} 只 · ${w.result==='win'?'通过':'失败'} · ${w.rounds} 回合</em></div>`).join('');
-  const rows=(rep.heroes||[]).map(h=>`<div class="pd-m"><span class="pd-dot${h.alive?'':' off'}"></span><b>${h.name}</b>
+  const rows=(rep.heroes||[]).map(h=>`<div class="pd-m"><span class="pd-dot${h.alive?'':' off'}"></span><b>${esc(h.name)}</b>
       <em>${h.alive?'存活':'倒下'} · 剩余 ${Math.round(h.hpEnd)} · 输出 ${fmt(Math.round(h.damage||0))}</em></div>`).join('');
   showModal(`<h2 class="${win?'':'fail'}">${win?'战斗胜利':'战斗失败'}</h2>
     <div class="msub">通过 ${rep.waveDone||0}/${rep.waveTotal||3} 波 · ${rep.partyMult} 倍人数加成</div>
@@ -3500,12 +3499,15 @@ async function playPartyBattle(rep){
     <div class="enc-btns"><button class="big-btn goldbtn" id="partyOk">收下</button></div>`);
   $('partyOk').onclick=async()=>{
     hideModal(); partyClear(); showView('world');
+    // 通关后自动退队：避免留在队伍里、再进大厅又回放上一场战报
+    try{ await api('/api/party/leave',{userId:uid()}); }catch(e){}
     await reloadPlayerState();
   };
 }
 
 /* 邀请接收：未在队伍中时轻量轮询（8s），有邀请就弹窗 */
 let inviteTimer=null;
+function stopInviteWatch(){ if(inviteTimer){ clearInterval(inviteTimer); inviteTimer=null; } }
 function startInviteWatch(){
   if(inviteTimer) return;
   inviteTimer=setInterval(async()=>{
@@ -3516,7 +3518,7 @@ function startInviteWatch(){
     if(r.my||!r.invite) return;
     const inv=r.invite;
     showModal(`<h2>组队邀请</h2>
-      <div class="msub"><b style="color:#f0d590">${inv.fromName}</b> 邀请你加入队伍</div>
+      <div class="msub"><b style="color:#f0d590">${esc(inv.fromName)}</b> 邀请你加入队伍</div>
       <div class="pd-btns">
         <button class="big-btn goldbtn" id="invYes">接受</button>
         <button class="btn-gray" id="invNo">拒绝</button>
@@ -3531,5 +3533,4 @@ function startInviteWatch(){
     };
   },8000);
 }
-window.__battleReplay=playBattle;   // 调试钩子：自动化测试回放服务端战报（不影响玩法）
 })();

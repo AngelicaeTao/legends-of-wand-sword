@@ -13,15 +13,16 @@ import (
 )
 
 // DiskStore 是线程安全的本地存档。
-// v1.9.41 交互延迟优化：Load 走内存缓存（免每请求读盘+解析 JSON），
-// Save 只更新缓存与 dirty 集合立即返回，由后台协程每 400ms 批量原子落盘
-// （先写临时文件再 rename）。同一 userID 只保留最新状态，连续动作合并为一次写盘。
+// v1.9.86 并发加固：缓存改为「规范 JSON 字节」，Load 每次 unmarshal 出新对象返回，
+// 杜绝多个请求共享同一个 *PlayerState 指针导致的数据竞争 / 相互覆盖。
+// Save 只更新缓存字节与 dirty 集合立即返回，由后台协程每 400ms 批量原子落盘。
 type DiskStore struct {
-	dir    string
-	mu     sync.Mutex
-	cache  map[string]*PlayerState        // uid → 最新状态（读缓存，进程内单一事实源）
-	dirty  map[string]struct{}            // 待落盘 uid 集合
-	stopCh chan struct{}
+	dir      string
+	mu       sync.Mutex
+	cache    map[string][]byte       // uid → 规范 JSON 字节（进程内单一事实源）
+	lastUsed map[string]time.Time    // uid → 最近访问时间（用于清理冷缓存）
+	dirty    map[string]struct{}     // 待落盘 uid 集合
+	stopCh   chan struct{}
 }
 
 func NewDiskStore(dir string) (*DiskStore, error) {
@@ -30,26 +31,49 @@ func NewDiskStore(dir string) (*DiskStore, error) {
 		return nil, err
 	}
 	d := &DiskStore{
-		dir:    path,
-		cache:  map[string]*PlayerState{},
-		dirty:  map[string]struct{}{},
-		stopCh: make(chan struct{}),
+		dir:      path,
+		cache:    map[string][]byte{},
+		lastUsed: map[string]time.Time{},
+		dirty:    map[string]struct{}{},
+		stopCh:   make(chan struct{}),
 	}
 	go d.flushLoop()
 	return d, nil
 }
 
-// flushLoop 后台去抖落盘：每 400ms 把 dirty 集合写盘一次。
+// flushLoop 后台去抖落盘：每 400ms 把 dirty 集合写盘一次；
+// 每 60s 清理 lastUsed 超过 30 分钟且不在 dirty 的冷缓存，防止内存无限增长。
 func (d *DiskStore) flushLoop() {
 	t := time.NewTicker(400 * time.Millisecond)
 	defer t.Stop()
+	clean := time.NewTicker(60 * time.Second)
+	defer clean.Stop()
 	for {
 		select {
 		case <-t.C:
 			_ = d.FlushAll()
+		case <-clean.C:
+			d.pruneCache()
 		case <-d.stopCh:
 			return
 		}
+	}
+}
+
+// pruneCache 清理长时间未访问且无未落盘变更的缓存。
+func (d *DiskStore) pruneCache() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cutoff := time.Now().Add(-30 * time.Minute)
+	for uid, t := range d.lastUsed {
+		if t.After(cutoff) {
+			continue
+		}
+		if _, isDirty := d.dirty[uid]; isDirty {
+			continue
+		}
+		delete(d.cache, uid)
+		delete(d.lastUsed, uid)
 	}
 }
 
@@ -58,7 +82,12 @@ func (d *DiskStore) FlushAll() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for uid := range d.dirty {
-		if err := d.writeLocked(uid, d.cache[uid]); err != nil {
+		b, ok := d.cache[uid]
+		if !ok {
+			delete(d.dirty, uid)
+			continue
+		}
+		if err := d.writeBytesLocked(uid, b); err != nil {
 			return err
 		}
 		delete(d.dirty, uid)
@@ -66,12 +95,8 @@ func (d *DiskStore) FlushAll() error {
 	return nil
 }
 
-// writeLocked 原子写入（调用方必须已持有 d.mu）。
-func (d *DiskStore) writeLocked(userID string, p *PlayerState) error {
-	b, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return err
-	}
+// writeBytesLocked 原子写入（调用方必须已持有 d.mu）。
+func (d *DiskStore) writeBytesLocked(userID string, b []byte) error {
 	tmp := d.path(userID) + ".tmp"
 	if err := os.WriteFile(tmp, b, 0644); err != nil {
 		return err
@@ -96,34 +121,52 @@ func (d *DiskStore) path(userID string) string {
 }
 
 // Load 读存档；不存在返回 (nil, nil)，由调用方决定创角。
-// v1.9.41：优先命中内存缓存（进程内单一事实源），未命中才读盘。
+// 命中缓存时从缓存字节 unmarshal 出新对象返回（不共享指针），未命中才读盘。
 func (d *DiskStore) Load(userID string) (*PlayerState, error) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	if p, ok := d.cache[userID]; ok {
-		return p, nil
+	b, ok := d.cache[userID]
+	if ok {
+		d.lastUsed[userID] = time.Now()
 	}
-	b, err := os.ReadFile(d.path(userID))
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
+	d.mu.Unlock()
+	if !ok {
+		var err error
+		b, err = os.ReadFile(d.path(userID))
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		// 读盘期间可能已有 Save 更新了缓存，以缓存为准，避免返回过期数据
+		d.mu.Lock()
+		if cb, cached := d.cache[userID]; cached {
+			b = cb
+		} else {
+			d.cache[userID] = append([]byte(nil), b...)
+			d.lastUsed[userID] = time.Now()
+		}
+		d.mu.Unlock()
 	}
 	var p PlayerState
 	if err := json.Unmarshal(b, &p); err != nil {
 		return nil, fmt.Errorf("角色数据读取失败: %w", err)
 	}
-	d.cache[userID] = &p
 	return &p, nil
 }
 
-// Save 更新缓存与 dirty 集合，立即返回；实际落盘由后台 flushLoop 批量完成。
+// Save 更新缓存字节与 dirty 集合，立即返回；实际落盘由后台 flushLoop 批量完成。
+// 缓存只存字节，避免把调用方持有的对象指针放进全局缓存。
 func (d *DiskStore) Save(userID string, p *PlayerState) error {
+	b, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.cache[userID] = p
+	d.cache[userID] = b
+	d.lastUsed[userID] = time.Now()
 	d.dirty[userID] = struct{}{}
+	d.mu.Unlock()
 	return nil
 }
 

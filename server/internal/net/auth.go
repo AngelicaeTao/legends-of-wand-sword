@@ -6,11 +6,11 @@ package net
 import (
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -71,6 +71,22 @@ func (s *AccountStore) put(a *Account) error {
 	return os.Rename(tmp, s.path(a.UserID))
 }
 
+var errAccountNotFound = errors.New("账号不存在")
+
+func (s *AccountStore) resetPassword(username, newPassword string) error {
+	hash, err := hashPassword(newPassword)
+	if err != nil { return err }
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	uid, ok := s.byName[strings.ToLower(strings.TrimSpace(username))]
+	if !ok { return errAccountNotFound }
+	a, err := s.get(uid)
+	if err != nil { return err }
+	if a == nil { return errAccountNotFound }
+	a.Password = hash
+	return s.put(a)
+}
+
 func safeName(s string) string {
 	out := ""
 	for _, r := range s {
@@ -90,19 +106,27 @@ func newUserID() string {
 var accounts *AccountStore
 var tokenSecret []byte
 
+// initTokenSecret 从 data/token_secret 读取签名密钥；不存在或长度不足则随机生成并落盘（0600）。
+// 旧版本写入的是公开代码里的固定 SHA1（20 字节），长度不足会被替换 —— 旧 token 全部失效是预期行为。
 func initTokenSecret(dataDir string) {
-	// 内测原型：用固定派生密钥，保证多实例/重启后 token 验证一致。
-	// （生产环境应换成从安全配置注入；此处单端口内测优先保证跨设备续玩稳定）
-	sum := sha1.Sum([]byte("zjcs-nakama-compatible-internal-token-secret-v1"))
-	tokenSecret = sum[:]
-	// 仍尝试写文件以兼容旧逻辑，但不依赖它（避免多实例各自随机导致 token 失效）
 	p := filepath.Join(dataDir, "token_secret")
-	_ = os.WriteFile(p, tokenSecret, 0600)
+	if b, err := os.ReadFile(p); err == nil && len(b) >= 32 {
+		tokenSecret = b
+		return
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic("生成 token 密钥失败: " + err.Error())
+	}
+	if err := os.WriteFile(p, b, 0600); err != nil {
+		panic("写入 token 密钥失败: " + err.Error())
+	}
+	tokenSecret = b
 }
 
-// signToken 生成 HMAC token：base64(userId.exp.sig)
+// signToken 生成 HMAC token：base64(userId.exp.sig)，有效期 7 天。
 func signToken(userID string) string {
-	exp := time.Now().Add(30 * 24 * time.Hour).Unix()
+	exp := time.Now().Add(7 * 24 * time.Hour).Unix()
 	payload := fmt.Sprintf("%s.%d", userID, exp)
 	m := hmac.New(sha256.New, tokenSecret)
 	m.Write([]byte(payload))
@@ -139,7 +163,7 @@ func deviceLogin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		uid = newUserID()
 		a := &Account{UserID: uid, DeviceIDs: []string{q.DeviceID}, CreatedAt: time.Now().Unix()}
-		if err := accounts.put(a); err != nil { http.Error(w, err.Error(), 500); return }
+		if err := accounts.put(a); err != nil { internalErr(w, err); return }
 		accounts.byDev[q.DeviceID] = uid
 	} else {
 		a, _ := accounts.get(uid)
@@ -153,18 +177,18 @@ func registerAccount(w http.ResponseWriter, r *http.Request) {
 	var q struct{ Username, Password, DeviceID string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
 	q.Username = strings.TrimSpace(q.Username)
-	if len(q.Username) < 2 || len(q.Password) < 4 { http.Error(w, "用户名≥2字符、密码≥4字符", 400); return }
+	if len(q.Username) < 2 || len(q.Password) < 6 { http.Error(w, "用户名≥2字符、密码≥6字符", 400); return }
 	accounts.mu.Lock()
 	defer accounts.mu.Unlock()
 	if _, exists := accounts.byName[strings.ToLower(q.Username)]; exists {
 		http.Error(w, "用户名已存在", 409); return
 	}
 	hash, err := hashPassword(q.Password)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 	uid := newUserID()
 	a := &Account{UserID: uid, Username: q.Username, Password: hash, CreatedAt: time.Now().Unix(), LastLogin: time.Now().Unix()}
 	if q.DeviceID != "" { a.DeviceIDs = []string{q.DeviceID} }
-	if err := accounts.put(a); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := accounts.put(a); err != nil { internalErr(w, err); return }
 	accounts.byName[strings.ToLower(q.Username)] = uid
 	if q.DeviceID != "" { accounts.byDev[q.DeviceID] = uid }
 	jsonOut(w, map[string]any{"userId": uid, "token": signToken(uid), "username": q.Username})
@@ -174,19 +198,23 @@ func registerAccount(w http.ResponseWriter, r *http.Request) {
 func loginAccount(w http.ResponseWriter, r *http.Request) {
 	var q struct{ Username, Password, DeviceID string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	accounts.mu.RLock()
+	accounts.mu.Lock()
+	defer accounts.mu.Unlock()
 	uid, ok := accounts.byName[strings.ToLower(strings.TrimSpace(q.Username))]
-	accounts.mu.RUnlock()
 	if !ok { http.Error(w, "用户不存在", 404); return }
 	a, _ := accounts.get(uid)
 	if a == nil || !checkPassword(a.Password, q.Password) {
 		http.Error(w, "密码错误", 401); return
 	}
-	accounts.mu.Lock()
 	a.LastLogin = time.Now().Unix()
+	// 透明升级：旧格式 s:<salt>:<hash> 校验通过后，用 PBKDF2 重新哈希并保存
+	if needsRehash(a.Password) {
+		if nh, herr := hashPassword(q.Password); herr == nil {
+			a.Password = nh
+		}
+	}
 	if q.DeviceID != "" && !contains(a.DeviceIDs, q.DeviceID) { a.DeviceIDs = append(a.DeviceIDs, q.DeviceID); accounts.byDev[q.DeviceID] = uid }
 	_ = accounts.put(a)
-	accounts.mu.Unlock()
 	jsonOut(w, map[string]any{"userId": uid, "token": signToken(uid), "username": a.Username})
 }
 
@@ -213,6 +241,13 @@ func authUserID(r *http.Request) (string, bool) {
 	if t == "" { t = r.URL.Query().Get("token") }
 	if t == "" { return "", false }
 	return verifyToken(t)
+}
+
+// authUserIDHeader 只认 Authorization 头（API 用，避免 token 出现在 URL/日志里）。
+func authUserIDHeader(r *http.Request) (string, bool) {
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, "Bearer ") { return "", false }
+	return verifyToken(strings.TrimPrefix(h, "Bearer "))
 }
 
 func contains(ss []string, s string) bool { for _, x := range ss { if x == s { return true } }; return false }

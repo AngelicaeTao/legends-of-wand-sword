@@ -39,8 +39,11 @@ func chestDrop(w http.ResponseWriter, r *http.Request) {
 		Boss    bool   `json:"boss"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	if q.UserID == "" { q.UserID, _ = authUserID(r) }
-	if q.UserID == "" { http.Error(w, "未授权", 401); return }
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
+	}
+	q.UserID = uid
 	if q.WorldID == "" { q.WorldID = "W1" }
 	if !strings.HasPrefix(q.NodeID, "drop_") || len(q.NodeID) > 64 {
 		http.Error(w, "目标无效", 400)
@@ -70,15 +73,16 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 		Tier    string `json:"tier"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	uid, ok := authUserID(r)
-	if !ok && q.UserID != "" { uid = q.UserID } // 兼容旧链路
-	if uid == "" { http.Error(w, "未授权", 401); return }
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
+	}
 	if q.WorldID == "" { q.WorldID = "W1" }
 	if q.NodeID == "" { http.Error(w, "nodeId 不能为空", 400); return }
 	if q.Tier == "" { q.Tier = "wood" }
 
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 
 	// 点位状态机校验：宝箱必须处于 ACTIVE，并返回服务端权威档位
 	spot, ok := game.SM().OpenChest(uid, q.WorldID, q.NodeID)
@@ -143,7 +147,7 @@ func chestOpen(w http.ResponseWriter, r *http.Request) {
 		equips = []game.EquipItem{e}
 	}
 	logs, items := store.ApplyChestReward(p, exp, gold, gem, mat, potions, equips)
-	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := disk.Save(uid, p); err != nil { internalErr(w, err); return }
 	jsonOut(w, map[string]any{
 		"reward": map[string]any{"exp": exp, "gold": gold, "gem": gem, "tier": q.Tier, "items": items},
 		"logs": logs, "state": p,
@@ -159,14 +163,15 @@ func potionPick(w http.ResponseWriter, r *http.Request) {
 		NodeID  string `json:"nodeId"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	uid, ok := authUserID(r)
-	if !ok && q.UserID != "" { uid = q.UserID }
-	if uid == "" { http.Error(w, "未授权", 401); return }
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
+	}
 	if q.WorldID == "" { q.WorldID = "W1" }
 	if q.NodeID == "" { http.Error(w, "nodeId 不能为空", 400); return }
 
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 	if _, ok := game.SM().PickPotion(uid, q.WorldID, q.NodeID); !ok {
 		http.Error(w, "草药尚未长成（冷却中或不存在）", 409); return
 	}
@@ -175,7 +180,7 @@ func potionPick(w http.ResponseWriter, r *http.Request) {
 	if rand.Intn(100) < 30 { potions = 2 }
 	gold := 10 + rand.Intn(30)
 	logs := store.ApplyPotionPick(p, potions, gold)
-	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := disk.Save(uid, p); err != nil { internalErr(w, err); return }
 	jsonOut(w, map[string]any{
 		"reward": map[string]any{"potions": potions, "gold": gold},
 		"logs": logs, "state": p,
@@ -184,6 +189,9 @@ func potionPick(w http.ResponseWriter, r *http.Request) {
 
 // monsterKill：击败怪物 → 世界共享点位进入冷却（供战斗胜利后调用）。
 func monsterKill(w http.ResponseWriter, r *http.Request) {
+	if _, ok := mustUser(w, r, ""); !ok {
+		return
+	}
 	var q struct {
 		WorldID string `json:"worldId"`
 		NodeID  string `json:"nodeId"`
@@ -195,29 +203,26 @@ func monsterKill(w http.ResponseWriter, r *http.Request) {
 }
 
 // spawnQuery：查询世界当前 ACTIVE 点位（含玩家宝箱实例）。
-// userId 优先取 query 参数（前端传 uid()，避免网关剥离 token 导致宝箱丢失），再 fallback token。
+// 身份只认 token；query 里的 userId 若存在必须与 token 一致。
 func spawnQuery(w http.ResponseWriter, r *http.Request) {
-	uid := r.URL.Query().Get("userId")
-	if uid == "" { uid, _ = authUserID(r) }
+	uid, ok := mustUser(w, r, r.URL.Query().Get("userId"))
+	if !ok {
+		return
+	}
 	worldID := r.URL.Query().Get("worldId")
 	if worldID == "" { worldID = "W1" }
 	spots := game.SM().ActiveSpots(worldID, uid)
 	jsonOut(w, map[string]any{"worldId": worldID, "spots": spots, "serverNow": game.ServerNow()})
 }
 
-// reqUserID 统一取 userId：query/body 优先（前端传 uid()），再 fallback token。
-func reqUserID(r *http.Request) string {
-	if u := r.URL.Query().Get("userId"); u != "" { return u }
-	if u, ok := authUserID(r); ok { return u }
-	return ""
-}
-
 // worldUnlocks：返回玩家的世界解锁状态 + 可传送 GATE 列表。
 func worldUnlocks(w http.ResponseWriter, r *http.Request) {
-	uid := reqUserID(r)
-	if uid == "" { http.Error(w, "未授权", 401); return }
+	uid, ok := mustUser(w, r, r.URL.Query().Get("userId"))
+	if !ok {
+		return
+	}
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 	gates := []map[string]any{}
 	for _, wd := range game.C().Worlds.Worlds {
 		for _, s := range wd.Spawns {
@@ -234,16 +239,17 @@ func worldUnlocks(w http.ResponseWriter, r *http.Request) {
 
 // worldTravel：世界切换/传送（免费 5s CD，服务端权威），校验等级门槛。
 func worldTravel(w http.ResponseWriter, r *http.Request) {
-	uid := reqUserID(r)
 	var q struct {
 		To     string `json:"to"`
 		UserID string `json:"userId"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	if uid == "" { uid = q.UserID }
-	if uid == "" { http.Error(w, "未授权", 401); return }
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
+	}
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 	// 目标世界必须存在
 	var target *game.WorldDef
 	for i := range game.C().Worlds.Worlds {
@@ -258,7 +264,7 @@ func worldTravel(w http.ResponseWriter, r *http.Request) {
 		}
 		p.World.WorldID = "HOME"
 		p.World.X, p.World.Y = 1280, 780 // 家园锚点
-		if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+		if err := disk.Save(uid, p); err != nil { internalErr(w, err); return }
 		jsonOut(w, map[string]any{"worldId": "HOME", "state": p})
 		return
 	}
@@ -296,7 +302,7 @@ func worldTravel(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := disk.Save(uid, p); err != nil { internalErr(w, err); return }
 	jsonOut(w, map[string]any{"worldId": q.To, "state": p})
 }
 
@@ -331,38 +337,40 @@ func guildView(g *store.Guild) map[string]any {
 func guildList(w http.ResponseWriter, r *http.Request) {
 	var q struct{ UserID string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	uid := q.UserID
-	if uid == "" {
-		uid, _ = authUserID(r)
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return
 	}
 	out := []map[string]any{}
 	for _, g := range store.Guilds().GuildList() {
 		out = append(out, guildView(g))
 	}
 	resp := map[string]any{"guilds": out}
-	if uid != "" {
-		if g, role := store.Guilds().GuildByUser(uid); g != nil {
-			resp["my"] = guildView(g)
-			resp["myRole"] = role
-		}
+	if g, role := store.Guilds().GuildByUser(uid); g != nil {
+		resp["my"] = guildView(g)
+		resp["myRole"] = role
 	}
 	jsonOut(w, resp)
 }
 
-func guildActionBody(r *http.Request) (string, string, string, error) {
+// guildActionBody 解析公会操作请求体：身份只认 token，body userId 必须一致。
+func guildActionBody(w http.ResponseWriter, r *http.Request) (string, string, string, bool) {
 	var q struct{ UserID, Name, GuildID string }
 	_ = json.NewDecoder(r.Body).Decode(&q)
-	uid := q.UserID
-	if uid == "" { uid, _ = authUserID(r) }
-	if uid == "" { return "", "", "", fmt.Errorf("未授权") }
-	return uid, q.Name, q.GuildID, nil
+	uid, ok := mustUser(w, r, q.UserID)
+	if !ok {
+		return "", "", "", false
+	}
+	return uid, q.Name, q.GuildID, true
 }
 
 func guildCreate(w http.ResponseWriter, r *http.Request) {
-	uid, name, _, err := guildActionBody(r)
-	if err != nil { http.Error(w, err.Error(), 401); return }
+	uid, name, _, ok := guildActionBody(w, r)
+	if !ok {
+		return
+	}
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 	if p.Guild != nil { http.Error(w, "你已加入公会，请先退出再创建", 409); return }
 	if p.Core.Gold < store.GuildCreateCost {
 		http.Error(w, fmt.Sprintf("金币不足：创建公会需 %d（当前 %d）", store.GuildCreateCost, p.Core.Gold), 400); return
@@ -373,29 +381,33 @@ func guildCreate(w http.ResponseWriter, r *http.Request) {
 	p.Core.Gold -= store.GuildCreateCost
 	p.Guild = &store.GuildRef{ID: g.ID, Name: g.Name, Role: "president"}
 	p.AppendLogs([]string{fmt.Sprintf("创建公会：%s（消耗 %d 金币）", g.Name, store.GuildCreateCost)})
-	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := disk.Save(uid, p); err != nil { internalErr(w, err); return }
 	jsonOut(w, map[string]any{"state": p, "guild": guildView(g), "message": "公会创建成功"})
 }
 
 func guildJoin(w http.ResponseWriter, r *http.Request) {
-	uid, _, gid, err := guildActionBody(r)
-	if err != nil { http.Error(w, err.Error(), 401); return }
+	uid, _, gid, ok := guildActionBody(w, r)
+	if !ok {
+		return
+	}
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 	if p.Guild != nil { http.Error(w, "你已加入公会，请先退出再加入其他公会", 409); return }
 	g, err := store.Guilds().GuildJoin(gid, p.UserID, p.Core.Name, p.Core.Level, p.Core.BattlePower)
 	if err != nil { http.Error(w, err.Error(), 409); return }
 	p.Guild = &store.GuildRef{ID: g.ID, Name: g.Name, Role: "member"}
 	p.AppendLogs([]string{fmt.Sprintf("加入公会：%s", g.Name)})
-	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := disk.Save(uid, p); err != nil { internalErr(w, err); return }
 	jsonOut(w, map[string]any{"state": p, "guild": guildView(g), "message": "加入公会成功"})
 }
 
 func guildLeave(w http.ResponseWriter, r *http.Request) {
-	uid, _, _, err := guildActionBody(r)
-	if err != nil { http.Error(w, err.Error(), 401); return }
+	uid, _, _, ok := guildActionBody(w, r)
+	if !ok {
+		return
+	}
 	p, err := loadOrCreate(uid)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil { internalErr(w, err); return }
 	if p.Guild == nil { http.Error(w, "你尚未加入公会", 409); return }
 	gname := p.Guild.Name
 	rest, err := store.Guilds().GuildLeave(p.Guild.ID, p.UserID)
@@ -406,6 +418,6 @@ func guildLeave(w http.ResponseWriter, r *http.Request) {
 	} else {
 		p.AppendLogs([]string{fmt.Sprintf("退出公会：%s", gname)})
 	}
-	if err := disk.Save(uid, p); err != nil { http.Error(w, err.Error(), 500); return }
+	if err := disk.Save(uid, p); err != nil { internalErr(w, err); return }
 	jsonOut(w, map[string]any{"state": p, "message": "已退出公会"})
 }
