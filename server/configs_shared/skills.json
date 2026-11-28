@@ -120,7 +120,7 @@
       "fx": "fx_buff_shield",
       "classId": "warrior",
       "tier": "initial",
-      "desc": "格挡姿态：3 回合内受到的伤害降低 40%",
+      "desc": "格挡姿态：为血量最低的队友（或自己）提供 3 回合 40% 减伤",
       "drRounds": 3,
       "drPct": 0.4
     },
@@ -146,7 +146,7 @@
       "fx": "fx_heal",
       "classId": "mage",
       "tier": "initial",
-      "desc": "持续回血：立即回复 15% 最大生命，之后 2 回合每回合再回 15%（共 45%）",
+      "desc": "持续回血：为血量最低的队友立即回复 15% 最大生命，之后 2 回合每回合再回 15%",
       "hotRounds": 3,
       "hotPer": 0.15
     },
@@ -160,7 +160,7 @@
       "fx": "fx_buff_shield",
       "classId": "knight",
       "tier": "advanced",
-      "desc": "群体护盾"
+      "desc": "圣盾：为血量最低的队友套上护盾，抵挡相当于攻击力 120% 的伤害"
     },
     {
       "id": "k_taunt",
@@ -220,7 +220,7 @@
       "fx": "fx_buff_shield",
       "classId": "fighter",
       "tier": "advanced",
-      "desc": "减伤反弹"
+      "desc": "铁身：为血量最低的队友提供护盾与减伤"
     },
     {
       "id": "s_bless",
@@ -244,7 +244,7 @@
       "fx": "fx_heal",
       "classId": "sage",
       "tier": "advanced",
-      "desc": "复活队友"
+      "desc": "复活：为血量最低的队友恢复 120% 最大生命"
     },
     {
       "id": "s_purify",
@@ -256,7 +256,7 @@
       "fx": "fx_heal",
       "classId": "sage",
       "tier": "advanced",
-      "desc": "清除负面"
+      "desc": "净化：为血量最低的队友恢复 60% 最大生命"
     },
     {
       "id": "wl_curse",
@@ -273,14 +273,16 @@
     {
       "id": "wl_summon",
       "name": "召唤",
-      "kind": "magic",
-      "power": 1.0,
+      "kind": "summon",
+      "power": 0,
       "cd": 12,
-      "element": "none",
+      "element": "dark",
       "fx": "fx_dmg_dark",
       "classId": "warlock",
       "tier": "advanced",
-      "desc": "召唤魔物"
+      "desc": "召唤魔物协战 6 回合：召唤当回合不出手，之后每回合额外造成 0.2× 攻击的暗系伤害",
+      "summonRounds": 6,
+      "summonPower": 0.2
     },
     {
       "id": "wl_drain",
@@ -292,7 +294,8 @@
       "fx": "fx_dmg_dark",
       "classId": "warlock",
       "tier": "advanced",
-      "desc": "吸血攻击"
+      "desc": "吸血攻击：命中回复本次伤害的 50%",
+      "lifesteal": 0.5
     }
   ]
 }

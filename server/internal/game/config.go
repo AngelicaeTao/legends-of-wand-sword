@@ -54,7 +54,7 @@ type SkillsConfig struct {
 type SkillDef struct {
 	ID      string  `json:"id"`
 	Name    string  `json:"name"`
-	Kind    string  `json:"kind"` // physical/magic/heal/shield/buff/debuff
+	Kind    string  `json:"kind"` // physical/magic/heal/shield/buff/debuff/summon
 	Power   float64 `json:"power"`
 	CD      float64 `json:"cd"`
 	Element string  `json:"element"`
@@ -69,6 +69,12 @@ type SkillDef struct {
 	HotPer    float64 `json:"hotPer,omitempty"`
 	DRRounds  int     `json:"drRounds,omitempty"`
 	DRPct     float64 `json:"drPct,omitempty"`
+	// v1.9.82 术士专属：Lifesteal>0 的伤害技能命中后回复本次伤害的该比例（吸取 50%）；
+	// Kind=summon 的技能施放时不造成伤害，而是召唤召唤物协战 SummonRounds 回合，
+	// 之后每个英雄回合额外造成 SummonPower×攻击 的暗系伤害（受技能等级加成）。
+	Lifesteal    float64 `json:"lifesteal,omitempty"`
+	SummonRounds int     `json:"summonRounds,omitempty"`
+	SummonPower  float64 `json:"summonPower,omitempty"`
 }
 
 // SkillPool 是一个职业的 BD 可选池：初始技能 + 进阶技能。

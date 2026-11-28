@@ -273,14 +273,16 @@
     {
       "id": "wl_summon",
       "name": "召唤",
-      "kind": "magic",
-      "power": 1.0,
+      "kind": "summon",
+      "power": 0,
       "cd": 12,
-      "element": "none",
+      "element": "dark",
       "fx": "fx_dmg_dark",
       "classId": "warlock",
       "tier": "advanced",
-      "desc": "召唤魔物"
+      "desc": "召唤魔物协战 6 回合：召唤当回合不出手，之后每回合额外造成 0.2× 攻击的暗系伤害",
+      "summonRounds": 6,
+      "summonPower": 0.2
     },
     {
       "id": "wl_drain",
@@ -292,7 +294,8 @@
       "fx": "fx_dmg_dark",
       "classId": "warlock",
       "tier": "advanced",
-      "desc": "吸血攻击"
+      "desc": "吸血攻击：命中回复本次伤害的 50%",
+      "lifesteal": 0.5
     }
   ]
 }

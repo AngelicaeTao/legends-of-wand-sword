@@ -165,6 +165,10 @@ func ResolveBattle(req BattleRequest) BattleReport {
 			if m := SkillEffectMult(req.SkillLv[sid]); m > 1 {
 				s.Power *= m
 				s.HotPer *= m
+				// v1.9.82 召唤物伤害同样吃技能等级加成
+				if s.SummonPower > 0 {
+					s.SummonPower *= m
+				}
 				if s.DRPct > 0 {
 					s.DRPct *= m
 					if s.DRPct > 0.85 { // 减伤封顶 85%，避免高等级直接免疫
@@ -201,6 +205,10 @@ func ResolveBattle(req BattleRequest) BattleReport {
 	hotName := ""
 	drLeft := 0
 	drPct := 0.0
+	// v1.9.82 召唤物协战状态（术士 wl_summon：持续 N 个英雄回合，每回合额外伤害）
+	summonLeft := 0
+	summonPower := 0.0
+	summonName := ""
 
 	// 按速度决定先后手（服务端确定性）
 	heroFirst := hero.Spd >= 10
@@ -261,6 +269,30 @@ func ResolveBattle(req BattleRequest) BattleReport {
 						HeroHP: round2(heroHP), MonHP: round2(math.Max(0, totalMonHP())),
 					})
 				}
+				// v1.9.82 召唤物协战：英雄行动前先结算一次召唤物伤害（独立战报行，暗系浮字）
+				if summonLeft > 0 && heroHP > 0 && totalMonHP() > 0 {
+					summonLeft--
+					if ti := nextAlive(turnIdx); ti >= 0 {
+						dmg := hero.ATK * summonPower * (1 - mems[ti].mdef/(mems[ti].mdef+100))
+						dmg *= 0.9 + rng.Float64()*0.2
+						if dmg > mems[ti].hp {
+							dmg = mems[ti].hp
+						}
+						if dmg < 0 {
+							dmg = 0
+						}
+						mems[ti].hp -= dmg
+						n++
+						rep.Rounds = append(rep.Rounds, BattleRound{
+							N: n, Actor: "hero", Action: "summonHit", SkillName: summonName + "（协战）",
+							FX: "fx_dmg_dark", Damage: round2(dmg), MonIdx: ti,
+							HeroHP: round2(heroHP), MonHP: round2(math.Max(0, totalMonHP())),
+						})
+					}
+					if totalMonHP() <= 0 { // 召唤物收尾：本场结束，不再进入英雄出手
+						break
+					}
+				}
 				// 选一个可用技能（优先级：伤害 > 治疗/护盾，cd 就绪）
 				sort.SliceStable(queue, func(i, j int) bool { return queue[i].remain > queue[j].remain })
 				chosen := -1
@@ -320,6 +352,13 @@ func ResolveBattle(req BattleRequest) BattleReport {
 					heroAtkBuff = power
 				case "debuff":
 					monAtkDebuff = power
+				case "summon":
+					// v1.9.82 召唤：当回合只登场不出手，之后每个英雄回合由召唤物补伤害
+					if act.SummonRounds > 0 {
+						summonLeft = act.SummonRounds
+						summonPower = act.SummonPower
+						summonName = act.Name
+					}
 				default: // physical / magic
 					dmg := hero.ATK * (1 + heroAtkBuff) * power * (1 - tgt.mdef/(tgt.mdef+100))
 					if act.ID == "execute" && tgt.hp < tgt.def.Base["hp"]*tgt.lvFactor*0.3 {
@@ -332,8 +371,24 @@ func ResolveBattle(req BattleRequest) BattleReport {
 						shield -= absorbed
 						actual = dmg - absorbed
 					}
+					hpBefore := tgt.hp
 					tgt.hp -= actual
 					r.Damage = round2(actual)
+					// v1.9.82 吸取：命中回复本次实际造成伤害的 lifesteal（按目标剩余血量计，防溢出）
+					if act.Lifesteal > 0 && actual > 0 {
+						effective := actual
+						if hpBefore < effective {
+							effective = hpBefore
+						}
+						heal := effective * act.Lifesteal
+						if room := hero.HP - heroHP; heal > room {
+							heal = room
+						}
+						if heal > 0 {
+							heroHP += heal
+							r.Heal = round2(heal)
+						}
+					}
 				}
 				r.HeroHP = round2(heroHP)
 				r.MonHP = round2(math.Max(0, totalMonHP()))
