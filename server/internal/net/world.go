@@ -43,7 +43,7 @@ func chestDrop(w http.ResponseWriter, r *http.Request) {
 	if q.UserID == "" { http.Error(w, "未授权", 401); return }
 	if q.WorldID == "" { q.WorldID = "W1" }
 	if !strings.HasPrefix(q.NodeID, "drop_") || len(q.NodeID) > 64 {
-		http.Error(w, "nodeId 非法（必须以 drop_ 开头且 ≤64 字符）", 400)
+		http.Error(w, "目标无效", 400)
 		return
 	}
 	kind := q.Kind

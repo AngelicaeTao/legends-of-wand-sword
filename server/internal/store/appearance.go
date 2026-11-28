@@ -61,7 +61,7 @@ func NormalizeLook(in map[string]string) (map[string]string, error) {
 			return nil, fmt.Errorf("外观部件缺失：%s", slot)
 		}
 		if !c.LookSlotValid(slot, id) {
-			return nil, fmt.Errorf("外观选项非法：%s=%s", slot, id)
+			return nil, fmt.Errorf("外型设置有误：%s=%s", slot, id)
 		}
 		out[slot] = id
 	}
@@ -92,7 +92,7 @@ func (p *PlayerState) CreateCharacter(classID string, look map[string]string, na
 		slots = slots[:0]
 		for _, sid := range skills {
 			if !hasStr(unlocked, sid) {
-				return fmt.Errorf("初始技能非法：%s", sid)
+				return fmt.Errorf("初始技能不可用：%s", sid)
 			}
 			if !hasStr(slots, sid) {
 				slots = append(slots, sid)
@@ -160,7 +160,7 @@ func (p *PlayerState) TransferTo(to string, stage int) error {
 		if pool.From != "" && p.Core.ClassID != pool.From {
 			cur, ok2 := c.Skills.Classes[p.Core.ClassID]
 			if !ok2 || cur.Tier != 1 || cur.From != pool.From {
-				return fmt.Errorf("转职路径非法：%s 不能直接转为 %s", p.Core.ClassID, pool.Name)
+				return fmt.Errorf("转职路线不可用：%s 不能直接转为 %s", p.Core.ClassID, pool.Name)
 			}
 		}
 	} else if p.Core.ClassID != to {

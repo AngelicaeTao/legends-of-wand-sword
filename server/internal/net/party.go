@@ -459,7 +459,7 @@ func partyStart(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if len(heroes) == 0 {
-		http.Error(w, "队伍成员存档缺失", 500)
+		http.Error(w, "队伍成员数据异常，请重试", 500)
 		return
 	}
 	// v1.9.77 三波车轮战：按副本配置逐波推进；未配置 waves 时退化为单波

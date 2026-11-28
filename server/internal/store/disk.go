@@ -112,7 +112,7 @@ func (d *DiskStore) Load(userID string) (*PlayerState, error) {
 	}
 	var p PlayerState
 	if err := json.Unmarshal(b, &p); err != nil {
-		return nil, fmt.Errorf("存档损坏: %w", err)
+		return nil, fmt.Errorf("角色数据读取失败: %w", err)
 	}
 	d.cache[userID] = &p
 	return &p, nil
