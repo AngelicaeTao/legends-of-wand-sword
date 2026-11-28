@@ -21,8 +21,16 @@ build() {
   echo "[build] 完成 → $BIN"
 }
 
+# 是否需要重编译：二进制缺失，或 server/ 下有 .go 比二进制新。
+# 缺这一段时，切分支 / git pull 后直接 start 会继续跑旧二进制，
+# 服务起来看似正常，但新增路由全部 404（落到静态兜底返回 index.html）。
+needs_build() {
+  [ -x "$BIN" ] || return 0
+  [ -n "$(find server -name '*.go' -newer "$BIN" -print -quit 2>/dev/null)" ]
+}
+
 start() {
-  [ -x "$BIN" ] || build
+  if needs_build; then build; fi
   if pgrep -x zjcs-server >/dev/null 2>&1; then
     echo "服务已在运行（pid $(pgrep -x zjcs-server | tr '\n' ' ')），如需重启：$0 restart"
     exit 0
