@@ -29,17 +29,27 @@
     "exp": { "goldPerUnit": 1, "gemPerExp": 10 },
     "maxQty": 1000000,
     "sell": {
-      "_note": "回收单价 = 每 1 件可换到的金币 / 钻石。v1.9.68：强化材料（钢锭/精铁/蓝宝石/皮革/布料等一切材料类）统一按 1 件 = 10 金币 或 1 钻石 兑换（即金币 1:10、钻石 1:1），不再按 id 单独定价，未列出的材料走 default.material；药水与特殊物品（potion_s/potion_l/秘银/金币袋）保留 v1.9.57 的专价",
+      "_note": "回收单价 = 每 1 件可换到的金币 / 钻石。仓库物品（items）与强化材料计数器（materialOut）是两套体系：items 按 id 专价，保持 v1.9.57 标准（钢锭120/精铁200/蓝宝石600/皮革80/布料60，药水与秘银/金币袋同 v1.9.57），未列出的材料按 default.material 兜底 100 金/10 钻；materialOut 才是 v1.9.68 引入的强化材料计数器兑回，1 件 = 10 金币 或 1 钻石",
       "items": {
+        "钢锭":     { "gold": 120, "gem": 10 },
+        "精铁":     { "gold": 200, "gem": 20 },
+        "蓝宝石":   { "gold": 600, "gem": 50 },
+        "皮革":     { "gold": 80,  "gem": 10 },
+        "布料":     { "gold": 60,  "gem": 10 },
         "potion_s": { "gold": 150, "gem": 10 },
         "potion_l": { "gold": 450, "gem": 30 },
         "秘银":     { "gold": 400, "gem": 40 },
         "金币袋":   { "gold": 500, "gem": 50 }
       },
       "default": {
-        "material": { "gold": 10, "gem": 1 },
+        "material": { "gold": 100, "gem": 10 },
         "consume":  { "gold": 150, "gem": 10 }
       }
+    },
+    "materialOut": {
+      "_note": "v1.9.68 强化材料（角色计数器，强化/升品消耗的那个）兑回货币：每 1 件强化材料 = goldPerUnit 金币 或 gemPerUnit 钻石，即金币 1:10、钻石 1:1（与买入 material 10:1/1:1 互为镜像）",
+      "goldPerUnit": 10,
+      "gemPerUnit": 1
     }
   },
   "skillUpgrade": {
