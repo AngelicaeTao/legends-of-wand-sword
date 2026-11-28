@@ -1,47 +1,42 @@
 {
   "bundle": "char_warlock",
-  "format": "standee_sprite_v1",
-  "source": "ai_precision_pixel",
+  "format": "standee_sprite_v2",
+  "source": "original_ai_master_procedural_rig_v2",
   "kind": "warlock",
-  "note": "术士-黑紫符文法杖",
+  "note": "术士-原创写实奇幻装备与材质",
   "character_size": [
     64,
     96
   ],
-  "scaleRoot": 2,
+  "texture_size": [
+    256,
+    384
+  ],
+  "scaleRoot": 4,
   "screen_size": [
-    128,
-    192
+    256,
+    384
   ],
   "sprite": {
     "file": "char_warlock_standee.png",
     "size": [
-      128,
-      192
+      256,
+      384
     ],
     "anchor": "feet-center, 图像底部中心=角色脚底",
     "pivot": [
-      64,
-      96
+      128,
+      384
     ]
   },
   "palette": [
-    "#262234",
-    "#282c46",
-    "#304e98",
-    "#4e76cd",
-    "#693e26",
-    "#786296",
-    "#78a0f0",
-    "#96603a",
-    "#9e6a3a",
-    "#bcc6d4",
-    "#be9632",
-    "#e1aa7d",
-    "#f5cd5f",
-    "#fafafc",
-    "#ffd2a5"
+    "#120f18",
+    "#2d2139",
+    "#5e4174",
+    "#8c68a5",
+    "#b28bd0"
   ],
-  "color_count": 15,
-  "coord": "origin=feet-center, x=right+, y=up+ (logic px)"
+  "coord": "origin=feet-center, x=right+, y=up+ (logic px)",
+  "generator": "scripts/charactergen/generate.py",
+  "seed": 20261128
 }
