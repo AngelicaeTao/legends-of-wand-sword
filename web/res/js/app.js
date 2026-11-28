@@ -2350,7 +2350,8 @@ function renderMap(){
   const dgZone=$('dgZone');
   const dungeons=(CFG?.economy?.dungeons)||DUNGEONS;
   const lv=state&&state.core?state.core.level:1;
-  Promise.all(dungeons.map(d=>api('/api/player/action',{userId:uid(),action:'dungeon_remain',dungeonId:d.id}).catch(()=>({remain:d.perDay})))).then(rems=>{
+  // v1.9.76 组队副本不限次数，不必请求剩余次数（服务端对 perDay=0 会拒绝）
+  Promise.all(dungeons.map(d=>(d.recPower||0)>0?Promise.resolve({remain:-1}):api('/api/player/action',{userId:uid(),action:'dungeon_remain',dungeonId:d.id}).catch(()=>({remain:d.perDay})))).then(rems=>{
     if(!dgZone||!dgZone.isConnected)return; // 面板已切换
     dungeons.forEach((d,i)=>d._remain=(rems[i]?.remain!=null?rems[i].remain:d.perDay));
     const diffOf={grass:1,mist:2,flame:3,frost:4};
@@ -2366,20 +2367,23 @@ function renderMap(){
           <div class="di-art">${ICON.tent(132)}</div>
           <div class="di-info">
             <div class="di-name">${d.name}<em class="di-star">${stars}</em></div>
-            <div class="di-meta">推荐 Lv.${d.lv} · 今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次 · ${d.drop}</div>
+            <div class="di-meta">推荐 Lv.${d.lv} · ${isParty?'不限次数':`今日 ${d._remain!=null?d._remain:d.perDay}/${d.perDay} 次`} · ${d.drop}</div>
           </div>
           <button class="di-enter${dis?' off':''}" data-dg="${d.id}" data-party="${isParty?1:0}" ${dis?'disabled':''}>${locked?'等级不足':(isParty?'组队挑战':exhausted?'次数用完':'进入')}</button>
         </div>`;
       }).join('')}</div>
       <div class="dg-summary">
-        ${(()=>{const used=dungeons.reduce((a,d)=>a+(d.perDay-(d._remain!=null?d._remain:d.perDay)),0);
-               const total=dungeons.reduce((a,d)=>a+d.perDay,0);
+        ${(()=>{const daily=dungeons.filter(d=>(d.recPower||0)<=0);
+               const used=daily.reduce((a,d)=>a+(d.perDay-(d._remain!=null?d._remain:d.perDay)),0);
+               const total=daily.reduce((a,d)=>a+d.perDay,0);
                const open=dungeons.filter(d=>lv>=d.lv).length;
+               const unlimited=dungeons.filter(d=>(d.recPower||0)>0&&lv>=d.lv).length;
                return `<div class="dgs"><em>今日已挑战</em><b>${used} / ${total}</b></div>
                        <div class="dgs"><em>已解锁</em><b>${open} / ${dungeons.length}</b></div>
-                       <div class="dgs"><em>主要产出</em><b>强化材料 · 装备 · 强化石</b></div>`;})()}
+                       <div class="dgs"><em>主要产出</em><b>强化材料 · 装备 · 强化石</b></div>`+
+                      (unlimited?`<div class="dgs"><em>不限次数</em><b>${unlimited} 个组队副本</b></div>`:'');})()}
       </div>
-      <div class="dg-reset">${ICON.hourglass(13,'#f0d590')}<span>距离每日次数重置 <b>${(()=>{
+      <div class="dg-reset">${ICON.hourglass(13,'#f0d590')}<span>限次副本距离重置 <b>${(()=>{
         const now=new Date(); const t=new Date(now); t.setHours(24,0,0,0);
         const m=Math.floor((t-now)/60000); return Math.floor(m/60)+' 小时 '+(m%60)+' 分';
       })()}</b></span></div>`;
